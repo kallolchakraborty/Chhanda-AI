@@ -28,21 +28,29 @@ class ContextManager @javax.inject.Inject constructor(
         // Long-Term Memory: Vector search for semantic relevance across all history
         val longTermMemory = try {
             val queryEmbedding = embeddingEngine.embed(query)
-            // Use topK=3 but filter for high-confidence/low-signal chunks
-            val results = vectorStore.search(queryEmbedding, topK = 3, modelId = modelName)
+            val results = vectorStore.search(queryEmbedding, topK = 5, modelId = modelName)
             
-            results
-                .filter { it.score > 0.65f } // Discard low-signal chunks
+            val filtered = results
+                .filter { it.score > 0.62f } // Discard low-signal chunks
                 .filter { result ->
-                    // Avoid repeating context already in recent history
                     recentMessages.none { it.text.contains(result.text.take(20)) }
                 }
-                .joinToString("\n---\n") { result ->
-                    val source = result.metadata["source"] ?: "Local Source"
-                    val type = result.metadata["type"] ?: "Document"
-                    "[Source: $source ($type)]\n${result.text}"
-                }
-                .take(1000) // Adaptive limit for mobile
+
+            if (filtered.isEmpty()) ""
+            else {
+                filtered.groupBy { it.metadata["type"] ?: "TXT" }
+                    .entries.joinToString("\n") { (type, chunks) ->
+                        val label = when(type.uppercase()) {
+                            "PDF" -> "PDF"
+                            "AUDIO" -> "Audio transcript"
+                            "VIDEO" -> "Video transcript"
+                            "IMAGE" -> "OCR from images/frames"
+                            "URL" -> "URL extracts"
+                            else -> "Text"
+                        }
+                        "- $label: ${chunks.joinToString("; ") { it.text }}"
+                    }
+            }
         } catch (e: Exception) {
             "" // Graceful fallback
         }
