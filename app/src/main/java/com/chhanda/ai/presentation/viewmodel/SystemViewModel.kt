@@ -147,7 +147,7 @@ class SystemViewModel @Inject constructor(
     private val _downloadIds = MutableStateFlow<Map<String, java.util.UUID>>(emptyMap())
 
     private val _isServerRunning = MutableStateFlow(false)
-    val isServerRunning: StateFlow<Boolean> = _isServerRunning
+    val isServerRunning: StateFlow<Boolean> = _isServerRunning.asStateFlow()
 
     val storageSummary = combine(
         chatDao.getAllMessages(),
@@ -386,6 +386,23 @@ class SystemViewModel @Inject constructor(
                 addLog("SYSTEM", "Telemetry observer failed: ${e.message}", "WARNING")
             }
         }
+        // Server status and error observers
+        val localServer = chhandaServer
+        val pFlow: kotlinx.coroutines.flow.Flow<Int> = localServer.boundPortFlow
+        val eFlow: kotlinx.coroutines.flow.Flow<String?> = localServer.serverErrorFlow
+        
+        viewModelScope.launch {
+            pFlow.collect { port ->
+                _isServerRunning.value = port > 0
+            }
+        }
+        viewModelScope.launch {
+            eFlow.collect { msg ->
+                if (msg != null) {
+                    addLog("SERVER", msg.toString(), "ERROR")
+                }
+            }
+        }
 
     }
 
@@ -594,7 +611,6 @@ class SystemViewModel @Inject constructor(
     fun stopServer() {
         viewModelScope.launch {
             com.chhanda.ai.service.ChhandaForegroundService.stop(context)
-            _isServerRunning.value = false
             addLog("SERVER", "Web Gateway manually stopped", "WARNING")
         }
     }
@@ -626,18 +642,17 @@ class SystemViewModel @Inject constructor(
                     llmEngine.initModel(path)
                 }
                 _isModelLoading.value = false
-
-                _isServerRunning.value = true
+                
                 val finalPort = (serverPort.value.toIntOrNull() ?: 8888).let { p ->
                     if (p == 8000 || p == 8080) 8888 else p
                 }
+
                 com.chhanda.ai.service.ChhandaForegroundService.start(context, finalPort, maxDevices.value)
                 addLog("SYSTEM", "Model ready: $modelName", "SUCCESS")
-                addLog("SERVER", "Gateway started on port $finalPort", "SUCCESS")
+                addLog("SERVER", "Gateway start requested on port $finalPort", "INFO")
             } catch (e: Throwable) {
                 _isModelLoading.value = false
                 // Full rollback on failure
-                _isServerRunning.value = false
                 _ownedModels.value = _ownedModels.value.map { it.copy(isActive = false) }
                 _sharedModels.value = _sharedModels.value.map { it.copy(isActive = false) }
                 try { llmEngine.close() } catch (_: Exception) {}
@@ -1030,7 +1045,6 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             try { llmEngine.close() } catch (_: Exception) {}
             try { com.chhanda.ai.service.ChhandaForegroundService.stop(context) } catch (_: Exception) {}
-            _isServerRunning.value = false
             _tokensPerSec.value = "0.0"
             addLog("SYSTEM", "App shutdown requested. Disconnected all devices and stopped LLM.", "INFO")
         }

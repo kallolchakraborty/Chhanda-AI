@@ -38,6 +38,21 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = if (isDark) darkColorScheme() else lightColorScheme()) {
                 ChhandaApp(vm)
             }
+
+            // PRO FIX: Request Notification Permission for Foreground Service on API 33+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val permission = android.Manifest.permission.POST_NOTIFICATIONS
+                val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                ) { isGranted ->
+                    if (!isGranted) {
+                        vm.addLog("SYSTEM", "Notification permission denied. Background server may be less stable.", "WARNING")
+                    }
+                }
+                LaunchedEffect(Unit) {
+                    launcher.launch(permission)
+                }
+            }
         }
     }
 

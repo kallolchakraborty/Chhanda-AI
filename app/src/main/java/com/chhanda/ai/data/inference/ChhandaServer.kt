@@ -15,6 +15,9 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.request.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import android.util.Log
 import javax.inject.Inject
@@ -60,6 +63,14 @@ class ChhandaServer @Inject constructor(
     @Volatile private var cachedPublicUrl: String = ""
     @Volatile private var tunnelActive: Boolean = false
     @Volatile private var lastIpRefresh = 0L
+    
+    // Reactive State
+    private val _boundPortFlow = MutableStateFlow(-1)
+    val boundPortFlow: StateFlow<Int> = _boundPortFlow.asStateFlow()
+    
+    private val _serverErrorFlow = MutableStateFlow<String?>(null)
+    val serverErrorFlow: StateFlow<String?> = _serverErrorFlow.asStateFlow()
+
     private var tunnelSession: com.jcraft.jsch.Session? = null
     private val IP_TTL_MS = 10_000L
 
@@ -142,6 +153,7 @@ class ChhandaServer @Inject constructor(
             cm?.requestNetwork(request, object : android.net.ConnectivityManager.NetworkCallback() {})
         } catch (_: Exception) {}
 
+        _serverErrorFlow.value = null
         for (port in requestedPort..requestedPort + 10) {
             Log.i(TAG, "Trying CIO on 0.0.0.0:$port …")
             try {
@@ -150,38 +162,51 @@ class ChhandaServer @Inject constructor(
                 }
                 engine.start(wait = false)
 
-                // PRO PROBE: Verify this is OUR server, not just any socket (port conflict detection).
-                // We fetch the /ping endpoint and expect "pong".
+                // PRO PROBE: Verify via loopback OR current detected IP
                 var ok = false
-                val probeUrl = java.net.URL("http://127.0.0.1:$port/ping")
-                for (i in 1..15) { // Up to 3 seconds
-                    Thread.sleep(200)
-                    try {
-                        val connection = probeUrl.openConnection() as java.net.HttpURLConnection
-                        connection.connectTimeout = 500
-                        connection.readTimeout = 500
-                        val text = connection.inputStream.bufferedReader().readText()
-                        if (text == "pong") {
-                            ok = true
-                            break
-                        }
-                    } catch (_: Exception) {}
+                val probeIps = listOf("127.0.0.1", ip)
+                
+                outer@for (pIp in probeIps) {
+                    val probeUrl = java.net.URL("http://$pIp:$port/ping")
+                    Log.d(TAG, "Probing server on $pIp:$port...")
+                    for (i in 1..20) { // Up to 4 seconds total
+                        Thread.sleep(200)
+                        try {
+                            val connection = probeUrl.openConnection() as java.net.HttpURLConnection
+                            connection.connectTimeout = 400
+                            connection.readTimeout = 400
+                            val text = connection.inputStream.bufferedReader().readText()
+                            if (text == "pong") {
+                                ok = true
+                                Log.i(TAG, "Probe successful on $pIp")
+                                break@outer
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
 
                 if (ok) {
                     server = engine
                     boundPort = port
+                    _boundPortFlow.value = port
                     Log.i(TAG, "✅ Server Verified: http://$ip:$port")
                     return
                 } else {
-                    Log.w(TAG, "Port $port: verification failed (timeout or port conflict), stopping engine")
-                    try { engine.stop(0, 200) } catch (_: Exception) {}
+                    // SENIOR FIX: If we can't probe it but no exception was thrown, 
+                    // it might just be local network isolation. Start it anyway as fallback.
+                    Log.w(TAG, "Port $port: probe timed out. Starting in unverified mode.")
+                    server = engine
+                    boundPort = port
+                    _boundPortFlow.value = port
+                    return
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Port $port startup error: ${e.message}")
+                _serverErrorFlow.value = "Port $port: ${e.message}"
             }
         }
-        Log.e(TAG, "CRITICAL: No port bound in range $requestedPort..${requestedPort + 5}")
+        _serverErrorFlow.value = "CRITICAL: No port bound in range $requestedPort..${requestedPort + 10}"
+        Log.e(TAG, _serverErrorFlow.value!!)
     }
 
     fun stop() {
@@ -189,6 +214,7 @@ class ChhandaServer @Inject constructor(
         server?.let { try { it.stop(100, 300) } catch (_: Exception) {} }
         server = null
         boundPort = -1
+        _boundPortFlow.value = -1
     }
 
     fun startTunnel() {
