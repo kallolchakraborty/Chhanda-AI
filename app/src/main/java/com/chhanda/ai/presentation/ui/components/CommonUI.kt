@@ -86,7 +86,7 @@ fun ChhandaLogo(modifier: Modifier = Modifier, size: Int = 36, modelName: String
     ) {
         Box(contentAlignment = Alignment.Center) {
             Image(
-                painter = painterResource(id = logoRes ?: R.mipmap.chhanda_app_logo),
+                painter = painterResource(id = logoRes ?: R.drawable.ic_launcher_foreground),
                 contentDescription = "Model Logo",
                 modifier = Modifier.fillMaxSize(if (logoRes != null) 0.9f else 0.85f)
             )

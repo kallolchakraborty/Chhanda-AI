@@ -289,6 +289,7 @@ fun LogsScreen(
                             }
                         }
                     )
+                }
             }
         }
 

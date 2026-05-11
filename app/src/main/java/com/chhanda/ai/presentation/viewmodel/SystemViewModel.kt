@@ -452,7 +452,13 @@ class SystemViewModel @Inject constructor(
                         isActive = false
                     )
                     
-                    if (isOwned) ownedFound.add(info) else sharedFound.add(info)
+                    if (isOwned) {
+                        if (ownedFound.any { it.name == name }) return
+                        ownedFound.add(info)
+                    } else {
+                        if (sharedFound.any { it.name == name }) return
+                        sharedFound.add(info)
+                    }
                     pathMap[name] = file.absolutePath
                     processedPaths.add(file.absolutePath)
                 }
@@ -538,17 +544,21 @@ class SystemViewModel @Inject constructor(
     }
 
     private fun updateStats() {
-        val ramValue = (8.0 + Math.random() * 0.5).format(1)
-        _ramUsage.value = "$ramValue / 12.4 GB"
-        
-        val vramValue = (16.0 + Math.random() * 0.8).format(1)
-        _vramUsage.value = "$vramValue / 38.2 GB"
-        
-        // Read battery temperature
-        val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-        val rawTemp = intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
-        val celsius = rawTemp / 10.0
-        _deviceTemperature.value = celsius
+        try {
+            val ramValue = (8.0 + Math.random() * 0.5).format(1)
+            _ramUsage.value = "$ramValue / 12.4 GB"
+            
+            val vramValue = (16.0 + Math.random() * 0.8).format(1)
+            _vramUsage.value = "$vramValue / 38.2 GB"
+            
+            // Read battery temperature
+            val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            val rawTemp = intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
+            val celsius = rawTemp / 10.0
+            _deviceTemperature.value = celsius
+        } catch (e: Exception) {
+            android.util.Log.e("SystemViewModel", "Failed to update stats: ${e.message}")
+        }
     }
 
     private fun Double.format(digits: Int) = "%.${digits}f".format(this)

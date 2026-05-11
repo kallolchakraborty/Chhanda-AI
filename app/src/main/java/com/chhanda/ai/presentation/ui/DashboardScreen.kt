@@ -796,130 +796,150 @@ fun DashboardScreen(
     }
 
     if (showQrDialog) {
-        AlertDialog(
-            onDismissRequest = { showQrDialog = false },
-            title = { 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.QrCode, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Text(Localization.getString("connection_gateway", appLanguage), style = MaterialTheme.typography.titleLarge)
-                }
-            },
-            text = {
-                val ip by viewModel.localIpAddress.collectAsState()
-                val publicUrl by viewModel.publicUrl.collectAsState()
-                val deviceModel = viewModel.deviceModelName
-                val activeModelName = (ownedModels + sharedModels).find { m -> m.isActive }?.name?.replace(" ", "_") ?: "model"
-                
-                var selectedIp by remember { mutableStateOf("") }
-                LaunchedEffect(networkIps) { if (selectedIp.isEmpty() && networkIps.isNotEmpty()) selectedIp = networkIps.first() }
-                
-                val currentIp = if (selectedIp.isNotEmpty()) selectedIp else ip
-                val chatUrl = if (publicUrl.isNotBlank()) publicUrl.removeSuffix("/") else if (tunnelUrl.isNotEmpty()) tunnelUrl else "http://$currentIp:$displayPort"
-                val apiUrl = if (publicUrl.isNotBlank()) "$chatUrl/v1" else if (tunnelUrl.isNotEmpty()) "$chatUrl/v1" else "$chatUrl/$deviceModel/$activeModelName/v1"
-                
-                val apiKey by viewModel.apiKey.collectAsState()
-                
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showQrDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
                 Column(
-                    horizontalAlignment = Alignment.CenterHorizontally, 
-                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                    modifier = Modifier.padding(20.dp)
                 ) {
-                    if (isVpnActive && !isTunnelActive) {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                            modifier = Modifier.padding(bottom = 12.dp)
-                        ) {
-                            Text(
-                                Localization.getString("vpn_warning", appLanguage),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(8.dp)
-                            )
-                        }
-                    }
-
-                    // Side-by-side QR and Basic Info
+                    // Title
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Compact QR Code
-                        Surface(
-                            modifier = Modifier.size(110.dp),
-                            color = Color.White,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
-                        ) {
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
-                                val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
-                                if (qrBitmap != null) {
-                                    Image(
-                                        bitmap = qrBitmap.asImageBitmap(),
-                                        contentDescription = "QR Code",
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                            }
-                        }
-                        
-                        Spacer(Modifier.width(16.dp))
-                        
-                        Column(modifier = Modifier.weight(1f)) {
-                            ConnectionDetailCard(title = "API Endpoint", value = apiUrl)
-                            ConnectionDetailCard(
-                                title = "API Key", 
-                                value = if (isApiKeyVisibleInQr) apiKey else "••••••••••••",
-                                trailingIcon = if (isApiKeyVisibleInQr) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                onIconClick = { isApiKeyVisibleInQr = !isApiKeyVisibleInQr }
-                            )
-                        }
+                        Icon(Icons.Default.QrCode, null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Text(Localization.getString("connection_gateway", appLanguage), style = MaterialTheme.typography.titleLarge)
                     }
                     
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(16.dp))
                     
-                    if (networkIps.size > 1) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("IP: ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                            networkIps.forEach { nIp ->
-                                FilterChip(
-                                    selected = selectedIp == nIp,
-                                    onClick = { selectedIp = nIp },
-                                    label = { Text(nIp, fontSize = 10.sp) },
-                                    modifier = Modifier.padding(horizontal = 2.dp),
-                                    shape = RoundedCornerShape(8.dp)
+                    // Content
+                    val ip by viewModel.localIpAddress.collectAsState()
+                    val publicUrl by viewModel.publicUrl.collectAsState()
+                    val deviceModel = viewModel.deviceModelName
+                    val activeModelName = (ownedModels + sharedModels).find { m -> m.isActive }?.name?.replace(" ", "_") ?: "model"
+                    
+                    var selectedIp by remember { mutableStateOf("") }
+                    LaunchedEffect(networkIps) { if (selectedIp.isEmpty() && networkIps.isNotEmpty()) selectedIp = networkIps.first() }
+                    
+                    val currentIp = if (selectedIp.isNotEmpty()) selectedIp else ip
+                    val chatUrl = if (publicUrl.isNotBlank()) publicUrl.removeSuffix("/") else if (tunnelUrl.isNotEmpty()) tunnelUrl else "http://$currentIp:$displayPort"
+                    val apiUrl = if (publicUrl.isNotBlank()) "$chatUrl/v1" else if (tunnelUrl.isNotEmpty()) "$chatUrl/v1" else "$chatUrl/$deviceModel/$activeModelName/v1"
+                    
+                    val apiKey by viewModel.apiKey.collectAsState()
+                    
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally, 
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())
+                    ) {
+                        if (isVpnActive && !isTunnelActive) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            ) {
+                                Text(
+                                    Localization.getString("vpn_warning", appLanguage),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(8.dp)
                                 )
                             }
                         }
+
+                        // Side-by-side QR and Basic Info
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Compact QR Code
+                            Surface(
+                                modifier = Modifier.size(110.dp),
+                                color = Color.White,
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
+                                    val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
+                                    if (qrBitmap != null) {
+                                        Image(
+                                            bitmap = qrBitmap.asImageBitmap(),
+                                            contentDescription = "QR Code",
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Spacer(Modifier.width(16.dp))
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                ConnectionDetailCard(title = "API Endpoint", value = apiUrl)
+                                ConnectionDetailCard(
+                                    title = "API Key", 
+                                    value = if (isApiKeyVisibleInQr) apiKey else "••••••••••••",
+                                    trailingIcon = if (isApiKeyVisibleInQr) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    onIconClick = { isApiKeyVisibleInQr = !isApiKeyVisibleInQr }
+                                )
+                            }
+                        }
+                        
                         Spacer(Modifier.height(12.dp))
+                        
+                        if (networkIps.size > 1) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("IP: ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                networkIps.forEach { nIp ->
+                                    FilterChip(
+                                        selected = selectedIp == nIp,
+                                        onClick = { selectedIp = nIp },
+                                        label = { Text(nIp, fontSize = 10.sp) },
+                                        modifier = Modifier.padding(horizontal = 2.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        
+                        // Configs - Stacked and leaner
+                        AssistantConfigSection(
+                            name = "Continue Config",
+                            isExpanded = expandedAssistant == "continue",
+                            onToggle = { expandedAssistant = if (expandedAssistant == "continue") null else "continue" },
+                            config = """{"title": "Chhanda", "provider": "openai", "model": "$activeModelName", "apiBase": "$apiUrl", "apiKey": "$apiKey"}"""
+                        )
+                        
+                        Spacer(Modifier.height(8.dp))
+                        
+                        AssistantConfigSection(
+                            name = "Cline Config",
+                            isExpanded = expandedAssistant == "cline",
+                            onToggle = { expandedAssistant = if (expandedAssistant == "cline") null else "cline" },
+                            config = """provider: "openai", model: "$activeModelName", apiBase: "$apiUrl", apiKey: "$apiKey""""
+                        )
                     }
                     
-                    // Configs - Stacked and leaner
-                    AssistantConfigSection(
-                        name = "Continue Config",
-                        isExpanded = expandedAssistant == "continue",
-                        onToggle = { expandedAssistant = if (expandedAssistant == "continue") null else "continue" },
-                        config = """{"title": "Chhanda", "provider": "openai", "model": "$activeModelName", "apiBase": "$apiUrl", "apiKey": "$apiKey"}"""
-                    )
+                    Spacer(Modifier.height(16.dp))
                     
-                    Spacer(Modifier.height(8.dp))
-                    
-                    AssistantConfigSection(
-                        name = "Cline Config",
-                        isExpanded = expandedAssistant == "cline",
-                        onToggle = { expandedAssistant = if (expandedAssistant == "cline") null else "cline" },
-                        config = """provider: "openai", model: "$activeModelName", apiBase: "$apiUrl", apiKey: "$apiKey""""
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showQrDialog = false }) {
-                    Text("Close")
+                    // Button at the bottom
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showQrDialog = false }) {
+                            Text("Close")
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 
     if (showStorageManager) {

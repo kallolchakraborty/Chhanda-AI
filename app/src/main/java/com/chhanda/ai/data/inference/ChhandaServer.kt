@@ -29,6 +29,9 @@ import java.net.ServerSocket
 @Serializable
 data class WebMessage(val text: String, val role: String = "user")
 
+@Serializable
+data class RegisterRequest(val name: String)
+
 /**
  * Chhanda embedded HTTP server.
  *
@@ -309,6 +312,14 @@ class ChhandaServer @Inject constructor(
                     )
                 }
 
+                post("/register") {
+                    val request = call.receive<RegisterRequest>()
+                    val remoteIp = call.request.local.remoteHost
+                    val userAgent = call.request.headers["User-Agent"] ?: "Unknown"
+                    trackDevice(remoteIp, userAgent, request.name)
+                    call.respond(mapOf("success" to true))
+                }
+
                 // / — Chat UI — no-store prevents stale cached page
                 get("/") {
                     val remoteIp = call.request.local.remoteHost
@@ -356,14 +367,20 @@ class ChhandaServer @Inject constructor(
         }
     }
 
-    private fun trackDevice(ip: String, userAgent: String = "Remote Client") {
+    private fun trackDevice(ip: String, userAgent: String = "Remote Client", customName: String? = null) {
         if (ip == "127.0.0.1" || ip == "0:0:0:0:0:0:0:1") return
 
         @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
             try {
                 val existing = deviceDao.getDeviceByIp(ip)
-                if (existing == null) {
+                val lastOctet = ip.split(".").lastOrNull() ?: ip.takeLast(3)
+                
+                val uniqueName = if (customName != null) {
+                    "$customName ($lastOctet)"
+                } else if (existing != null) {
+                    existing.deviceName
+                } else {
                     val fallbackName = "Device"
                     val parsedName = when {
                         userAgent.contains("iPhone") -> "iPhone"
@@ -373,9 +390,10 @@ class ChhandaServer @Inject constructor(
                         userAgent.contains("Macintosh") -> "Mac"
                         else -> fallbackName
                     }
-                    val lastOctet = ip.split(".").lastOrNull() ?: ip.takeLast(3)
-                    val uniqueName = "$parsedName ($lastOctet)"
-                    
+                    "$parsedName ($lastOctet)"
+                }
+                
+                if (existing == null) {
                     val newDevice = com.chhanda.ai.data.repository.DeviceEntity(
                         deviceName = uniqueName,
                         ipAddress = ip,
@@ -389,10 +407,33 @@ class ChhandaServer @Inject constructor(
                 } else {
                     deviceDao.updateDeviceStatus(existing.deviceName, true, System.currentTimeMillis())
                 }
+                
+                // Show notification on the device
+                showNotification(uniqueName)
+                
             } catch (e: Exception) {
                 Log.w(TAG, "Device tracking failure for $ip: ${e.message}")
             }
         }
+    }
+
+    private fun showNotification(deviceName: String) {
+        val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val channelId = "chhanda_server"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(channelId, "Chhanda Server", android.app.NotificationManager.IMPORTANCE_DEFAULT)
+            notificationManager.createNotificationChannel(channel)
+        }
+        
+        val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentTitle("New Connection")
+            .setContentText("$deviceName connected to Chhanda AI")
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+            
+        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
     }
 
     // ── IP Util ────────────────────────────────────────────────────────────────
@@ -455,13 +496,11 @@ class ChhandaServer @Inject constructor(
             width: 40px;
             height: 40px;
             border-radius: 12px;
-            background: var(--primary);
+            background: #ffffff;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
-            font-size: 18px;
-            color: var(--on-primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         
         #title {
@@ -510,14 +549,32 @@ class ChhandaServer @Inject constructor(
             scroll-behavior: smooth;
         }
         
-        .msg {
+        .msg-container {
+            display: flex;
+            flex-direction: column;
             max-width: 80%;
+            animation: slideUp 0.2s cubic-bezier(0, 0, 0.2, 1);
+        }
+        
+        .msg-container.u {
+            align-self: flex-end;
+        }
+        
+        .msg-container.a {
+            align-self: flex-start;
+        }
+        
+        .msg-container.s {
+            align-self: center;
+            max-width: 90%;
+        }
+        
+        .msg {
             padding: 12px 16px;
             border-radius: 20px;
             font-size: 15px;
             line-height: 1.5;
             word-break: break-word;
-            animation: slideUp 0.2s cubic-bezier(0, 0, 0.2, 1);
         }
         
         @keyframes slideUp {
@@ -525,31 +582,61 @@ class ChhandaServer @Inject constructor(
             to { opacity: 1; transform: translateY(0); }
         }
         
-        .u {
-            align-self: flex-end;
+        .u .msg {
             background: var(--user-bubble);
             color: #fff;
             border-bottom-right-radius: 4px;
         }
         
-        .a {
-            align-self: flex-start;
+        .a .msg {
             background: var(--ai-bubble);
             color: var(--fg);
             border-bottom-left-radius: 4px;
             border: 1px solid var(--border);
         }
         
-        .s {
-            align-self: center;
+        .s .msg {
             background: transparent;
             border: 1px dashed var(--border);
             color: var(--muted);
             font-size: 13px;
-            max-width: 90%;
             padding: 6px 12px;
             border-radius: 8px;
             text-align: center;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+            margin-left: 4px;
+            align-items: center;
+            width: 100%;
+        }
+        
+        .action-btn {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .action-btn:hover {
+            color: var(--primary);
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .speed-label {
+            font-size: 11px;
+            color: var(--muted);
+            align-self: center;
+            margin-right: auto;
         }
         
         #ftr {
@@ -642,19 +729,113 @@ class ChhandaServer @Inject constructor(
         .msg b { font-weight: 700; color: #fff; }
         .msg code { background: rgba(0, 0, 0, 0.3); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; }
         
+        details.think {
+            background: rgba(0,0,0,0.15);
+            padding: 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        details.think summary {
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--primary);
+            outline: none;
+        }
+        
+        .think-loader {
+            color: var(--muted);
+            font-size: 13px;
+            font-style: italic;
+            padding: 8px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: inline-block;
+            animation: pulse-op 1.5s infinite;
+        }
+        @keyframes pulse-op {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        /* Name Modal Styles */
+        #name-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(20, 18, 24, 0.9);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+        #name-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            padding: 24px;
+            max-width: 360px;
+            width: 90%;
+            text-align: center;
+        }
+        #name-card h2 { font-size: 20px; margin-bottom: 8px; color: var(--fg); }
+        #name-card p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+        #name-inp {
+            width: 100%;
+            background: var(--surface-container);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            color: var(--fg);
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+            text-align: center;
+        }
+        #name-btn {
+            width: 100%;
+            background: var(--primary);
+            color: var(--on-primary);
+            border: none;
+            padding: 12px;
+            border-radius: 100px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
         @media (max-width: 600px) {
-            .msg { max-width: 85%; }
+            .msg-container { max-width: 85%; }
         }
     </style>
 </head>
 <body>
+    <div id="name-modal">
+        <div id="name-card">
+            <h2>Welcome!</h2>
+            <p>Please enter your name to start chatting.</p>
+            <input id="name-inp" type="text" placeholder="Your Name" autocomplete="off">
+            <button id="name-btn">Continue</button>
+        </div>
+    </div>
     <div id="hdr">
-        <div id="logo">C</div>
+        <div id="logo">
+            <svg width="32" height="32" viewBox="0 0 108 108">
+                <path d="M 70,30 A 28,28 0 1,0 70,78" stroke="#2563EB" stroke-width="8" stroke-linecap="round" fill="none"/>
+                <path d="M 46,44 h 5 v 20 h -5 z" fill="#10B981"/>
+                <path d="M 56,38 h 5 v 32 h -5 z" fill="#EF4444"/>
+                <path d="M 66,48 h 5 v 12 h -5 z" fill="#2563EB"/>
+            </svg>
+        </div>
         <span id="title">Chhanda AI</span>
         <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
     </div>
     <div id="msgs">
-        <div class="msg s">Connection established with Node at ${ip}:${port}</div>
+        <div class="msg-container s"><div class="msg s">Connection established with Node at ${ip}:${port}</div></div>
     </div>
     <div id="ftr">
         <div id="row">
@@ -668,8 +849,8 @@ class ChhandaServer @Inject constructor(
     </div>
     <div id="ovl">
         <div id="crd">
-            <h2>⚠️ Cannot Reach Node</h2>
-            <p>Node at <code>${ip}:${port}</code> is not responding.<br><br>
+            <h2 id="ovl-title">⚠️ Cannot Reach Node</h2>
+            <p id="ovl-text">Node at <code>${ip}:${port}</code> is not responding.<br><br>
             <b>Troubleshooting:</b><br>
             • Ensure both devices share the SAME Wi-Fi.<br>
             • <b>iPhone:</b> Turn off "Private Relay" or "Limit IP Address Tracking" in Wi-Fi settings.<br>
@@ -680,7 +861,10 @@ class ChhandaServer @Inject constructor(
     <script>
         const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),
               btn=document.getElementById('btn'),badge=document.getElementById('badge'),
-              bt=document.getElementById('bt'),ovl=document.getElementById('ovl');
+              bt=document.getElementById('bt'),ovl=document.getElementById('ovl'),
+              nameModal=document.getElementById('name-modal'),
+              nameInp=document.getElementById('name-inp'),
+              nameBtn=document.getElementById('name-btn');
         let ready=false,fails=0,errShown=false;
         const MAX=12;
 
@@ -706,7 +890,13 @@ class ChhandaServer @Inject constructor(
             }catch(e){
                 fails++;
                 badge.className='';bt.textContent='CONNECTING ('+fails+'/'+MAX+')';
-                if(fails>=MAX)ovl.style.display='flex';
+                if(fails>=MAX){
+                    ovl.style.display='flex';
+                    document.getElementById('ovl-title').textContent = "🔴 Server is Offline";
+                    document.getElementById('ovl-text').innerHTML = "The server is set to off. No further communication is possible for now.";
+                    inp.disabled = true;
+                    btn.disabled = true;
+                }
             }
         }
 
@@ -717,6 +907,8 @@ class ChhandaServer @Inject constructor(
             const txt=inp.value.trim();if(!txt)return;
             inp.value='';inp.disabled=true;btn.disabled=true;
             addMsg(txt,'u');const ai=addMsg('Thinking…','a');
+            let tokenCount = 0;
+            let startTime = null;
             try{
                 const res=await fetch('/chat',{method:'POST',
                     headers:{'Content-Type':'application/json'},
@@ -736,6 +928,9 @@ class ChhandaServer @Inject constructor(
                         if(tok.trim()==='[DONE]')break;
                         if(tok.startsWith('ERR:')){ai.className='msg s';ai.textContent=tok.slice(4);break;}
                         
+                        tokenCount++;
+                        if (!startTime) startTime = Date.now();
+                        
                         const currentText = ai.getAttribute('data-raw') || '';
                         const newText = currentText + tok.replace(/\\n/g,'\n');
                         ai.setAttribute('data-raw', newText);
@@ -744,12 +939,46 @@ class ChhandaServer @Inject constructor(
                         msgs.scrollTop=msgs.scrollHeight;
                     }
                 }
+                
+                // Add actions after streaming completes
+                const raw = ai.getAttribute('data-raw');
+                if (raw) {
+                    let speed = 0;
+                    if (startTime) {
+                        const duration = (Date.now() - startTime) / 1000;
+                        speed = duration > 0 ? (tokenCount / duration).toFixed(1) : 0;
+                    }
+                    addActionsToMessage(ai, raw, speed);
+                }
+                
             }catch(e){ai.className='msg s';ai.textContent='Error: '+e.message;}
             finally{if(ready){inp.disabled=false;btn.disabled=false;inp.focus();}msgs.scrollTop=msgs.scrollHeight;}
         }
 
         function formatText(t) {
-            return t
+            const thinkStart = t.indexOf('<think>');
+            const thinkEnd = t.indexOf('</think>');
+            
+            if (thinkStart !== -1) {
+                const beforeThink = t.substring(0, thinkStart);
+                if (thinkEnd !== -1) {
+                    const thinkText = t.substring(thinkStart + 7, thinkEnd);
+                    const afterThink = t.substring(thinkEnd + 8);
+                    return escapeHtml(beforeThink) + 
+                           `<details class="think"><summary>💡 Click to view thinking process</summary>` + 
+                           escapeHtml(thinkText) + 
+                           `</details>` + 
+                           escapeHtml(afterThink);
+                } else {
+                    return escapeHtml(beforeThink) + 
+                           `<div class="think-loader">⚡ Thinking...</div>`;
+                }
+            }
+            return escapeHtml(t);
+        }
+        
+        function escapeHtml(text) {
+            return text
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -759,6 +988,9 @@ class ChhandaServer @Inject constructor(
         }
 
         function addMsg(t,c){
+            const container = document.createElement('div');
+            container.className = 'msg-container ' + c;
+            
             const d=document.createElement('div');
             d.className='msg '+c;
             if (c === 's') {
@@ -767,9 +999,84 @@ class ChhandaServer @Inject constructor(
                 d.setAttribute('data-raw', t);
                 d.innerHTML = formatText(t);
             }
-            msgs.appendChild(d);
+            
+            container.appendChild(d);
+            msgs.appendChild(container);
             msgs.scrollTop=msgs.scrollHeight;
+            
+            if (c === 'a' && t !== 'Thinking…') {
+                addActionsToMessage(d, t, 0);
+            }
+            
             return d;
+        }
+        
+        function addActionsToMessage(msgDiv, text, speed) {
+            const container = msgDiv.parentElement;
+            if (!container) return;
+            
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+            
+            if (speed) {
+                const speedLabel = document.createElement('span');
+                speedLabel.className = 'speed-label';
+                speedLabel.textContent = speed + ' tok/s';
+                actions.appendChild(speedLabel);
+            }
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'action-btn';
+            copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(text);
+                const originalContent = copyBtn.innerHTML;
+                copyBtn.innerHTML = `<span style="font-size:10px;color:var(--primary);">Copied!</span>`;
+                setTimeout(() => { copyBtn.innerHTML = originalContent; }, 1500);
+            };
+            
+            const shareBtn = document.createElement('button');
+            shareBtn.className = 'action-btn';
+            shareBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.41" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
+            shareBtn.onclick = () => {
+                if (navigator.share) {
+                    navigator.share({ text: text });
+                } else {
+                    alert('Sharing not supported on this browser. Text copied instead!');
+                    navigator.clipboard.writeText(text);
+                }
+            };
+            
+            actions.appendChild(copyBtn);
+            actions.appendChild(shareBtn);
+            container.appendChild(actions);
+        }
+
+        // Name Prompt Logic
+        let userName = localStorage.getItem('userName');
+        if (!userName) {
+            nameModal.style.display = 'flex';
+            nameBtn.onclick = () => {
+                const val = nameInp.value.trim();
+                if (val) {
+                    localStorage.setItem('userName', val);
+                    nameModal.style.display = 'none';
+                    registerName(val);
+                }
+            };
+            nameInp.addEventListener('keypress', e => { if (e.key === 'Enter') nameBtn.click(); });
+        } else {
+            registerName(userName);
+        }
+        
+        async function registerName(name) {
+            try {
+                await fetch('/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: name})
+                });
+            } catch(e) { console.error(e); }
         }
 
         btn.onclick=send;

@@ -150,9 +150,10 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
     ) { innerPadding ->
         NavHost(
             navController = navController, 
-            startDestination = Screen.Dashboard.route, 
+            startDestination = "welcome", 
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable("welcome") { WelcomeScreen(navController) }
             composable(Screen.Dashboard.route) { DashboardScreen(navController, systemViewModel) }
             composable(Screen.Models.route) { KnowledgeBaseScreen(navController, systemViewModel) }
             composable(Screen.Config.route) { ConfigScreen(navController, systemViewModel) }
