@@ -97,7 +97,12 @@ object Localization {
             "copy" to "Copy",
             "share" to "Share",
             "delete" to "Delete",
-            "cancel" to "Cancel"
+            "cancel" to "Cancel",
+            "clear_logs_confirm" to "Clear all logs?",
+            "clear_logs_desc" to "This will permanently remove all activity logs. This cannot be undone.",
+            "confirm" to "Confirm",
+            "delete_model_confirm" to "Delete Model?",
+            "delete_model_desc" to "This will remove the model file from your device. You will need to download it again to use it."
         ),
         "Bengali" to mapOf(
             "dashboard" to "মূল পাতা",
@@ -194,7 +199,12 @@ object Localization {
             "copy" to "কপি",
             "share" to "শেয়ার",
             "delete" to "মুছুন",
-            "cancel" to "বাতিল"
+            "cancel" to "বাতিল",
+            "clear_logs_confirm" to "সব লগ মুছে ফেলবেন?",
+            "clear_logs_desc" to "এটি সব অ্যাক্টিভিটি লগ স্থায়ীভাবে মুছে ফেলবে। এটি আর ফিরে পাওয়া সম্ভব নয়।",
+            "confirm" to "নিশ্চিত করুন",
+            "delete_model_confirm" to "মডেল মুছে ফেলবেন?",
+            "delete_model_desc" to "এটি আপনার ডিভাইস থেকে মডেল ফাইলটি মুছে ফেলবে। এটি ব্যবহার করতে আপনাকে আবার ডাউনলোড করতে হবে।"
         ),
         "Hindi" to mapOf(
             "dashboard" to "मुख्य",
@@ -291,7 +301,12 @@ object Localization {
             "copy" to "कॉपी",
             "share" to "शेयर",
             "delete" to "हटाएं",
-            "cancel" to "रद्द करें"
+            "cancel" to "रद्द करें",
+            "clear_logs_confirm" to "सभी लॉग मिटाएं?",
+            "clear_logs_desc" to "यह सभी गतिविधि लॉग स्थायी रूप से हटा देगा। इसे पूर्ववत नहीं किया जा सकता है।",
+            "confirm" to "पुष्टि करें",
+            "delete_model_confirm" to "मॉडल हटाएं?",
+            "delete_model_desc" to "यह आपके डिवाइस से मॉडल फ़ाइल को हटा देगा। इसका उपयोग करने के लिए आपको इसे फिर से डाउनलोड करना होगा।"
         ),
         "Spanish" to mapOf(
             "dashboard" to "Inicio",
@@ -388,7 +403,12 @@ object Localization {
             "copy" to "Copiar",
             "share" to "Compartir",
             "delete" to "Eliminar",
-            "cancel" to "Cancelar"
+            "cancel" to "Cancelar",
+            "clear_logs_confirm" to "¿Borrar todos los registros?",
+            "clear_logs_desc" to "Esto eliminará permanentemente todos los registros de actividad. Esta acción no se puede deshacer.",
+            "confirm" to "Confirmar",
+            "delete_model_confirm" to "¿Eliminar modelo?",
+            "delete_model_desc" to "Esto eliminará el archivo del modelo de su dispositivo. Tendrá que descargarlo de nuevo para usarlo."
         )
     )
 

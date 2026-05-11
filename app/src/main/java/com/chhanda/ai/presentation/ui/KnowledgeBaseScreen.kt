@@ -50,6 +50,9 @@ fun KnowledgeBaseScreen(
     }
     val context = LocalContext.current
     
+    var showWipeConfirm by remember { mutableStateOf(false) }
+    var modelToDelete by remember { mutableStateOf<String?>(null) }
+    
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
@@ -138,7 +141,7 @@ fun KnowledgeBaseScreen(
             item {
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { viewModel.clearAllData() },
+                    onClick = { showWipeConfirm = true },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
@@ -149,6 +152,30 @@ fun KnowledgeBaseScreen(
                 }
                 Spacer(Modifier.height(80.dp))
             }
+        }
+
+        if (showWipeConfirm) {
+            AlertDialog(
+                onDismissRequest = { showWipeConfirm = false },
+                title = { Text(Localization.getString("purge_history_title", appLanguage)) },
+                text = { Text(Localization.getString("purge_history_text", appLanguage)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearAllData()
+                            showWipeConfirm = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(Localization.getString("confirm", appLanguage))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showWipeConfirm = false }) {
+                        Text(Localization.getString("cancel", appLanguage))
+                    }
+                }
+            )
         }
     }
 }

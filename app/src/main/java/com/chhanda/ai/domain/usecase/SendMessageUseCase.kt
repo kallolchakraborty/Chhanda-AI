@@ -39,25 +39,23 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
         val systemInstruction = buildString {
             append("""
-                You are an on-device retrieval-augmented assistant optimized for mobile efficiency.
-
-                Question: $userText
-
-                Source context:
-                ${if (longTermContext.trim().isEmpty()) "- No relevant local context found." else longTermContext.take(1500)}
-
-                Instructions:
-                Use the most relevant and recent evidence.
-                Prefer transcript/OCR/text evidence over metadata.
-                Answer briefly and accurately.
-                If evidence is insufficient, say what is missing.
+                You are Chhanda AI, an on-device assistant using Retrieval-Augmented Generation (RAG).
                 
-                Optimization priorities: 1. Correctness, 2. Low latency, 3. Low memory, 4. Short output.
+                USER QUESTION:
+                "$userText"
+
+                CONTEXT FROM LOCAL KNOWLEDGE BASE:
+                ${if (longTermContext.trim().isEmpty()) "- No relevant local evidence found." else longTermContext.trim()}
+
+                STRICT CONSTRAINTS:
+                1. Answer ONLY based on the provided context if possible.
+                2. If the context doesn't contain the answer, use your general knowledge but state clearly that local evidence was insufficient.
+                3. Prioritize OCR text and document transcripts over metadata.
+                4. Be extremely concise and professional.
+                5. Do NOT mention being an AI or your internal mechanisms unless asked.
+                
+                RESPONSE LANGUAGE: $preferredLanguage
             """.trimIndent())
-            
-            if (preferredLanguage != "English") {
-                append("\nIMPORTANT: Always respond in $preferredLanguage.\n")
-            }
         }
 
         // STEP 4: Streamed Generation — emit tokens as they arrive

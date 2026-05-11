@@ -39,16 +39,16 @@ class ContextManager @javax.inject.Inject constructor(
             if (filtered.isEmpty()) ""
             else {
                 filtered.groupBy { it.metadata["type"] ?: "TXT" }
-                    .entries.joinToString("\n") { (type, chunks) ->
+                    .entries.joinToString("\n\n") { (type, chunks) ->
                         val label = when(type.uppercase()) {
-                            "PDF" -> "PDF"
-                            "AUDIO" -> "Audio transcript"
-                            "VIDEO" -> "Video transcript"
-                            "IMAGE" -> "OCR from images/frames"
-                            "URL" -> "URL extracts"
-                            else -> "Text"
+                            "PDF" -> "[Source: PDF Document]"
+                            "AUDIO" -> "[Source: Audio Transcript]"
+                            "VIDEO" -> "[Source: Video Transcript]"
+                            "IMAGE" -> "[Source: Image OCR]"
+                            "URL" -> "[Source: Web Content]"
+                            else -> "[Source: Text]"
                         }
-                        "- $label: ${chunks.joinToString("; ") { it.text }}"
+                        "$label\n" + chunks.joinToString("\n---\n") { it.text }
                     }
             }
         } catch (e: Exception) {

@@ -2,22 +2,44 @@ package com.chhanda.ai.domain.model
 
 object TextChunker {
     /**
-     * Splits text into chunks of chunkSize with overlap.
-     * Optimized for mobile: avoids large allocations and handles edge cases.
+     * Splits text into chunks by attempting to break at sentence boundaries.
+     * Follows the 'Semantic Chunking' pattern from the System Design RAG tutorial.
      */
-    fun chunk(text: String, chunkSize: Int = 500, overlap: Int = 50): List<String> {
+    fun chunk(text: String, chunkSize: Int = 800, overlap: Int = 100): List<String> {
         if (text.isBlank()) return emptyList()
-        if (chunkSize <= 0) return listOf(text)
-        if (overlap >= chunkSize) return listOf(text) // Avoid infinite loop
         
+        // Split into sentences using common punctuation
+        val sentences = text.split(Regex("(?<=[.!?])\\s+"))
         val chunks = mutableListOf<String>()
-        var start = 0
-        while (start < text.length) {
-            val end = minOf(start + chunkSize, text.length)
-            chunks.add(text.substring(start, end))
-            if (end == text.length) break
-            start += chunkSize - overlap
+        var currentChunk = StringBuilder()
+        
+        for (sentence in sentences) {
+            if (currentChunk.length + sentence.length <= chunkSize) {
+                currentChunk.append(sentence).append(" ")
+            } else {
+                if (currentChunk.isNotEmpty()) {
+                    chunks.add(currentChunk.toString().trim())
+                }
+                // Handle cases where a single sentence is longer than chunkSize
+                if (sentence.length > chunkSize) {
+                    var subStart = 0
+                    while (subStart < sentence.length) {
+                        val subEnd = minOf(subStart + chunkSize, sentence.length)
+                        chunks.add(sentence.substring(subStart, subEnd))
+                        subStart += chunkSize - overlap
+                    }
+                    currentChunk = StringBuilder()
+                } else {
+                    // Start new chunk with the sentence
+                    currentChunk = StringBuilder(sentence).append(" ")
+                }
+            }
         }
+        
+        if (currentChunk.isNotEmpty()) {
+            chunks.add(currentChunk.toString().trim())
+        }
+        
         return chunks
     }
 }

@@ -51,6 +51,9 @@ fun LogsScreen(
     var filterExpanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
+    var showClearConfirm by remember { mutableStateOf(false) }
+    var showDeleteSelectedConfirm by remember { mutableStateOf(false) }
+    
     val selectedLogIds = remember { mutableStateListOf<String>() }
     val isSelectionMode = selectedLogIds.isNotEmpty()
     
@@ -112,10 +115,7 @@ fun LogsScreen(
                 },
                 actions = {
                     if (isSelectionMode) {
-                        IconButton(onClick = {
-                            viewModel.deleteLogs(selectedLogIds.toList())
-                            selectedLogIds.clear()
-                        }) {
+                        IconButton(onClick = { showDeleteSelectedConfirm = true }) {
                             Icon(Icons.Default.Delete, "Delete selected", tint = MaterialTheme.colorScheme.error)
                         }
                         IconButton(onClick = { selectedLogIds.clear() }) {
@@ -124,7 +124,7 @@ fun LogsScreen(
                     } else {
                         IconButton(onClick = { 
                             if (logs.isNotEmpty()) {
-                                viewModel.clearAllLogs()
+                                showClearConfirm = true
                             }
                         }) {
                             Icon(Icons.Default.DeleteSweep, "Clear all", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
@@ -289,8 +289,56 @@ fun LogsScreen(
                             }
                         }
                     )
-                }
             }
+        }
+
+        if (showClearConfirm) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirm = false },
+                title = { Text(Localization.getString("clear_logs_confirm", appLanguage)) },
+                text = { Text(Localization.getString("clear_logs_desc", appLanguage)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearAllLogs()
+                            showClearConfirm = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(Localization.getString("confirm", appLanguage))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearConfirm = false }) {
+                        Text(Localization.getString("cancel", appLanguage))
+                    }
+                }
+            )
+        }
+
+        if (showDeleteSelectedConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteSelectedConfirm = false },
+                title = { Text("Delete ${selectedLogIds.size} logs?") },
+                text = { Text("This action cannot be undone.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteLogs(selectedLogIds.toList())
+                            selectedLogIds.clear()
+                            showDeleteSelectedConfirm = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(Localization.getString("confirm", appLanguage))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteSelectedConfirm = false }) {
+                        Text(Localization.getString("cancel", appLanguage))
+                    }
+                }
+            )
         }
     }
 }

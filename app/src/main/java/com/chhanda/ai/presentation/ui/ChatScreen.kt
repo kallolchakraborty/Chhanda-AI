@@ -54,6 +54,7 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
     val appLanguage by viewModel.appLanguage.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom on new messages or partial tokens
     val totalItems = uiState.messages.size + (if (uiState.currentPartialResponse.isNotEmpty()) 1 else 0)
@@ -81,7 +82,12 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-                )
+                ),
+                actions = {
+                    IconButton(onClick = { showClearConfirm = true }) {
+                        Icon(Icons.Default.Close, "Clear History", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
             )
         },
         containerColor = MaterialTheme.colorScheme.surface
@@ -192,6 +198,30 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
                 onStop = { viewModel.stopInference() },
                 onAttach = { viewModel.addFile(it) },
                 appLanguage = appLanguage
+            )
+        }
+
+        if (showClearConfirm) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirm = false },
+                title = { Text(Localization.getString("purge_history_title", appLanguage)) },
+                text = { Text(Localization.getString("purge_history_text", appLanguage)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearHistory()
+                            showClearConfirm = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(Localization.getString("confirm", appLanguage))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearConfirm = false }) {
+                        Text(Localization.getString("cancel", appLanguage))
+                    }
+                }
             )
         }
     }
