@@ -28,14 +28,23 @@ class ContextManager @javax.inject.Inject constructor(
         // Long-Term Memory: Vector search for semantic relevance across all history
         val longTermMemory = try {
             val queryEmbedding = embeddingEngine.embed(query)
-            val results = vectorStore.search(queryEmbedding, topK = 2, modelId = modelName)
-            results.filter { result ->
-                recentMessages.none { it.text.contains(result.text.take(20)) }
-            }
-            .joinToString("\n---\n") { it.text }
-            .take(500)
+            // Use topK=3 but filter for high-confidence/low-signal chunks
+            val results = vectorStore.search(queryEmbedding, topK = 3, modelId = modelName)
+            
+            results
+                .filter { it.score > 0.65f } // Discard low-signal chunks
+                .filter { result ->
+                    // Avoid repeating context already in recent history
+                    recentMessages.none { it.text.contains(result.text.take(20)) }
+                }
+                .joinToString("\n---\n") { result ->
+                    val source = result.metadata["source"] ?: "Local Source"
+                    val type = result.metadata["type"] ?: "Document"
+                    "[Source: $source ($type)]\n${result.text}"
+                }
+                .take(1000) // Adaptive limit for mobile
         } catch (e: Exception) {
-            "" // Graceful fallback — RAG is optional enhancement
+            "" // Graceful fallback
         }
 
         return history to longTermMemory
