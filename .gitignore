@@ -1,0 +1,26 @@
+# Gradle files
+.gradle/
+build/
+app/build/
+
+# Android Studio files
+*.iml
+.idea/
+
+# Local configuration
+local.properties
+
+# Log files
+*.log
+
+# Output files
+*.apk
+
+# OS files
+.DS_Store
+
+# Large binaries and JDK
+jdk/
+*.bin
+*.litertlm
+*.tar.gz

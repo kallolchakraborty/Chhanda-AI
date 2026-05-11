@@ -1,0 +1,115 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'com.google.devtools.ksp'
+apply plugin: 'kotlinx-serialization'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'com.google.dagger.hilt.android'
+
+android {
+    namespace 'com.chhanda.ai'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.chhanda.ai"
+        minSdk 26
+        targetSdk 34
+        versionCode 3
+        versionName "1.2"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables { useSupportLibrary true }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+    kotlinOptions {
+        jvmTarget = '21'
+        freeCompilerArgs += ["-Xskip-metadata-version-check"]
+    }
+
+    buildFeatures {
+        compose true
+    }
+
+    // composeOptions removed for Kotlin 2.0
+
+    packagingOptions {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+            excludes += 'META-INF/INDEX.LIST'
+            excludes += 'META-INF/io.netty.versions.properties'
+            excludes += 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+
+    // BOM 2024.02.00 is verified stable for Kotlin 1.9.22 + compiler 1.5.10
+    // Maps to: ui:1.6.2, material3:1.2.0
+    implementation platform('androidx.compose:compose-bom:2024.02.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+
+    // Hilt 2.55 — stable with Kotlin 2.1.0
+    implementation "com.google.dagger:hilt-android:2.55"
+    ksp "com.google.dagger:hilt-compiler:2.55"
+    implementation 'androidx.hilt:hilt-navigation-compose:1.2.0'
+    implementation 'androidx.navigation:navigation-compose:2.8.5'
+
+    // Room
+    implementation "androidx.room:room-runtime:2.6.1"
+    implementation "androidx.room:room-ktx:2.6.1"
+    ksp "androidx.room:room-compiler:2.6.1"
+
+    // MediaPipe LiteRT LM (Newer API with abort capability)
+    implementation 'com.google.ai.edge.litertlm:litertlm-android:0.11.0'
+
+    // DataStore
+    implementation "androidx.datastore:datastore-preferences:1.1.1"
+
+    // ML Kit OCR
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+
+    // Ktor CIO
+    implementation "io.ktor:ktor-server-core:2.3.12"
+    implementation "io.ktor:ktor-server-cio:2.3.12"
+    implementation "io.ktor:ktor-server-content-negotiation:2.3.12"
+    implementation "io.ktor:ktor-serialization-kotlinx-json:2.3.12"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3"
+    implementation "io.ktor:ktor-server-cors:2.3.12"
+
+    // QR Code
+    implementation 'com.google.zxing:core:3.5.3'
+
+    // WorkManager for background downloading
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
+
+    // SSH
+    implementation 'com.github.mwiede:jsch:0.2.16'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'io.mockk:mockk:1.13.5'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    androidTestImplementation platform('androidx.compose:compose-bom:2024.09.03')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
