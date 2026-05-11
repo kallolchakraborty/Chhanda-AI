@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.chhanda.ai.data.inference.AndroidMultimodalIngestor
 import com.chhanda.ai.data.inference.LiteRTLMEngine
+import com.chhanda.ai.data.inference.LiteRTEmbeddingEngine
 import com.chhanda.ai.data.repository.AppDatabase
 import com.chhanda.ai.data.repository.ChatDao
 import com.chhanda.ai.data.repository.DeviceDao

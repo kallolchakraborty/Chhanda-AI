@@ -8,6 +8,9 @@ import com.google.mediapipe.tasks.text.textembedder.TextEmbedder.TextEmbedderOpt
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.google.mediapipe.tasks.core.Delegate
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,8 +22,9 @@ class LiteRTEmbeddingEngine @Inject constructor(
 
     private var embedder: TextEmbedder? = null
     private var lastModelPath: String? = null
+    private val mutex = Mutex()
 
-    private fun getEmbedder(): TextEmbedder? {
+    private suspend fun getEmbedder(): TextEmbedder? = mutex.withLock {
         val modelFile = File(context.filesModelsDir(), "embedding-gemma-300m.tflite")
         if (!modelFile.exists()) return null
 
@@ -32,6 +36,7 @@ class LiteRTEmbeddingEngine @Inject constructor(
             .setBaseOptions(
                 com.google.mediapipe.tasks.core.BaseOptions.builder()
                     .setModelAssetPath(modelFile.absolutePath)
+                    .setDelegate(Delegate.GPU)
                     .build()
             )
             .build()
