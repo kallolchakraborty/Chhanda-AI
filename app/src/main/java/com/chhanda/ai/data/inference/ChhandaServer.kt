@@ -142,7 +142,7 @@ class ChhandaServer @Inject constructor(
             cm?.requestNetwork(request, object : android.net.ConnectivityManager.NetworkCallback() {})
         } catch (_: Exception) {}
 
-        for (port in requestedPort..requestedPort + 5) {
+        for (port in requestedPort..requestedPort + 10) {
             Log.i(TAG, "Trying CIO on 0.0.0.0:$port …")
             try {
                 val engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {

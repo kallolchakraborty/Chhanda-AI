@@ -103,6 +103,10 @@ class LiteRTLMEngine @Inject constructor(
         // Tear down any existing engine
         close()
         
+        // NEW: Mandatory Memory Flush
+        System.gc()
+        Runtime.getRuntime().gc()
+        
         // CRITICAL: Mathematically guarantee C++ Garbage Collector has time to release 
         // the 2.5GB file from RAM. No matter how many times close() is called, 
         // we force at least a 2500ms gap before allocating new RAM.
@@ -118,7 +122,15 @@ class LiteRTLMEngine @Inject constructor(
             if (!file.exists()) throw Exception("Model file not found: $path")
 
             if (file.length() < 1_000_000L) {
-                throw Exception("Model file too small (${file.length()} bytes). It may be corrupted or incomplete.")
+                throw Exception("Model file too small. It might be an HTML error page from HuggingFace. Check your HF Token.")
+            }
+
+            // NEW: Corrupted-stub detection
+            val firstBytes = try { file.inputStream().use { it.readNBytes(10) } } catch(_: Exception) { byteArrayOf() }
+            if (firstBytes.decodeToString().contains("<!DOC", ignoreCase = true) || 
+                firstBytes.decodeToString().contains("<html", ignoreCase = true)) {
+                file.delete()
+                throw Exception("Downloaded file was an HTML error page (likely 401 Unauthorized). Please check your HF Token in Settings.")
             }
 
             Log.d(TAG, "Loading ${file.name} (${file.length() / 1_048_576} MB)...")
