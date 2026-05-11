@@ -41,7 +41,8 @@ import javax.inject.Singleton
 @Singleton
 class LiteRTLMEngine @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val ingestor: MultimodalIngestor
+    private val ingestor: MultimodalIngestor,
+    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository
 ) : LLMEngine {
 
     // ── State ──────────────────────────────────────────────────────────────────
@@ -135,12 +136,16 @@ class LiteRTLMEngine @Inject constructor(
 
             Log.d(TAG, "Loading ${file.name} (${file.length() / 1_048_576} MB)...")
 
+            val contextLengthStr = settingsRepository.contextLengthFlow.first()
+            val contextLength = contextLengthStr.toIntOrNull() ?: 2048
+            Log.d(TAG, "Dynamic context length: $contextLength")
+
             try {
                 Log.d(TAG, "Attempting GPU initialization...")
                 val gpuConfig = EngineConfig(
                     modelPath = path,
                     backend = Backend.GPU(),
-                    maxNumTokens = 2048,
+                    maxNumTokens = contextLength,
                     cacheDir = context.cacheDir.absolutePath
                 )
                 val engine = Engine(gpuConfig)
@@ -153,7 +158,7 @@ class LiteRTLMEngine @Inject constructor(
                     val cpuConfig = EngineConfig(
                         modelPath = path,
                         backend = Backend.CPU(),
-                        maxNumTokens = 2048,
+                        maxNumTokens = contextLength,
                         cacheDir = context.cacheDir.absolutePath
                     )
                     val engine = Engine(cpuConfig)

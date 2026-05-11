@@ -12,5 +12,6 @@ data class MessageEntity(
     val deviceId: String = "local",
     val modelName: String = "unknown",
     val sessionId: String = "default_session",
-    val tps: Double = 0.0
+    val tps: Double = 0.0,
+    val isRagUsed: Boolean = false
 )

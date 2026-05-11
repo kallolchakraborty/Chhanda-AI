@@ -39,19 +39,30 @@ class MainActivity : ComponentActivity() {
                 ChhandaApp(vm)
             }
 
-            // PRO FIX: Request Notification Permission for Foreground Service on API 33+
+            // PRO FIX: Request Permissions for Foreground Service and Storage
+            val permissions = mutableListOf<String>()
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                val permission = android.Manifest.permission.POST_NOTIFICATIONS
-                val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                ) { isGranted ->
-                    if (!isGranted) {
-                        vm.addLog("SYSTEM", "Notification permission denied. Background server may be less stable.", "WARNING")
-                    }
+                permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+                // For RAG we often need files, so requesting media permissions is a good first step on API 33+
+                permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+                permissions.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+                permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+            } else {
+                permissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            
+            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+            ) { result ->
+                val denied = result.filter { !it.value }
+                if (denied.isNotEmpty()) {
+                    vm.addLog("SYSTEM", "Some permissions denied. App functionality might be limited.", "WARNING")
                 }
-                LaunchedEffect(Unit) {
-                    launcher.launch(permission)
-                }
+            }
+            
+            LaunchedEffect(Unit) {
+                launcher.launch(permissions.toTypedArray())
             }
         }
     }
@@ -159,18 +170,23 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
             composable(Screen.Config.route) { ConfigScreen(navController, systemViewModel) }
             composable(Screen.Logs.route) { LogsScreen(navController, systemViewModel) }
             composable(
-                "chat/{modelName}?sessionId={sessionId}",
+                "chat/{modelName}?sessionId={sessionId}&readOnly={readOnly}",
                 arguments = listOf(
                     androidx.navigation.navArgument("modelName") { type = androidx.navigation.NavType.StringType },
                     androidx.navigation.navArgument("sessionId") { 
                         type = androidx.navigation.NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    androidx.navigation.navArgument("readOnly") {
+                        type = androidx.navigation.NavType.BoolType
+                        defaultValue = false
                     }
                 )
             ) { backStackEntry ->
+                val readOnly = backStackEntry.arguments?.getBoolean("readOnly") ?: false
                 val viewModel: ChatViewModel = hiltViewModel()
-                ChatScreen(navController = navController, viewModel = viewModel)
+                ChatScreen(navController = navController, viewModel = viewModel, isReadOnly = readOnly)
             }
         }
     }

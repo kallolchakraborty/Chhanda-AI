@@ -2,6 +2,7 @@ package com.chhanda.ai.presentation.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,7 +56,7 @@ fun DashboardScreen(
     viewModel: SystemViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val ramUsage by viewModel.ramUsage.collectAsState()
-    val vramUsage by viewModel.vramUsage.collectAsState()
+    val appStorageUsage by viewModel.appStorageUsage.collectAsState()
     val tps by viewModel.tokensPerSec.collectAsState()
     val port by viewModel.serverPort.collectAsState()
     val deviceTemperature by viewModel.deviceTemperature.collectAsState()
@@ -77,6 +78,8 @@ fun DashboardScreen(
     val downloadPauseState by viewModel.downloadPauseFlow.collectAsState()
     val isModelLoading by viewModel.isModelLoading.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
+    val vectorDbUsage by viewModel.vectorDbUsage.collectAsState()
+    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
     val context = LocalContext.current
     var showModelPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -191,6 +194,8 @@ fun DashboardScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+
+
             item {
                 if (isVpnActive) {
                     Card(
@@ -223,14 +228,32 @@ fun DashboardScreen(
                     },
                     isLoading = isModelLoading,
                     temperature = deviceTemperature,
-                    appLanguage = appLanguage
+                    appLanguage = appLanguage,
+                    ipAddress = viewModel.localIpAddress.collectAsState().value
                 )
             }
             
             item {
+                val usageGb = vectorDbUsage.toDouble() / (1024 * 1024 * 1024)
+                val capacityGb = vectorDbCapacityBytes.toDouble() / (1024 * 1024 * 1024)
+                val isDbAlert = vectorDbUsage.toDouble() >= (vectorDbCapacityBytes.toDouble() * 0.9)
+                val usageMb = vectorDbUsage.toDouble() / (1024 * 1024)
+                
+                val displayValue = if (usageGb >= 1.0) {
+                    String.format(java.util.Locale.US, "%.2f / %.1f GB", usageGb, capacityGb)
+                } else {
+                    String.format(java.util.Locale.US, "%.1f MB / %.1f GB", usageMb, capacityGb)
+                }
+                
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StatCard(Modifier.weight(1f), Localization.getString("ram", appLanguage), ramUsage, Icons.Default.Memory)
-                    StatCard(Modifier.weight(1f), Localization.getString("vram", appLanguage), vramUsage, Icons.Default.Kitchen)
+                    StatCard(Modifier.weight(1f), Localization.getString("app_storage", appLanguage), appStorageUsage, Icons.Default.Storage)
+                    StatCard(
+                        Modifier.weight(1f), 
+                        Localization.getString("vector_db", appLanguage), 
+                        displayValue, 
+                        Icons.Default.Dns,
+                        isAlert = isDbAlert
+                    )
                 }
             }
             
@@ -827,10 +850,15 @@ fun DashboardScreen(
                     LaunchedEffect(networkIps) { if (selectedIp.isEmpty() && networkIps.isNotEmpty()) selectedIp = networkIps.first() }
                     
                     val currentIp = if (selectedIp.isNotEmpty()) selectedIp else ip
-                    val chatUrl = if (publicUrl.isNotBlank()) publicUrl.removeSuffix("/") else if (tunnelUrl.isNotEmpty()) tunnelUrl else "http://$currentIp:$displayPort"
-                    val apiUrl = if (publicUrl.isNotBlank()) "$chatUrl/v1" else if (tunnelUrl.isNotEmpty()) "$chatUrl/v1" else "$chatUrl/$deviceModel/$activeModelName/v1"
-                    
                     val apiKey by viewModel.apiKey.collectAsState()
+                    val chatUrl = if (publicUrl.isNotBlank()) {
+                        "${publicUrl.removeSuffix("/")}?key=$apiKey"
+                    } else if (tunnelUrl.isNotEmpty()) {
+                        "$tunnelUrl?key=$apiKey"
+                    } else {
+                        "http://$currentIp:$displayPort?key=$apiKey"
+                    }
+                    val apiUrl = if (publicUrl.isNotBlank()) "$chatUrl/v1" else if (tunnelUrl.isNotEmpty()) "$chatUrl/v1" else "$chatUrl/$deviceModel/$activeModelName/v1"
                     
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally, 
@@ -958,7 +986,9 @@ fun DashboardScreen(
                 },
                 onClearDevice = { deviceId ->
                     viewModel.clearHistoryForDevice(deviceId)
-                }
+                },
+                navController = navController,
+                viewModel = viewModel
             )
         }
     }
@@ -993,7 +1023,9 @@ fun DashboardScreen(
 fun StorageManagerSheet(
     summary: com.chhanda.ai.presentation.viewmodel.StorageSummary,
     onClearAll: () -> Unit,
-    onClearDevice: (String) -> Unit
+    onClearDevice: (String) -> Unit,
+    navController: NavController,
+    viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel
 ) {
     var expandedDeviceId by remember { mutableStateOf<String?>(null) }
 
@@ -1036,6 +1068,17 @@ fun StorageManagerSheet(
         
         Spacer(Modifier.height(24.dp))
         
+        val isIngesting by viewModel.isIngesting.collectAsState()
+        val progress by viewModel.ingestionProgress.collectAsState()
+        val message by viewModel.ingestionMessage.collectAsState()
+        
+        com.chhanda.ai.presentation.ui.components.IngestionProgressDialog(
+            isIngesting = isIngesting,
+            progress = progress,
+            message = message,
+            onDismiss = { viewModel.dismissIngestionProgress() }
+        )
+        
         Text("DEVICES & HISTORY", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         
@@ -1051,7 +1094,10 @@ fun StorageManagerSheet(
                     onToggleExpand = {
                         expandedDeviceId = if (expandedDeviceId == deviceHistory.deviceId) null else deviceHistory.deviceId
                     },
-                    onClear = { onClearDevice(deviceHistory.deviceId) }
+                    onClear = { onClearDevice(deviceHistory.deviceId) },
+                    onThreadClick = { sessionId, modelName, readOnly ->
+                        navController.navigate("chat/$modelName?sessionId=$sessionId&readOnly=$readOnly")
+                    }
                 )
             }
             
@@ -1059,6 +1105,138 @@ fun StorageManagerSheet(
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                         Text("No chat history available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(24.dp))
+        
+        var selectedFiles by remember { mutableStateOf(setOf<String>()) }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("RAG FILES", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            if (selectedFiles.isNotEmpty()) {
+                TextButton(onClick = {
+                    viewModel.deleteFiles(selectedFiles.toList())
+                    selectedFiles = emptySet()
+                }) {
+                    Text("Delete Selected (${selectedFiles.size})", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        
+        val showAllFiles by viewModel.showAllFiles.collectAsState()
+        val recentFiles by viewModel.recentFiles.collectAsState()
+        val allFiles by viewModel.allFiles.collectAsState()
+        
+        val filesToShow = if (showAllFiles) allFiles else recentFiles
+        
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 300.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(filesToShow) { file ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!file.isDeleted) {
+                        Checkbox(
+                            checked = selectedFiles.contains(file.id),
+                            onCheckedChange = { checked ->
+                                selectedFiles = if (checked) {
+                                    selectedFiles + file.id
+                                } else {
+                                    selectedFiles - file.id
+                                }
+                            }
+                        )
+                    } else {
+                        Spacer(Modifier.width(48.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            file.name, 
+                            fontWeight = FontWeight.Bold, 
+                            fontSize = 12.sp,
+                            color = if (file.isDeleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
+                            textDecoration = if (file.isDeleted) null else androidx.compose.ui.text.style.TextDecoration.Underline,
+                            modifier = Modifier.clickable(enabled = !file.isDeleted) {
+                                try {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                        setDataAndType(android.net.Uri.parse(file.path), context.contentResolver.getType(android.net.Uri.parse(file.path)))
+                                        flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Cannot open file", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                        Text(
+                            "${file.format} · ${file.size / 1024} KB" + if (file.isDeleted) " · Deleted" else "", 
+                            fontSize = 10.sp, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    if (!file.isDeleted && selectedFiles.isEmpty()) {
+                        var showMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete") },
+                                    onClick = { 
+                                        viewModel.deleteFiles(listOf(file.id))
+                                        showMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Open") },
+                                    onClick = { 
+                                        try {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                setDataAndType(android.net.Uri.parse(file.path), context.contentResolver.getType(android.net.Uri.parse(file.path)))
+                                                flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(context, "Cannot open file", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                        showMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Launch, null, modifier = Modifier.size(16.dp)) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (filesToShow.isEmpty()) {
+                item {
+                    Text("No files uploaded for RAG.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                }
+            }
+            
+            if (!showAllFiles && allFiles.size > 10) {
+                item {
+                    TextButton(onClick = { viewModel.setShowAllFiles(true) }) {
+                        Text("See More Files", fontSize = 12.sp)
                     }
                 }
             }
@@ -1071,7 +1249,8 @@ fun DeviceHistoryItem(
     deviceHistory: com.chhanda.ai.presentation.viewmodel.DeviceHistoryInfo,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onThreadClick: (sessionId: String, modelName: String, readOnly: Boolean) -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -1119,27 +1298,50 @@ fun DeviceHistoryItem(
             if (isExpanded) {
                 Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                 Column(modifier = Modifier.padding(16.dp)) {
-                    deviceHistory.messages.takeLast(5).forEach { message ->
-                        Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(
-                                if (message.role == "user") "YOU: " else "AI: ",
-                                fontWeight = FontWeight.Black,
-                                fontSize = 10.sp,
-                                color = if (message.role == "user") MaterialTheme.colorScheme.primary else Color.Gray
+                    val threads = deviceHistory.messages.groupBy { it.sessionId }
+                    threads.forEach { (sessionId, messages) ->
+                        val firstMessage = messages.firstOrNull { it.role == "user" }?.text 
+                            ?: messages.firstOrNull()?.text ?: "Empty Chat"
+                        val snippet = if (firstMessage.length > 40) firstMessage.take(40) + "..." else firstMessage
+                        val modelName = messages.firstOrNull()?.modelName ?: "unknown"
+                        val readOnly = deviceHistory.deviceId != "local"
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onThreadClick(sessionId, modelName, readOnly) }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.ChatBubble, 
+                                null, 
+                                modifier = Modifier.size(16.dp), 
+                                tint = MaterialTheme.colorScheme.primary
                             )
-                            Text(
-                                message.text.take(60) + if (message.text.length > 60) "..." else "",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(snippet, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Text(
+                                    "${messages.size} messages · $modelName", 
+                                    fontSize = 10.sp, 
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight, 
+                                null, 
+                                modifier = Modifier.size(16.dp), 
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         }
+                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
                     }
-                    if (deviceHistory.messageCount > 5) {
+                    if (threads.isEmpty()) {
                         Text(
-                            "... and ${deviceHistory.messageCount - 5} more messages",
-                            fontSize = 9.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(top = 4.dp)
+                            "No messages available",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                 }
@@ -1161,7 +1363,8 @@ fun ActiveModelCard(
     onTryIt: () -> Unit,
     isLoading: Boolean = false,
     temperature: Double,
-    appLanguage: String = "English"
+    appLanguage: String = "English",
+    ipAddress: String = "Detecting..."
 ) {
     Box(
         modifier = Modifier
@@ -1233,7 +1436,7 @@ fun ActiveModelCard(
                 Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Lan, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" 192.168.1.124", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
                 Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
@@ -1242,10 +1445,38 @@ fun ActiveModelCard(
                         Text(" " + Localization.getString("server_port", appLanguage) + ": $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
-                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
+
+                val isTempAlert = temperature >= 40.0
+                val infiniteTransition = rememberInfiniteTransition(label = "TempAlert")
+                val tempAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.6f,
+                    targetValue = 1.0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(600, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "TempPulse"
+                )
+
+                Surface(
+                    color = if (isTempAlert) Color.Red.copy(alpha = 0.2f * tempAlpha) 
+                            else (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), 
+                    shape = RoundedCornerShape(12.dp),
+                    border = if (isTempAlert) androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = tempAlpha)) else null
+                ) {
                     Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Thermostat, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" %.1f°C".format(temperature), color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Icon(
+                            Icons.Default.Thermostat, 
+                            null, 
+                            tint = if (isTempAlert) Color.Red else (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer), 
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            " %.1f°C".format(temperature), 
+                            color = if (isTempAlert) Color.Red else (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer), 
+                            fontSize = 11.sp, 
+                            fontWeight = if (isTempAlert) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -1313,30 +1544,54 @@ fun ActiveModelCard(
 }
 
 @Composable
-fun StatCard(modifier: Modifier, label: String, value: String, icon: ImageVector, onClick: (() -> Unit)? = null) {
+fun StatCard(
+    modifier: Modifier, 
+    label: String, 
+    value: String, 
+    icon: ImageVector, 
+    isAlert: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "StatAlert")
+    val alertAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "AlertPulse"
+    )
+
     Surface(
         modifier = modifier.height(110.dp),
         onClick = { onClick?.invoke() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(24.dp)
+        color = if (isAlert) Color.Red.copy(alpha = 0.12f * alertAlpha) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(24.dp),
+        border = if (isAlert) androidx.compose.foundation.BorderStroke(1.5.dp, Color.Red.copy(alpha = alertAlpha)) else null
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Icon(
+                    icon, 
+                    null, 
+                    tint = if (isAlert) Color.Red else MaterialTheme.colorScheme.primary, 
+                    modifier = Modifier.size(16.dp)
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     label, 
                     fontSize = 11.sp, 
                     fontWeight = FontWeight.Bold, 
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = if (isAlert) Color.Red.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
             Spacer(Modifier.height(12.dp))
             Text(
                 value, 
-                fontSize = 22.sp, 
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 20.sp, 
+                fontWeight = FontWeight.Black,
+                color = if (isAlert) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.serialization.Serializable
 import android.util.Log
 import javax.inject.Inject
@@ -27,7 +28,10 @@ import java.net.Socket
 import java.net.ServerSocket
 
 @Serializable
-data class WebMessage(val text: String, val role: String = "user")
+data class WebAttachment(val name: String, val type: String, val data: String)
+
+@Serializable
+data class WebMessage(val text: String, val role: String = "user", val attachments: List<WebAttachment> = emptyList(), val language: String = "en")
 
 @Serializable
 data class RegisterRequest(val name: String)
@@ -314,6 +318,14 @@ class ChhandaServer @Inject constructor(
 
                 post("/register") {
                     val request = call.receive<RegisterRequest>()
+                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
+                    val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-Key"]
+                    
+                    if (apiKey != null && providedKey != apiKey) {
+                        call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("success" to false, "error" to "Invalid API Key"))
+                        return@post
+                    }
+
                     val remoteIp = call.request.local.remoteHost
                     val userAgent = call.request.headers["User-Agent"] ?: "Unknown"
                     trackDevice(remoteIp, userAgent, request.name)
@@ -322,6 +334,19 @@ class ChhandaServer @Inject constructor(
 
                 // / — Chat UI — no-store prevents stale cached page
                 get("/") {
+                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
+                    val providedKey = call.request.queryParameters["key"]
+                    
+                    if (apiKey != null && providedKey != apiKey) {
+                        call.response.headers.append("Cache-Control", "no-store")
+                        call.respondText(
+                            buildAccessDeniedHtml(),
+                            io.ktor.http.ContentType.Text.Html,
+                            io.ktor.http.HttpStatusCode.Unauthorized
+                        )
+                        return@get
+                    }
+
                     val remoteIp = call.request.local.remoteHost
                     val userAgent = call.request.headers["User-Agent"] ?: "Unknown"
                     trackDevice(remoteIp, userAgent)
@@ -334,6 +359,14 @@ class ChhandaServer @Inject constructor(
                 }
 
                 post("/chat") {
+                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
+                    val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-Key"]
+                    
+                    if (apiKey != null && providedKey != apiKey) {
+                        call.respondText("Unauthorized", status = io.ktor.http.HttpStatusCode.Unauthorized)
+                        return@post
+                    }
+
                     val remoteIp = call.request.local.remoteHost
                     if (!llmEngine.isModelLoaded()) {
                         call.respondText("Model loading", status = io.ktor.http.HttpStatusCode.ServiceUnavailable)
@@ -351,7 +384,19 @@ class ChhandaServer @Inject constructor(
                     call.response.headers.append("Connection", "keep-alive")
                     call.respondTextWriter(io.ktor.http.ContentType.Text.EventStream) {
                         try {
-                            sendMessageUseCase(msg.text, remoteIp, llmEngine.getCurrentModelName(), "api_session").collect { upd ->
+                            val uris = msg.attachments.mapNotNull { attachment ->
+                                val base64Data = attachment.data.substringAfter("base64,")
+                                com.chhanda.ai.util.FileUtils.saveBase64ToFile(this@ChhandaServer.context, base64Data, attachment.name)
+                            }
+                            val languageName = when(msg.language) {
+                                "bn" -> "Bengali"
+                                "hi" -> "Hindi"
+                                "es" -> "Spanish"
+                                "fr" -> "French"
+                                "de" -> "German"
+                                else -> "English"
+                            }
+                            sendMessageUseCase(msg.text, remoteIp, llmEngine.getCurrentModelName(), "api_session", uris, languageName).collect { upd ->
                                 when (upd) {
                                     is TokenUpdate.Partial -> { write("data: ${upd.text.replace("\n","\\n")}\n\n"); flush() }
                                     is TokenUpdate.Final   -> { write("data: [DONE]\n\n"); flush() }
@@ -428,7 +473,7 @@ class ChhandaServer @Inject constructor(
         val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("New Connection")
-            .setContentText("$deviceName connected to Chhanda AI")
+            .setContentText("$deviceName connected to Chhanda")
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()
@@ -445,7 +490,7 @@ class ChhandaServer @Inject constructor(
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Chhanda AI</title>
+    <title>Chhanda</title>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -507,6 +552,10 @@ class ChhandaServer @Inject constructor(
             font-weight: 500;
             font-size: 20px;
             color: var(--fg);
+        }
+        
+        #title::after {
+            content: "Chhanda";
         }
         
         #badge {
@@ -831,14 +880,33 @@ class ChhandaServer @Inject constructor(
                 <path d="M 66,48 h 5 v 12 h -5 z" fill="#2563EB"/>
             </svg>
         </div>
-        <span id="title">Chhanda AI</span>
+        <span id="title"></span>
         <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
+        <select id="lang-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px; margin-left:8px;">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="hi">Hindi</option>
+            <option value="bn">Bengali</option>
+        </select>
+        <button id="close-btn" style="background:transparent; border:none; color:var(--muted); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; margin-left:auto;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
     </div>
     <div id="msgs">
         <div class="msg-container s"><div class="msg s">Connection established with Node at ${ip}:${port}</div></div>
     </div>
     <div id="ftr">
         <div id="row">
+            <button id="clip-btn" style="background:transparent; border:none; color:var(--muted); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                </svg>
+            </button>
+            <input id="file-inp" type="file" style="display:none" multiple accept="image/*,audio/*,text/*,application/pdf,.csv,.json,.xlsx,.txt">
             <input id="inp" placeholder="Waiting for AI…" autocomplete="off" disabled>
             <button id="btn" disabled>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -859,20 +927,56 @@ class ChhandaServer @Inject constructor(
         </div>
     </div>
     <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const apiKeyParam = urlParams.get('key');
         const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),
               btn=document.getElementById('btn'),badge=document.getElementById('badge'),
               bt=document.getElementById('bt'),ovl=document.getElementById('ovl'),
+              clipBtn=document.getElementById('clip-btn'),
+              fileInp=document.getElementById('file-inp'),
               nameModal=document.getElementById('name-modal'),
               nameInp=document.getElementById('name-inp'),
               nameBtn=document.getElementById('name-btn');
         let ready=false,fails=0,errShown=false;
         const MAX=12;
+        
+        let selectedFiles = [];
+        clipBtn.addEventListener('click', () => fileInp.click());
+        fileInp.addEventListener('change', async () => {
+            const files = Array.from(fileInp.files);
+            selectedFiles = await Promise.all(files.map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        resolve({
+                            name: file.name,
+                            type: file.type,
+                            data: e.target.result
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }));
+            clipBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg> (${'$'}{files.length})`;
+            clipBtn.style.color = "var(--primary)";
+        });
+
+        const closeBtn = document.getElementById('close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to close the chat?')) {
+                    window.close();
+                    // Fallback for browsers that block window.close()
+                    alert('If the tab did not close, please close it manually.');
+                }
+            });
+        }
 
         async function pulse(){
             try{
                 const c=new AbortController();
                 setTimeout(()=>c.abort(),5000);
-                const r=await fetch('/status?t='+Date.now(),{signal:c.signal, cache:'no-store'});
+                const r=await fetch('/status?key='+apiKeyParam+'&t='+Date.now(),{signal:c.signal, cache:'no-store'});
                 if(!r.ok)throw new Error('HTTP '+r.status);
                 const d=await r.json();
                 fails=0; ovl.style.display='none'; ready=d.modelLoaded;
@@ -909,10 +1013,15 @@ class ChhandaServer @Inject constructor(
             addMsg(txt,'u');const ai=addMsg('Thinking…','a');
             let tokenCount = 0;
             let startTime = null;
-            try{
-                const res=await fetch('/chat',{method:'POST',
+            try {
+                const res=await fetch('/chat?key='+apiKeyParam,{method:'POST',
                     headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({text:txt,role:'user'})});
+                    body:JSON.stringify({text:txt,role:'user', attachments: selectedFiles, language: document.getElementById('lang-sel').value})});
+                
+                selectedFiles = [];
+                clipBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>`;
+                clipBtn.style.color = "var(--muted)";
+                fileInp.value = '';
                 if(res.status===503){ai.className='msg s';ai.textContent='Model loading — try again.';return;}
                 if(!res.ok){ai.className='msg s';ai.textContent='Error '+res.status;return;}
                 ai.textContent=''; // Clear thinking state
@@ -962,13 +1071,8 @@ class ChhandaServer @Inject constructor(
             if (thinkStart !== -1) {
                 const beforeThink = t.substring(0, thinkStart);
                 if (thinkEnd !== -1) {
-                    const thinkText = t.substring(thinkStart + 7, thinkEnd);
                     const afterThink = t.substring(thinkEnd + 8);
-                    return escapeHtml(beforeThink) + 
-                           `<details class="think"><summary>💡 Click to view thinking process</summary>` + 
-                           escapeHtml(thinkText) + 
-                           `</details>` + 
-                           escapeHtml(afterThink);
+                    return escapeHtml(beforeThink) + escapeHtml(afterThink);
                 } else {
                     return escapeHtml(beforeThink) + 
                            `<div class="think-loader">⚡ Thinking...</div>`;
@@ -1071,7 +1175,7 @@ class ChhandaServer @Inject constructor(
         
         async function registerName(name) {
             try {
-                await fetch('/register', {
+                await fetch('/register?key='+apiKeyParam, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({name: name})
@@ -1085,4 +1189,58 @@ class ChhandaServer @Inject constructor(
 </body>
 </html>""".trimIndent()
 
+    private fun buildAccessDeniedHtml() = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Access Denied - Chhanda</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #141218;
+            color: #E6E1E5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .card {
+            background: #1D1B20;
+            border: 1px solid #49454F;
+            border-radius: 28px;
+            padding: 40px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            display: block;
+        }
+        h1 { font-size: 24px; margin-bottom: 16px; color: #D0BCFF; }
+        p { color: #CAC4D0; line-height: 1.6; margin-bottom: 24px; }
+        .hint {
+            background: #211F26;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            border: 1px dashed #49454F;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="icon">🔒</span>
+        <h1>Secure Access Required</h1>
+        <p>To use this AI gateway, please scan the <b>QR Code</b> displayed on the host device or use the full URL provided in the sharing settings.</p>
+        <div class="hint">
+            Unauthorized access is blocked to ensure network privacy.
+        </div>
+    </div>
+</body>
+</html>""".trimIndent()
 }

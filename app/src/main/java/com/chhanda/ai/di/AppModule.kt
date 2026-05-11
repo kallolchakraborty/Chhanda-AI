@@ -9,6 +9,7 @@ import com.chhanda.ai.data.repository.AppDatabase
 import com.chhanda.ai.data.repository.ChatDao
 import com.chhanda.ai.data.repository.DeviceDao
 import com.chhanda.ai.data.repository.LocalVectorStore
+import com.chhanda.ai.data.repository.UploadedFileDao
 import com.chhanda.ai.data.repository.VectorChunkDao
 import com.chhanda.ai.domain.model.EmbeddingEngine
 import com.chhanda.ai.domain.model.Embedding
@@ -46,6 +47,9 @@ object AppModule {
 
     @Provides @Singleton
     fun provideVectorChunkDao(db: AppDatabase): VectorChunkDao = db.vectorChunkDao()
+
+    @Provides @Singleton
+    fun provideUploadedFileDao(db: AppDatabase): UploadedFileDao = db.uploadedFileDao()
 
     @Provides @Singleton
     fun provideEmbeddingEngine(impl: LiteRTEmbeddingEngine): EmbeddingEngine = impl

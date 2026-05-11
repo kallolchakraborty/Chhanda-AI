@@ -10,6 +10,9 @@ interface VectorChunkDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(chunk: VectorChunkEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(chunks: List<VectorChunkEntity>)
+
     @Query("SELECT * FROM vector_chunks WHERE modelId = :modelId")
     suspend fun getAllForModel(modelId: String): List<VectorChunkEntity>
 
@@ -18,6 +21,15 @@ interface VectorChunkDao {
 
     @Query("SELECT * FROM vector_chunks")
     suspend fun getAll(): List<VectorChunkEntity>
+
+    @Query("SELECT COUNT(*) FROM vector_chunks")
+    suspend fun getCount(): Int
+
+    @Query("SELECT SUM(LENGTH(embeddingBlob)) FROM vector_chunks")
+    suspend fun getTotalEmbeddingSize(): Long?
+
+    @Query("DELETE FROM vector_chunks WHERE source = :source")
+    suspend fun deleteBySource(source: String)
 
     @Query("DELETE FROM vector_chunks")
     suspend fun clearAll()

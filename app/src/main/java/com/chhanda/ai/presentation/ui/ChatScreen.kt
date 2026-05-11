@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.AutoMode
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -49,12 +51,12 @@ import androidx.navigation.NavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
+fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnly: Boolean = false) {
     val uiState by viewModel.uiState.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
-    var showClearConfirm by remember { mutableStateOf(false) }
+    var showCloseConfirm by remember { mutableStateOf(false) }
 
     // Auto-scroll to bottom on new messages or partial tokens
     val totalItems = uiState.messages.size + (if (uiState.currentPartialResponse.isNotEmpty()) 1 else 0)
@@ -69,7 +71,7 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
             CenterAlignedTopAppBar(
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { navController.popBackStack() }) {
+                        IconButton(onClick = { showCloseConfirm = true }) {
                             ChhandaLogo(size = 32)
                         }
                         Spacer(Modifier.width(12.dp))
@@ -84,8 +86,8 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
                 ),
                 actions = {
-                    IconButton(onClick = { showClearConfirm = true }) {
-                        Icon(Icons.Default.Close, "Clear History", tint = MaterialTheme.colorScheme.error)
+                    IconButton(onClick = { showCloseConfirm = true }) {
+                        Icon(Icons.Default.Close, "Close Chat", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             )
@@ -189,6 +191,7 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
             // Input Area
             ChatInput(
                 text = inputText,
+                isReadOnly = isReadOnly,
                 onTextChange = { inputText = it },
                 onSend = {
                     viewModel.sendMessage(inputText)
@@ -201,24 +204,23 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel) {
             )
         }
 
-        if (showClearConfirm) {
+        if (showCloseConfirm) {
             AlertDialog(
-                onDismissRequest = { showClearConfirm = false },
-                title = { Text(Localization.getString("purge_history_title", appLanguage)) },
-                text = { Text(Localization.getString("purge_history_text", appLanguage)) },
+                onDismissRequest = { showCloseConfirm = false },
+                title = { Text("Close Chat") },
+                text = { Text("Are you sure you want to close the chat? Your history will be preserved.") },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            viewModel.clearHistory()
-                            showClearConfirm = false
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            showCloseConfirm = false
+                            navController.popBackStack()
+                        }
                     ) {
                         Text(Localization.getString("confirm", appLanguage))
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showClearConfirm = false }) {
+                    TextButton(onClick = { showCloseConfirm = false }) {
                         Text(Localization.getString("cancel", appLanguage))
                     }
                 }
@@ -307,37 +309,12 @@ fun MessageBubble(message: MessageEntity) {
             shadowElevation = 0.dp
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                // Thinking process is hidden in saved messages as per user request
+                /*
                 if (thinkingText != null) {
-                    var expanded by remember { mutableStateOf(false) }
-                    Column(modifier = Modifier.animateContentSize()) {
-                        Row(
-                            modifier = Modifier.clickable { expanded = !expanded },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                contentDescription = "Thinking",
-                                tint = textColor.copy(alpha = 0.7f)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "Thinking Process", 
-                                style = MaterialTheme.typography.bodySmall,
-                                color = textColor.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        if (expanded) {
-                            Spacer(Modifier.height(4.dp))
-                            MarkdownText(
-                                text = thinkingText,
-                                color = textColor.copy(alpha = 0.8f),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
+                    ...
                 }
+                */
                 
                 if (responseText.isNotEmpty()) {
                     MarkdownText(
@@ -388,6 +365,36 @@ fun MessageBubble(message: MessageEntity) {
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
+                }
+
+                if (message.isRagUsed) {
+                    Surface(
+                        color = Color(0xFF10B981).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoMode,
+                                contentDescription = null,
+                                modifier = Modifier.size(10.dp),
+                                tint = Color(0xFF059669)
+                            )
+                            Text(
+                                text = "RAG ACTIVE",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.5.sp
+                                ),
+                                color = Color(0xFF059669)
+                            )
+                        }
+                    }
                 }
 
                 if (message.tps > 0) {
@@ -609,69 +616,84 @@ fun ChatInput(
     isGenerating: Boolean,
     onStop: () -> Unit,
     onAttach: (android.net.Uri) -> Unit,
-    appLanguage: String = "English"
+    appLanguage: String = "English",
+    isReadOnly: Boolean = false
 ) {
     val fileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { onAttach(it) } }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(32.dp)
-    ) {
-        Row(
+    if (isReadOnly) {
+        Surface(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth()
+                .padding(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(32.dp)
         ) {
-            IconButton(onClick = { fileLauncher.launch("*/*") }) {
-                Icon(Icons.Default.Add, null, tint = Color.Gray)
+            Box(modifier = Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
+                Text("Read Only Chat", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
             }
-            TextField(
-                value = text,
-                onValueChange = onTextChange,
-                placeholder = { Text(Localization.getString("chat_hint", appLanguage)) },
-                modifier = Modifier.weight(1f),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-                singleLine = false,
-                maxLines = 4
-            )
-            
-            IconButton(
-                onClick = if (isGenerating) onStop else onSend,
-                enabled = (text.isNotBlank() || isGenerating),
+        }
+    } else {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(32.dp)
+        ) {
+            Row(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (text.isNotBlank() && !isGenerating) {
-                            Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)))
-                        } else {
-                            Brush.linearGradient(listOf(Color.Gray, Color.LightGray))
-                        }
-                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isGenerating) {
-                    Icon(
-                        imageVector = Icons.Default.Stop,
-                        contentDescription = "Stop",
-                        tint = Color.White
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "Send",
-                        tint = Color.White
-                    )
+                IconButton(onClick = { fileLauncher.launch("*/*") }) {
+                    Icon(Icons.Default.Add, null, tint = Color.Gray)
+                }
+                TextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    placeholder = { Text(Localization.getString("chat_hint", appLanguage)) },
+                    modifier = Modifier.weight(1f),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    singleLine = false,
+                    maxLines = 4
+                )
+                
+                IconButton(
+                    onClick = if (isGenerating) onStop else onSend,
+                    enabled = (text.isNotBlank() || isGenerating),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (text.isNotBlank() && !isGenerating) {
+                                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)))
+                            } else {
+                                Brush.linearGradient(listOf(Color.Gray, Color.LightGray))
+                            }
+                        )
+                ) {
+                    if (isGenerating) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "Stop",
+                            tint = Color.White
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "Send",
+                            tint = Color.White
+                        )
+                    }
                 }
             }
         }

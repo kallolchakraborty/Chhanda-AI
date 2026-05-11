@@ -2,6 +2,8 @@ package com.chhanda.ai.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import com.chhanda.ai.data.repository.ChatDao
 import com.chhanda.ai.data.repository.SettingsRepository
 import com.chhanda.ai.domain.model.LLMEngine
@@ -10,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.NetworkInterface
 import java.util.Collections
 import javax.inject.Inject
@@ -19,11 +22,16 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import androidx.work.*
 import com.chhanda.ai.service.DownloadWorker
+import com.chhanda.ai.service.IngestionWorker
 import android.util.Log
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
+import java.io.File
+import android.os.BatteryManager
+import android.app.ActivityManager
 
 @HiltViewModel
 class SystemViewModel @Inject constructor(
@@ -34,26 +42,218 @@ class SystemViewModel @Inject constructor(
     private val chatDao: ChatDao,
     private val deviceDao: com.chhanda.ai.data.repository.DeviceDao,
     private val chhandaServerLazy: dagger.Lazy<com.chhanda.ai.data.inference.ChhandaServer>,
-    private val ingestDocumentUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.IngestDocumentUseCase>
+    private val ingestDocumentUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.IngestDocumentUseCase>,
+    private val uploadedFileDao: com.chhanda.ai.data.repository.UploadedFileDao,
+    private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao,
+    private val scrapeUrlUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.ScrapeUrlUseCase>
 ) : ViewModel() {
 
     private val llmEngine get() = llmEngineLazy.get()
     private val vectorStore get() = vectorStoreLazy.get()
     private val chhandaServer get() = chhandaServerLazy.get()
     private val ingestDocumentUseCase get() = ingestDocumentUseCaseLazy.get()
+    private val scrapeUrlUseCase get() = scrapeUrlUseCaseLazy.get()
+    
+    private var activeScrapeJob: kotlinx.coroutines.Job? = null
+    
+    private val _ramUsage = kotlinx.coroutines.flow.MutableStateFlow("0 / 0 GB")
+    val ramUsage: kotlinx.coroutines.flow.StateFlow<String> = _ramUsage.asStateFlow()
+    
+    private val _appStorageUsage = kotlinx.coroutines.flow.MutableStateFlow("0 MB")
+    val appStorageUsage: kotlinx.coroutines.flow.StateFlow<String> = _appStorageUsage.asStateFlow()
+
+    private val _isIngesting = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isIngesting: kotlinx.coroutines.flow.StateFlow<Boolean> = _isIngesting.asStateFlow()
+
+    private val _ingestionError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val ingestionError = _ingestionError.asStateFlow()
+
+    var pendingBackgroundPrompt by androidx.compose.runtime.mutableStateOf<IngestionTask?>(null)
+        private set
+
+    data class IngestionTask(
+        val uris: List<android.net.Uri> = emptyList(),
+        val url: String? = null,
+        val label: String? = null
+    )
+    
+    private val _ingestionProgress = kotlinx.coroutines.flow.MutableStateFlow(0f)
+    val ingestionProgress: kotlinx.coroutines.flow.StateFlow<Float> = _ingestionProgress.asStateFlow()
+    
+    private val _ingestionMessage = kotlinx.coroutines.flow.MutableStateFlow("Processing file for RAG...")
+    val ingestionMessage: kotlinx.coroutines.flow.StateFlow<String> = _ingestionMessage.asStateFlow()
+
+    fun dismissIngestionProgress() {
+        _isIngesting.value = false
+        _ingestionProgress.value = 0f
+    }
+
+    private val _showModelSelectionDialog = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val showModelSelectionDialog: kotlinx.coroutines.flow.StateFlow<Boolean> = _showModelSelectionDialog.asStateFlow()
+
+    private val _pendingIngestion = kotlinx.coroutines.flow.MutableStateFlow<Pair<android.net.Uri, com.chhanda.ai.domain.usecase.DocType>?>(null)
+    val pendingIngestion: kotlinx.coroutines.flow.StateFlow<Pair<android.net.Uri, com.chhanda.ai.domain.usecase.DocType>?> = _pendingIngestion.asStateFlow()
+
+    fun dismissModelSelection() {
+        _showModelSelectionDialog.value = false
+        _pendingIngestion.value = null
+    }
+    
+    private val _showAllFiles = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val showAllFiles: kotlinx.coroutines.flow.StateFlow<Boolean> = _showAllFiles.asStateFlow()
+
+    val recentFiles: kotlinx.coroutines.flow.StateFlow<List<com.chhanda.ai.data.repository.UploadedFileEntity>> = 
+        uploadedFileDao.getRecentFiles(10).stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Lazily, emptyList())
+
+    val allFiles: kotlinx.coroutines.flow.StateFlow<List<com.chhanda.ai.data.repository.UploadedFileEntity>> = 
+        uploadedFileDao.getAllFiles().stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Lazily, emptyList())
+
+    fun setShowAllFiles(show: Boolean) {
+        _showAllFiles.value = show
+    }
+
+    fun deleteFiles(ids: List<String>) {
+        viewModelScope.launch {
+            uploadedFileDao.markMultipleAsDeleted(ids)
+            // Delete physical files
+            val filesToDelete = allFiles.value.filter { it.id in ids }
+            filesToDelete.forEach { file ->
+                try {
+                    val path = file.path
+                    if (path.startsWith("content://")) {
+                        context.contentResolver.delete(android.net.Uri.parse(path), null, null)
+                    } else {
+                        // Assume raw file path
+                        val physicalFile = java.io.File(path)
+                        if (physicalFile.exists()) physicalFile.delete()
+                    }
+                } catch (e: Exception) {
+                    addLog("STORAGE", "Failed to delete physical file: ${file.name}", "WARNING")
+                }
+            }
+            addLog("STORAGE", "Deleted ${ids.size} files from disk and DB", "SUCCESS")
+        }
+    }
     private val workManager by lazy { androidx.work.WorkManager.getInstance(context) }
 
-    fun ingestDocument(uri: android.net.Uri, type: com.chhanda.ai.domain.usecase.DocType) {
+    fun ingestDocuments(uris: List<android.net.Uri>) {
+        // Estimate time: > 1MB total usually takes > 30s
+        var totalSize = 0L
+        uris.forEach { uri ->
+            try {
+                totalSize += context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
+            } catch (e: Exception) {}
+        }
+
+        if (totalSize > 1024 * 1024) { // 1MB threshold
+            pendingBackgroundPrompt = IngestionTask(uris = uris)
+            return
+        }
+
+        processIngestDocuments(uris)
+    }
+
+    fun processIngestDocuments(uris: List<android.net.Uri>, inBackground: Boolean = false) {
+        pendingBackgroundPrompt = null
+        if (inBackground) {
+            uris.forEach { uri ->
+                val type = getDocType(uri)
+                val fileDetails = com.chhanda.ai.util.FileUtils.getFileDetails(context, uri)
+                val fileName = fileDetails.first
+                val data = workDataOf(
+                    IngestionWorker.KEY_URI to uri.toString(),
+                    IngestionWorker.KEY_TYPE to type.name,
+                    IngestionWorker.KEY_NAME to fileName
+                )
+                val request = OneTimeWorkRequestBuilder<IngestionWorker>()
+                    .setInputData(data)
+                    .build()
+                WorkManager.getInstance(context).enqueue(request)
+            }
+            addLog("SYSTEM", "Large ingestion moved to background.", "SUCCESS")
+            return
+        }
+
         viewModelScope.launch {
             try {
-                addLog("STORAGE", "Ingesting document: ${uri.lastPathSegment}", "PENDING")
-                val activeModel = ownedModels.value.firstOrNull { it.isActive }?.name ?: "default"
-                ingestDocumentUseCase(uri, type, modelId = activeModel)
-                addLog("STORAGE", "Document ingested successfully", "SUCCESS")
+                _isIngesting.value = true
+                _ingestionError.value = null
+                val totalFiles = uris.size
+                var processedFiles = 0
+
+                for (uri in uris) {
+                    _ingestionProgress.value = processedFiles.toFloat() / totalFiles
+                    val type = getDocType(uri)
+
+                    // Extract file details
+                    val fileDetails = com.chhanda.ai.util.FileUtils.getFileDetails(context, uri)
+                    val name = fileDetails.first
+                    val size = fileDetails.second
+                    val format = type.name
+                    val path = uri.toString()
+
+                    _ingestionMessage.value = "Processing $name ($format)..."
+
+                    // Check for duplicate
+                    val existingFile = uploadedFileDao.findByNameAndSize(name, size)
+                    if (existingFile != null) {
+                        addLog("STORAGE", "Duplicate file skipped: $name", "SUCCESS")
+                        processedFiles++
+                        continue
+                    }
+
+                    val id = java.util.UUID.randomUUID().toString()
+                    val fileEntity = com.chhanda.ai.data.repository.UploadedFileEntity(
+                        id = id, name = name, format = format, size = size, path = path, isDeleted = false
+                    )
+                    uploadedFileDao.insertFile(fileEntity)
+                    
+                    addLog("STORAGE", "Ingesting document: $name", "PENDING")
+                    val activeModel = "shared_rag_db"
+                    
+                    val baseProgress = processedFiles.toFloat() / totalFiles
+                    val fileWeight = 1f / totalFiles
+
+                    ingestDocumentUseCase(uri, type, modelId = "shared_rag_db") { fileProgress ->
+                        _ingestionProgress.value = baseProgress + (fileProgress * fileWeight)
+                    }
+                    
+                    processedFiles++
+                    addLog("STORAGE", "Document $name ingested successfully", "SUCCESS")
+                }
+                
+                _isIngesting.value = false
+                _ingestionProgress.value = 1.0f
+                _ingestionMessage.value = "All $totalFiles files processed successfully. Tap to close."
+                updateStats()
             } catch (e: Exception) {
-                addLog("STORAGE", "Failed to ingest document: ${e.message}", "ERROR")
+                _isIngesting.value = false
+                _ingestionProgress.value = 1.0f
+                _ingestionMessage.value = "Processing failed: ${e.localizedMessage}. Tap to close."
+                addLog("STORAGE", "Failed to ingest documents: ${e.message}", "ERROR")
+                _ingestionError.value = "Failed to process documents. Please try again."
             }
         }
+    }
+
+    private fun getDocType(uri: android.net.Uri): com.chhanda.ai.domain.usecase.DocType {
+        val mimeType = context.contentResolver.getType(uri)
+        return when {
+            mimeType?.startsWith("image/") == true -> com.chhanda.ai.domain.usecase.DocType.IMAGE
+            mimeType == "application/pdf" -> com.chhanda.ai.domain.usecase.DocType.PDF
+            mimeType == "text/plain" -> com.chhanda.ai.domain.usecase.DocType.TXT
+            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.chhanda.ai.domain.usecase.DocType.WORD
+            mimeType?.startsWith("audio/") == true -> com.chhanda.ai.domain.usecase.DocType.AUDIO
+            else -> com.chhanda.ai.domain.usecase.DocType.TXT
+        }
+    }
+
+    fun dismissIngestionPrompt() {
+        pendingBackgroundPrompt = null
+    }
+
+    fun clearIngestionError() {
+        _ingestionError.value = null
     }
 
     fun getSessionsForModel(modelName: String): Flow<List<String>> = chatDao.getSessionIdsForModel(modelName)
@@ -80,18 +280,16 @@ class SystemViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Detecting...")
     val publicUrl = settingsRepository.publicUrlFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val appLanguage = settingsRepository.appLanguageFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "English")
+    private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
+    val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
     val showRestartDialog: StateFlow<Boolean> = _showRestartDialog
 
-    // Hardware Stats State
-    private val _ramUsage = MutableStateFlow("Detecting...")
-    val ramUsage: StateFlow<String> = _ramUsage
-    
-    private val _vramUsage = MutableStateFlow("Detecting...")
-    val vramUsage: StateFlow<String> = _vramUsage
-
     private val _deviceTemperature = MutableStateFlow(0.0)
     val deviceTemperature: StateFlow<Double> = _deviceTemperature
+
+    private val _vectorDbUsage = MutableStateFlow(0L)
+    val vectorDbUsage: StateFlow<Long> = _vectorDbUsage.asStateFlow()
 
     private val _tokensPerSec = MutableStateFlow("0.0")
     val tokensPerSec: StateFlow<String> = _tokensPerSec
@@ -340,7 +538,6 @@ class SystemViewModel @Inject constructor(
                 delay(2000)
                 checkForModelUpdates()
                 startLocalHealthCheck()
-                startHardwareMonitoring()
                 addLog("SYSTEM", "Gateway Engine v18 Active", "SUCCESS")
             } catch (e: Throwable) {
                 addLog("CRITICAL", "Startup engine failure: ${e.localizedMessage}", "ERROR")
@@ -543,21 +740,54 @@ class SystemViewModel @Inject constructor(
         }
     }
 
+    fun setVectorDbCapacity(gb: Int) {
+        viewModelScope.launch {
+            settingsRepository.setVectorDbCapacity(gb)
+        }
+    }
+
     private fun updateStats() {
-        try {
-            val ramValue = (8.0 + Math.random() * 0.5).format(1)
-            _ramUsage.value = "$ramValue / 12.4 GB"
-            
-            val vramValue = (16.0 + Math.random() * 0.8).format(1)
-            _vramUsage.value = "$vramValue / 38.2 GB"
-            
-            // Read battery temperature
-            val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-            val rawTemp = intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
-            val celsius = rawTemp / 10.0
-            _deviceTemperature.value = celsius
-        } catch (e: Exception) {
-            android.util.Log.e("SystemViewModel", "Failed to update stats: ${e.message}")
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // 1. App Storage (Recursive)
+                val totalAppSize = getAppStorageSize()
+                
+                // 2. Vector DB Size (Database file + WAL + SHM)
+                val vectorUsage = getVectorDbSize()
+                
+                // 3. Hardware Metrics
+                val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                activityManager.getMemoryInfo(memoryInfo)
+                val usedMem = (memoryInfo.totalMem - memoryInfo.availMem) / (1024.0 * 1024 * 1024)
+                val totalMem = memoryInfo.totalMem / (1024.0 * 1024 * 1024)
+                
+                // 4. Battery Temperature
+                val intent = try {
+                    context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                } catch (e: Exception) { null }
+                val rawTemp = intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
+                val celsius = rawTemp / 10.0
+
+                // 5. Dynamic Vector Capacity (Max of 1GB and 15% of remaining storage)
+                val statFs = android.os.StatFs(context.filesDir.path)
+                val availableBytes = statFs.availableBlocksLong * statFs.blockSizeLong
+                val dynamicLimit = (availableBytes * 0.15).toLong()
+                val finalCapacity = maxOf(1024L * 1024 * 1024, dynamicLimit)
+                _vectorDbCapacityBytes.value = finalCapacity
+                
+                _ramUsage.value = String.format(Locale.US, "%.1f / %.1f GB", usedMem, totalMem)
+                _appStorageUsage.value = if (totalAppSize > 1024 * 1024 * 1024) {
+                    String.format(Locale.US, "%.2f GB", totalAppSize.toDouble() / (1024 * 1024 * 1024))
+                } else {
+                    String.format(Locale.US, "%.1f MB", totalAppSize.toDouble() / (1024 * 1024))
+                }
+                _deviceTemperature.value = celsius
+                _vectorDbUsage.value = vectorUsage
+                
+            } catch (e: Exception) {
+                android.util.Log.e("SystemViewModel", "Failed to update stats: ${e.message}")
+            }
         }
     }
 
@@ -644,6 +874,14 @@ class SystemViewModel @Inject constructor(
             _ownedModels.value = _ownedModels.value.map { it.copy(isActive = it.name == modelName) }
             _sharedModels.value = _sharedModels.value.map { it.copy(isActive = it.name == modelName) }
             addLog("SYSTEM", "Initializing model: $modelName", "INFO")
+
+            // Set default context length based on model
+            val defaultContextLength = when {
+                modelName.contains("Gemma-4-E2B", ignoreCase = true) -> 2048
+                modelName.contains("Gemma-4-E4B", ignoreCase = true) -> 4096
+                else -> 2048
+            }
+            setContextLength(defaultContextLength)
 
             try {
                 _isModelLoading.value = true
@@ -862,30 +1100,140 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    private fun startHardwareMonitoring() {
+
+    fun clearVectorStore() {
         viewModelScope.launch {
-            val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val memoryInfo = android.app.ActivityManager.MemoryInfo()
-            
-            while (true) {
-                if (_isAppVisible.value) {
-                    try {
-                        activityManager.getMemoryInfo(memoryInfo)
-                        val usedMem = (memoryInfo.totalMem - memoryInfo.availMem) / (1024.0 * 1024 * 1024)
-                        val totalMem = memoryInfo.totalMem / (1024.0 * 1024 * 1024)
-                        _ramUsage.value = "${String.format("%.1f", usedMem)} / ${String.format("%.1f", totalMem)} GB"
-                        
-                        // VRAM is simulated as 40% of used RAM on Android (unified)
-                        val vramUsed = usedMem * 0.4
-                        val vramTotal = totalMem * 0.6
-                        _vramUsage.value = "${String.format("%.1f", vramUsed)} / ${String.format("%.1f", vramTotal)} GB"
-                        
-                        _deviceTemperature.value = 32.0 + (if (_isModelLoading.value) 12.0 else 0.0)
-                    } catch (e: Exception) {}
-                }
-                kotlinx.coroutines.delay(3000)
+            try {
+                vectorChunkDao.clearAll()
+                // Mark all files as deleted to reset the "Indexed Files" counter in UI
+                val ids = allFiles.value.map { it.id }
+                uploadedFileDao.markMultipleAsDeleted(ids)
+                updateStats()
+                addLog("STORAGE", "Vector database emptied successfully", "SUCCESS")
+            } catch (e: Exception) {
+                addLog("STORAGE", "Failed to clear vector store: ${e.message}", "ERROR")
             }
         }
+    }
+
+    fun scrapeAndIngestUrl(url: String, label: String) {
+        // Estimation for URL: If label/URL contains "wikipedia" or long articles, it might take time.
+        // For URLs we don't know size easily, so we usually check content length in background.
+        // But for now, if it's not a tiny URL, we can prompt or just run foreground.
+        // User asked for "If file size is big... more than 30 sec".
+        // Let's just always offer background for URLs since network is unpredictable.
+        pendingBackgroundPrompt = IngestionTask(url = url, label = label)
+    }
+
+    fun processScrapeUrl(url: String, label: String, inBackground: Boolean = false) {
+        pendingBackgroundPrompt = null
+        if (inBackground) {
+            activeScrapeJob?.cancel()
+            val data = workDataOf(
+                IngestionWorker.KEY_URL to url,
+                IngestionWorker.KEY_NAME to label
+            )
+            val request = OneTimeWorkRequestBuilder<IngestionWorker>()
+                .setInputData(data)
+                .build()
+            WorkManager.getInstance(context).enqueue(request)
+            addLog("SYSTEM", "URL scraping moved to background.", "SUCCESS")
+            _isIngesting.value = false
+            return
+        }
+
+        activeScrapeJob?.cancel()
+        activeScrapeJob = viewModelScope.launch {
+            _isIngesting.value = true
+            _ingestionError.value = null
+            _ingestionProgress.value = 0f 
+            _ingestionMessage.value = "Scraping content from $label..."
+            
+            // Timer for background prompt
+            val timerJob = launch {
+                delay(30000)
+                if (_isIngesting.value && _ingestionMessage.value.contains("Scraping")) {
+                    pendingBackgroundPrompt = IngestionTask(url = url, label = label)
+                }
+            }
+
+            try {
+                val scrapedText = scrapeUrlUseCase(url)
+                timerJob.cancel()
+                
+                _ingestionMessage.value = "Ingesting web content into Vector DB..."
+                
+                ingestDocumentUseCase.ingestScrapedText(scrapedText, url, label) { progress ->
+                    _ingestionProgress.value = 0.3f + (progress * 0.7f)
+                }
+                
+                uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                    id = java.util.UUID.randomUUID().toString(),
+                    name = label,
+                    format = "WEB_URL",
+                    size = scrapedText.length.toLong(),
+                    path = url,
+                    timestamp = System.currentTimeMillis()
+                ))
+                
+                addLog("STORAGE", "Successfully indexed website: $label", "SUCCESS")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                timerJob.cancel()
+                addLog("STORAGE", "Web Scraping Failed: ${e.message}", "ERROR")
+                _ingestionError.value = "Failed to scrape $label. Please try again."
+            } finally {
+                _isIngesting.value = false
+                updateStats()
+            }
+        }
+    }
+
+    private suspend fun getVectorDbSize(): Long {
+        // We use the high-precision DAO query for exact vector memory footprint
+        val embeddingSize = try { vectorChunkDao.getTotalEmbeddingSize() ?: 0L } catch (e: Exception) { 0L }
+        val count = try { vectorChunkDao.getCount() } catch (e: Exception) { 0 }
+        
+        // Estimate table overhead (text, metadata, indices)
+        // Average chunk is ~800 chars. Indices/Metadata ~200 bytes.
+        val estimatedTotal = embeddingSize + (count.toLong() * 1000L)
+        return estimatedTotal
+    }
+
+    private fun getAppStorageSize(): Long {
+        var totalSize = 0L
+        
+        // Internal storage
+        totalSize += getDirSize(context.filesDir)
+        totalSize += getDirSize(context.cacheDir)
+        
+        // External storage (scoped)
+        context.getExternalFilesDir(null)?.let { totalSize += getDirSize(it) }
+        context.externalCacheDir?.let { totalSize += getDirSize(it) }
+        
+        // Database
+        val dbFile = context.getDatabasePath("chhanda_db")
+        if (dbFile.exists()) totalSize += dbFile.length()
+        
+        return totalSize
+    }
+
+    private fun getDirSize(dir: java.io.File): Long {
+        var size = 0L
+        val files = try { dir.listFiles() } catch (e: Exception) { null }
+        if (files != null) {
+            for (file in files) {
+                try {
+                    if (file.isDirectory) {
+                        size += getDirSize(file)
+                    } else if (file.isFile) {
+                        size += file.length()
+                    }
+                } catch (e: Exception) { /* skip unreadable */ }
+            }
+        }
+        return size
     }
 
     fun stopDownload(modelName: String) {
@@ -928,8 +1276,46 @@ class SystemViewModel @Inject constructor(
 
     fun clearAllData() {
         viewModelScope.launch {
+            // Delete physical files first
+            val ids = allFiles.value.map { it.id }
+            val filesToDelete = allFiles.value
+            filesToDelete.forEach { file ->
+                try {
+                    val path = file.path
+                    if (path.startsWith("content://")) {
+                        context.contentResolver.delete(android.net.Uri.parse(path), null, null)
+                    } else if (path.startsWith("file://")) {
+                        val physicalFile = java.io.File(path.removePrefix("file://"))
+                        if (physicalFile.exists()) physicalFile.delete()
+                    } else {
+                        val physicalFile = java.io.File(path)
+                        if (physicalFile.exists()) physicalFile.delete()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SystemViewModel", "Failed to delete file: ${e.message}")
+                }
+            }
+            
             chatDao.clearHistory()
-            addLog("STORAGE", "Database and Vector Store purged", "SUCCESS")
+            uploadedFileDao.markMultipleAsDeleted(ids)
+            vectorStore.clear()
+            _vectorDbUsage.value = 0L
+            addLog("STORAGE", "Deep purge complete: Files and DB cleared", "SUCCESS")
+        }
+    }
+
+
+    fun openFile(file: com.chhanda.ai.data.repository.UploadedFileEntity) {
+        try {
+            val uri = android.net.Uri.parse(file.path)
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            addLog("STORAGE", "Could not open file: ${file.name}", "ERROR")
         }
     }
 

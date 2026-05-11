@@ -2,6 +2,7 @@ package com.chhanda.ai.domain.usecase
 
 import android.net.Uri
 import com.chhanda.ai.domain.model.*
+import com.chhanda.ai.data.repository.VectorChunkEntity
 
 /**
  * Orchestrates the ingestion of a document into the RAG system.
@@ -15,7 +16,7 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
     private val vectorStore get() = vectorStoreLazy.get()
     private val ingestor get() = ingestorLazy.get()
 
-    suspend operator fun invoke(uri: Uri, type: DocType, modelId: String = "default") {
+    suspend operator fun invoke(uri: android.net.Uri, type: DocType, modelId: String = "shared_rag_db", onProgress: (Float) -> Unit = {}) {
         val rawText = when (type) {
             DocType.PDF -> ingestor.ingestPdf(uri).joinToString("\n")
             DocType.IMAGE -> ingestor.ingestImage(uri)
@@ -23,17 +24,42 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
             DocType.TXT -> ingestor.ingestTxt(uri)
             DocType.WORD -> ingestor.ingestWord(uri)
         }
+        processRawText(rawText, uri.toString(), type.name, modelId, onProgress)
+    }
 
-        val textChunks = TextChunker.chunk(rawText)
+    suspend fun ingestScrapedText(text: String, url: String, label: String, onProgress: (Float) -> Unit = {}) {
+        processRawText(text, url, "WEB_URL", "shared_rag_db", onProgress)
+    }
 
-        textChunks.forEach { text ->
-            val embedding = embeddingEngine.embed(text)
-            vectorStore.add(
-                text = text,
-                embedding = embedding,
-                metadata = mapOf("source" to uri.toString(), "type" to type.name),
-                modelId = modelId
-            )
+    private suspend fun processRawText(rawText: String, source: String, type: String, modelId: String, onProgress: (Float) -> Unit) {
+        val textChunks = TextChunker.chunk(rawText, chunkSize = 800, overlap = 200)
+        val totalChunks = textChunks.size
+        val chunkEntities = mutableListOf<VectorChunkEntity>()
+
+        try {
+            textChunks.forEachIndexed { index, text ->
+                val embedding = embeddingEngine.embed(text)
+                chunkEntities.add(
+                    VectorChunkEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        modelId = modelId,
+                        text = text,
+                        source = source,
+                        type = type,
+                        embeddingBlob = VectorChunkEntity.fromFloatArray(embedding.vector)
+                    )
+                )
+                
+                if (chunkEntities.size >= 10 || index == totalChunks - 1) {
+                    vectorStore.addAll(chunkEntities)
+                    chunkEntities.clear()
+                    onProgress((index + 1).toFloat() / totalChunks)
+                }
+            }
+        } catch (e: Exception) {
+            // Failure rollback: remove partial chunks for this source
+            vectorStore.clearSource(source)
+            throw e // Re-throw to be handled by caller (ViewModel or Worker)
         }
     }
 }

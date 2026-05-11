@@ -44,6 +44,7 @@ fun ConfigScreen(
     val hfToken by viewModel.hfToken.collectAsState()
     val maxDevices by viewModel.maxDevices.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
+    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
     val showRestart by viewModel.showRestartDialog.collectAsState()
     val context = LocalContext.current
 
@@ -176,26 +177,6 @@ fun ConfigScreen(
                         }
 
                         Spacer(Modifier.height(24.dp))
-                        Text(Localization.getString("public_url", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text(Localization.getString("public_url_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        Spacer(Modifier.height(8.dp))
-                        val publicUrl by viewModel.publicUrl.collectAsState()
-                        var tempPublicUrl by remember(publicUrl) { mutableStateOf(publicUrl) }
-                        OutlinedTextField(
-                            value = tempPublicUrl,
-                            onValueChange = { 
-                                tempPublicUrl = it
-                                viewModel.setPublicUrl(it)
-                            },
-                            placeholder = { Text("https://your-tunnel.ngrok-free.dev") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                unfocusedBorderColor = Color.Transparent,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
 
                         Spacer(Modifier.height(24.dp))
                         Text(Localization.getString("max_devices", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -210,6 +191,15 @@ fun ConfigScreen(
                                 Text("$maxDevices devices", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
                             Text("20", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+                        val capacityGb = vectorDbCapacityBytes.toDouble() / (1024 * 1024 * 1024)
+                        Text(Localization.getString("vector_db_capacity", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Automatically managed (1GB minimum, up to 15% of remaining storage).", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        Spacer(Modifier.height(12.dp))
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
+                            Text(String.format(java.util.Locale.US, "Current Limit: %.1f GB", capacityGb), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         }
                     }
                 }

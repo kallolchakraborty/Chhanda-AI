@@ -119,13 +119,23 @@ class AndroidMultimodalIngestor @Inject constructor(
                 while (entry != null) {
                     if (entry.name == "word/document.xml") {
                         val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                        factory.isNamespaceAware = true // IMPORTANT for Word XML
                         val builder = factory.newDocumentBuilder()
                         val doc = builder.parse(zipInputStream)
-                        val nodeList = doc.getElementsByTagName("w:t")
-                        for (i in 0 until nodeList.length) {
-                            stringBuilder.append(nodeList.item(i).textContent)
-                            stringBuilder.append(" ")
+                        
+                        // Use getElementsByTagNameNS if namespace aware, or handle both
+                        val nodeList = doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "t")
+                        val altNodeList = if (nodeList.length == 0) doc.getElementsByTagName("w:t") else nodeList
+                        
+                        for (i in 0 until altNodeList.length) {
+                            val node = altNodeList.item(i)
+                            val text = node.textContent
+                            if (!text.isNullOrBlank()) {
+                                stringBuilder.append(text)
+                                stringBuilder.append(" ")
+                            }
                         }
+                        android.util.Log.d("Ingestor", "Extracted ${stringBuilder.length} characters from Word document.")
                         break
                     }
                     entry = zipInputStream.nextEntry

@@ -2,10 +2,17 @@ package com.chhanda.ai.data.repository
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Index
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-@Entity(tableName = "vector_chunks")
+@Entity(
+    tableName = "vector_chunks",
+    indices = [
+        Index(value = ["modelId"]),
+        Index(value = ["source"])
+    ]
+)
 data class VectorChunkEntity(
     @PrimaryKey val id: String,
     val modelId: String,

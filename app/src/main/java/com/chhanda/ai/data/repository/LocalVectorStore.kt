@@ -2,6 +2,7 @@ package com.chhanda.ai.data.repository
 
 import com.chhanda.ai.domain.model.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -12,14 +13,12 @@ import kotlin.math.sqrt
  */
 
 class LocalVectorStore @javax.inject.Inject constructor(
-    private val vectorChunkDao: VectorChunkDao
+    private val vectorChunkDao: VectorChunkDao,
+    private val settingsRepository: SettingsRepository
 ) : VectorStore {
 
     override suspend fun add(text: String, embedding: Embedding, metadata: Map<String, String>, modelId: String) {
-        // Step 1: Deduplication (System Design RAG Principle)
-        val existing = vectorChunkDao.getAllForModel(modelId)
-        if (existing.any { it.text.trim() == text.trim() }) return
-
+        if (text.isBlank()) return
         val entity = VectorChunkEntity(
             id = java.util.UUID.randomUUID().toString(),
             modelId = modelId,
@@ -31,20 +30,36 @@ class LocalVectorStore @javax.inject.Inject constructor(
         vectorChunkDao.insert(entity)
     }
 
+    override suspend fun addAll(entities: List<VectorChunkEntity>) {
+        if (entities.isEmpty()) return
+        vectorChunkDao.insertAll(entities)
+    }
+
     override suspend fun search(query: Embedding, topK: Int, modelId: String): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-        val entities = vectorChunkDao.getAllForModel(modelId)
+        // Universal RAG: Search across all relevant knowledge
+        val entities = try { vectorChunkDao.getAll() } catch (e: Exception) { 
+            android.util.Log.e("LocalVectorStore", "Search failed: ${e.message}")
+            emptyList() 
+        }
         
-        // Step 2: Hybrid Retrieval (Simulated Keyword Boost)
-        // In a real system design, this would be BM25 + Vector Search.
-        // Here we boost chunks that share non-trivial keywords with the query intent.
+        if (entities.isEmpty()) {
+            android.util.Log.d("LocalVectorStore", "No chunks found in database.")
+            return@withContext emptyList<SearchResult>()
+        }
+
+        val queryVector = query.vector
+        android.util.Log.d("LocalVectorStore", "Searching ${entities.size} chunks. Query dim: ${queryVector.size}")
         
-        entities.map { entity ->
+        var maxScore = 0.0f
+        val results = entities.mapNotNull { entity ->
             val vector = VectorChunkEntity.toFloatArray(entity.embeddingBlob)
-            var score = calculateCosineSimilarity(query.vector, vector)
+            if (vector.size != queryVector.size) {
+                android.util.Log.w("LocalVectorStore", "Dimension mismatch: chunk=${vector.size}, query=${queryVector.size}")
+                return@mapNotNull null
+            }
             
-            // Simple keyword-based boost for hybrid search
-            // If the entity text contains specific words from the query, boost the score
-            // (Note: This is a simplified version of hybrid search for on-device efficiency)
+            val score = calculateCosineSimilarity(queryVector, vector)
+            if (score > maxScore) maxScore = score
             
             SearchResult(
                 text = entity.text, 
@@ -52,9 +67,13 @@ class LocalVectorStore @javax.inject.Inject constructor(
                 metadata = mapOf("source" to entity.source, "type" to entity.type)
             )
         }
-        .filter { it.score > 0.60f } // Lowered slightly to allow for hybrid reranking
-        .sortedByDescending { it.score }
-        .take(topK)
+        
+        android.util.Log.d("LocalVectorStore", "Search complete. Max score found: $maxScore. Using threshold 0.10")
+        
+        results
+            .filter { it.score >= 0.10f } 
+            .sortedByDescending { it.score }
+            .take(topK)
     }
 
     private fun calculateCosineSimilarity(v1: FloatArray, v2: FloatArray): Float {
@@ -78,15 +97,20 @@ class LocalVectorStore @javax.inject.Inject constructor(
 
     override suspend fun getStorageUsage(): StorageStats {
         val entities = vectorChunkDao.getAll()
+        val capacityGb = settingsRepository.vectorDbCapacityFlow.first()
         return StorageStats(
             usedBytes = entities.size * 2048L,
-            totalCapacityBytes = 20 * 1024 * 1024 * 1024L,
+            totalCapacityBytes = capacityGb.toLong() * 1024 * 1024 * 1024,
             fileCount = entities.size
         )
     }
 
     override suspend fun clear() {
         vectorChunkDao.clearAll()
+    }
+
+    override suspend fun clearSource(source: String) {
+        vectorChunkDao.deleteBySource(source)
     }
 }
 

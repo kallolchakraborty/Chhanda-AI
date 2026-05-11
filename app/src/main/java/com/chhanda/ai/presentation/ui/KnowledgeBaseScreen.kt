@@ -44,31 +44,41 @@ fun KnowledgeBaseScreen(
     viewModel: SystemViewModel = viewModel()
 ) {
     val ownedModels by viewModel.ownedModels.collectAsState()
+    val allFiles by viewModel.allFiles.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
+    var showAllFiles by remember { mutableStateOf(false) }
+    var selectedUris by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
+    var showConfirmUpload by remember { mutableStateOf(false) }
+
+    val isIngesting by viewModel.isIngesting.collectAsState()
+    val ingestionProgress by viewModel.ingestionProgress.collectAsState()
+    val ingestionMessage by viewModel.ingestionMessage.collectAsState()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+        onResult = { uris ->
+            if (uris.isNotEmpty()) {
+                selectedUris = uris
+                showConfirmUpload = true
+            }
+        }
+    )
+
     val activeModelName = remember(ownedModels) {
         ownedModels.firstOrNull { it.isActive }?.name ?: Localization.getString("no_active_model", appLanguage)
     }
     val context = LocalContext.current
     
     var showWipeConfirm by remember { mutableStateOf(false) }
+    var showEmptyVectorConfirm by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
     
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-        onResult = { uri ->
-            uri?.let {
-                val mimeType = context.contentResolver.getType(it)
-                val type = when {
-                    mimeType?.startsWith("image/") == true -> DocType.IMAGE
-                    mimeType == "application/pdf" -> DocType.PDF
-                    mimeType == "text/plain" -> DocType.TXT
-                    mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> DocType.WORD
-                    else -> DocType.TXT
-                }
-                viewModel.ingestDocument(it, type)
-            }
-        }
-    )
+    var showUrlDialog by remember { mutableStateOf(false) }
+    var urlLabel by remember { mutableStateOf("") }
+    var urlLink by remember { mutableStateOf("") }
+    var showUrlScrapingConfirm by remember { mutableStateOf(false) }
+    
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     Scaffold(
         topBar = {
@@ -110,7 +120,11 @@ fun KnowledgeBaseScreen(
                 Column {
                     ChhandaSectionHeader(icon = Icons.Default.CloudUpload, title = Localization.getString("data_ingestion", appLanguage))
                     Spacer(Modifier.height(12.dp))
-                    UploadRagCard(appLanguage = appLanguage, onUpload = { filePickerLauncher.launch(arrayOf("application/pdf", "image/*", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")) })
+                    UploadRagCard(
+                        appLanguage = appLanguage, 
+                        onUpload = { filePickerLauncher.launch(arrayOf("application/pdf", "image/*", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "audio/*")) },
+                        onConnectUrl = { showUrlDialog = true }
+                    )
                 }
             }
             
@@ -118,7 +132,7 @@ fun KnowledgeBaseScreen(
                 Column {
                     ChhandaSectionHeader(icon = Icons.Default.BarChart, title = Localization.getString("stats", appLanguage))
                     Spacer(Modifier.height(12.dp))
-                    IndexedStatsCard(appLanguage = appLanguage)
+                    IndexedStatsCard(appLanguage = appLanguage, fileCount = allFiles.size)
                 }
             }
             
@@ -126,33 +140,85 @@ fun KnowledgeBaseScreen(
                 Column {
                     ChhandaSectionHeader(icon = Icons.Default.Storage, title = Localization.getString("storage_metrics", appLanguage))
                     Spacer(Modifier.height(12.dp))
-                    VectorStorageStatusCard(appLanguage = appLanguage)
+                    VectorStorageStatusCard(appLanguage = appLanguage, totalSize = allFiles.sumOf { it.size })
                 }
             }
             
-            item {
-                RecentUploadsSectionHeader(appLanguage = appLanguage)
-            }
-            
-            items(ragFiles) { file ->
-                RagFileItem(file)
+            if (allFiles.isNotEmpty()) {
+                item {
+                    RecentUploadsSectionHeader(
+                        appLanguage = appLanguage, 
+                        onViewArchive = { showAllFiles = !showAllFiles }, 
+                        isExpanded = showAllFiles,
+                        isVisible = allFiles.size > 10
+                    )
+                }
+                
+                val displayFiles = if (showAllFiles || allFiles.size <= 10) allFiles else allFiles.take(3)
+                items(count = displayFiles.size) { index ->
+                    val file = displayFiles[index]
+                    RagFileItem(
+                        file = file, 
+                        onDelete = { viewModel.deleteFiles(listOf(file.id)) },
+                        onClick = { viewModel.openFile(file) }
+                    )
+                }
             }
             
             item {
                 Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { showWipeConfirm = true },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
-                ) {
-                    Icon(Icons.Default.Warning, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(Localization.getString("wipe_memory", appLanguage), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { showWipeConfirm = true },
+                        enabled = !isIngesting,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
+                    ) {
+                        Icon(Icons.Default.DeleteForever, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(Localization.getString("wipe_memory", appLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Button(
+                        onClick = { showEmptyVectorConfirm = true },
+                        enabled = !isIngesting,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4B5563))
+                    ) {
+                        Icon(Icons.Default.LayersClear, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(Localization.getString("empty_vector_db", appLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
                 Spacer(Modifier.height(80.dp))
             }
         }
+
+        if (showConfirmUpload) {
+            AlertDialog(
+                onDismissRequest = { showConfirmUpload = false },
+                title = { Text("Confirm Ingestion") },
+                text = { Text("Are you sure you want to ingest ${selectedUris.size} files into the Knowledge Base?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.ingestDocuments(selectedUris)
+                        showConfirmUpload = false
+                    }) { Text("Confirm") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmUpload = false }) { Text("Cancel") }
+                }
+            )
+        }
+
+        com.chhanda.ai.presentation.ui.components.IngestionProgressDialog(
+            isIngesting = isIngesting,
+            progress = ingestionProgress,
+            message = ingestionMessage,
+            onDismiss = { viewModel.dismissIngestionProgress() }
+        )
 
         if (showWipeConfirm) {
             AlertDialog(
@@ -173,6 +239,170 @@ fun KnowledgeBaseScreen(
                 dismissButton = {
                     TextButton(onClick = { showWipeConfirm = false }) {
                         Text(Localization.getString("cancel", appLanguage))
+                    }
+                }
+            )
+        }
+
+        if (showEmptyVectorConfirm) {
+            AlertDialog(
+                onDismissRequest = { showEmptyVectorConfirm = false },
+                title = { Text(Localization.getString("empty_vector_db", appLanguage)) },
+                text = { Text(Localization.getString("empty_vector_db_text", appLanguage)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearVectorStore()
+                            showEmptyVectorConfirm = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(Localization.getString("confirm", appLanguage))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEmptyVectorConfirm = false }) {
+                        Text(Localization.getString("cancel", appLanguage))
+                    }
+                }
+            )
+        }
+
+        if (showUrlDialog) {
+            AlertDialog(
+                onDismissRequest = { showUrlDialog = false },
+                title = { Text("Connect Website URL", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        OutlinedTextField(
+                            value = urlLabel,
+                            onValueChange = { urlLabel = it },
+                            label = { Text("Label (e.g., Project Wiki)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        OutlinedTextField(
+                            value = urlLink,
+                            onValueChange = { urlLink = it },
+                            label = { Text("Website Link (URL)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    clipboardManager.getText()?.text?.let { urlLink = it }
+                                }) {
+                                    Icon(Icons.Default.ContentPaste, "Paste from Clipboard")
+                                }
+                            }
+                        )
+                        if (urlLink.contains("youtube.com") || urlLink.contains("youtu.be")) {
+                            Text("YouTube scrapping is not allowed.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (urlLink.contains("youtube.com") || urlLink.contains("youtu.be")) return@Button
+                            showUrlScrapingConfirm = true
+                            showUrlDialog = false
+                        },
+                        enabled = urlLabel.isNotBlank() && urlLink.isNotBlank() && !(urlLink.contains("youtube.com") || urlLink.contains("youtu.be")),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Scrape")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUrlDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showUrlScrapingConfirm) {
+            AlertDialog(
+                onDismissRequest = { showUrlScrapingConfirm = false },
+                title = { Text("Confirm Website Scraping") },
+                text = { Text("Chhanda will now fetch and index the content from '$urlLink'. This may take a moment depending on the site size.") },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.processScrapeUrl(urlLink, urlLabel)
+                        showUrlScrapingConfirm = false
+                        urlLink = ""
+                        urlLabel = ""
+                    }) {
+                        Text("Confirm")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUrlScrapingConfirm = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // Background Ingestion Prompt
+        val pendingPrompt = viewModel.pendingBackgroundPrompt
+        if (pendingPrompt != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissIngestionPrompt() },
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.HourglassEmpty, null, tint = Color(0xFF2563EB))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Processing Time")
+                    }
+                },
+                text = { 
+                    Text("This file is quite large and might take more than 30 seconds to index. Would you like to process it in the background? You'll be notified once it's finished.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (pendingPrompt.url != null) {
+                                viewModel.processScrapeUrl(pendingPrompt.url, pendingPrompt.label ?: "Website", true)
+                            } else {
+                                viewModel.processIngestDocuments(pendingPrompt.uris, true)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                    ) {
+                        Text("Run in Background")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        if (pendingPrompt.url != null) {
+                            viewModel.processScrapeUrl(pendingPrompt.url, pendingPrompt.label ?: "Website", false)
+                        } else {
+                            viewModel.processIngestDocuments(pendingPrompt.uris, false)
+                        }
+                    }) {
+                        Text("Foreground")
+                    }
+                }
+            )
+        }
+
+        // Ingestion Error Handling
+        val ingestionError by viewModel.ingestionError.collectAsState()
+        if (ingestionError != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearIngestionError() },
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ingestion Failed")
+                    }
+                },
+                text = { Text(ingestionError ?: "An unexpected error occurred during indexing.") },
+                confirmButton = {
+                    Button(onClick = { viewModel.clearIngestionError() }) {
+                        Text("OK")
                     }
                 }
             )
@@ -279,7 +509,7 @@ fun TargetContextSelector(
 }
 
 @Composable
-fun UploadRagCard(appLanguage: String, onUpload: () -> Unit) {
+fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -297,6 +527,14 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit) {
                 color = MaterialTheme.colorScheme.primary,
                 shape = CircleShape
             ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.CloudUpload, 
+                        null, 
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
             Text(Localization.getString("upload_rag", appLanguage), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
@@ -313,17 +551,17 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit) {
                     onClick = onUpload,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.width(130.dp).height(48.dp)
+                    modifier = Modifier.weight(1f).height(48.dp)
                 ) {
-                    Text(Localization.getString("browse_files", appLanguage))
+                    Text(Localization.getString("browse_files", appLanguage), fontSize = 12.sp)
                 }
                 Button(
-                    onClick = onUpload,
+                    onClick = onConnectUrl,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.width(130.dp).height(48.dp)
+                    modifier = Modifier.weight(1f).height(48.dp)
                 ) {
-                    Text("Connect URL", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Connect URL", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -339,7 +577,7 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit) {
 }
 
 @Composable
-fun IndexedStatsCard(appLanguage: String) {
+fun IndexedStatsCard(appLanguage: String, fileCount: Int) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = RoundedCornerShape(32.dp),
@@ -357,7 +595,7 @@ fun IndexedStatsCard(appLanguage: String) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(Localization.getString("total_indexed", appLanguage), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text("1,248", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$fileCount", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(" " + Localization.getString("files", appLanguage), fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 12.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -370,7 +608,11 @@ fun IndexedStatsCard(appLanguage: String) {
 }
 
 @Composable
-fun VectorStorageStatusCard(appLanguage: String) {
+fun VectorStorageStatusCard(appLanguage: String, totalSize: Long) {
+    val totalSizeGB = totalSize.toDouble() / (1024.0 * 1024.0 * 1024.0)
+    val limitGB = 20.0
+    val progress = (totalSizeGB / limitGB).toFloat().coerceIn(0f, 1f)
+    
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
         shape = RoundedCornerShape(32.dp),
@@ -380,36 +622,56 @@ fun VectorStorageStatusCard(appLanguage: String) {
             Text(Localization.getString("vector_storage", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
             Spacer(Modifier.height(12.dp))
             LinearProgressIndicator(
-                progress = 0.71f,
+                progress = progress,
                 modifier = Modifier.fillMaxWidth().height(10.dp).clip(CircleShape),
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
             )
             Spacer(Modifier.height(12.dp))
-            Text("14.2 GB / 20 GB " + Localization.getString("used", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            val sizeStr = if (totalSizeGB < 0.1) {
+                "%.2f MB".format(totalSize.toDouble() / (1024.0 * 1024.0))
+            } else {
+                "%.2f GB".format(totalSizeGB)
+            }
+            Text("$sizeStr / $limitGB GB " + Localization.getString("used", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
     }
 }
 
 @Composable
-fun RecentUploadsSectionHeader(appLanguage: String) {
+fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, isExpanded: Boolean, isVisible: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(Localization.getString("recent_uploads", appLanguage), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        TextButton(onClick = {}) {
-            Text("View Archive", color = Color(0xFF1967D2), fontWeight = FontWeight.Bold)
-            Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(16.dp), tint = Color(0xFF1967D2))
+        if (isVisible) {
+            TextButton(onClick = onViewArchive) {
+                Text(if (isExpanded) "Hide Archive" else "View Archive", color = Color(0xFF1967D2), fontWeight = FontWeight.Bold)
+                Icon(if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ArrowForward, null, modifier = Modifier.size(16.dp), tint = Color(0xFF1967D2))
+            }
         }
     }
 }
 
 @Composable
-fun RagFileItem(file: RagFileData) {
+fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelete: () -> Unit, onClick: () -> Unit) {
+    var showMenu by remember { mutableStateOf(false) }
+    val icon = when (file.format) {
+        "PDF" -> androidx.compose.material.icons.Icons.Default.PictureAsPdf
+        "IMAGE" -> androidx.compose.material.icons.Icons.Default.Image
+        "AUDIO" -> androidx.compose.material.icons.Icons.Default.Mic
+        else -> androidx.compose.material.icons.Icons.Default.Description
+    }
+    val color = when (file.format) {
+        "PDF" -> androidx.compose.ui.graphics.Color.Red
+        "IMAGE" -> androidx.compose.ui.graphics.Color.Cyan
+        "AUDIO" -> androidx.compose.ui.graphics.Color.Blue
+        else -> androidx.compose.ui.graphics.Color.Gray
+    }
     Surface(
-        modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(),
+        modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth().clickable { onClick() },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(24.dp)
     ) {
@@ -419,24 +681,36 @@ fun RagFileItem(file: RagFileData) {
         ) {
             Surface(
                 modifier = Modifier.size(48.dp),
-                color = file.color.copy(alpha = 0.15f),
-                shape = CircleShape
+                color = color.copy(alpha = 0.15f),
+                shape = androidx.compose.foundation.shape.CircleShape
             ) {
-                Icon(file.icon, null, tint = file.color, modifier = Modifier.padding(12.dp))
+                Icon(icon, null, tint = color, modifier = Modifier.padding(12.dp))
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(file.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text("${file.size} • Updated ${file.time}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                val sizeStr = if (file.size < 1024 * 1024) {
+                    "%.2f KB".format(file.size.toDouble() / 1024.0)
+                } else {
+                    "%.2f MB".format(file.size.toDouble() / (1024.0 * 1024.0))
+                }
+                Text("$sizeStr • ${file.format}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
-            IconButton(onClick = {}) { Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            IconButton(onClick = { showMenu = true }) { 
+                Icon(androidx.compose.material.icons.Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = Color.Red) },
+                        onClick = {
+                            onDelete()
+                            showMenu = false
+                        },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) }
+                    )
+                }
+            }
         }
     }
 }
 
-data class RagFileData(val name: String, val size: String, val time: String, val icon: ImageVector, val color: Color)
-val ragFiles = listOf(
-    RagFileData("quarterly_report_q3.pdf", "12.4 MB", "2 hours ago", Icons.Default.PictureAsPdf, Color.Red),
-    RagFileData("interview_recording_final.mp3", "8.1 MB", "5 hours ago", Icons.Default.Mic, Color.Blue),
-    RagFileData("infrastructure_schema.png", "2.1 MB", "yesterday", Icons.Default.Image, Color.Cyan)
-)
+

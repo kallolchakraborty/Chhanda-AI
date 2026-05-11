@@ -28,6 +28,7 @@ class SettingsRepository @Inject constructor(
         val MAX_DEVICES = intPreferencesKey("max_devices")
         val PUBLIC_URL = stringPreferencesKey("public_url")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
+        val VECTOR_DB_CAPACITY = intPreferencesKey("vector_db_capacity")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -60,6 +61,10 @@ class SettingsRepository @Inject constructor(
 
     val appLanguageFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.APP_LANGUAGE] ?: "English"
+    }
+
+    val vectorDbCapacityFlow: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.VECTOR_DB_CAPACITY] ?: 1
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -107,6 +112,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setAppLanguage(language: String) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.APP_LANGUAGE] = language
+        }
+    }
+
+    suspend fun setVectorDbCapacity(gb: Int) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.VECTOR_DB_CAPACITY] = gb
         }
     }
 }

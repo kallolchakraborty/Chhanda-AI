@@ -28,30 +28,25 @@ class ContextManager @javax.inject.Inject constructor(
         // Long-Term Memory: Vector search for semantic relevance across all history
         val longTermMemory = try {
             val queryEmbedding = embeddingEngine.embed(query)
-            val results = vectorStore.search(queryEmbedding, topK = 5, modelId = modelName)
+            val results = vectorStore.search(queryEmbedding, topK = 6, modelId = "shared_rag_db")
             
             val filtered = results
-                .filter { it.score > 0.62f } // Discard low-signal chunks
-                .filter { result ->
-                    recentMessages.none { it.text.contains(result.text.take(20)) }
-                }
+                .filter { it.score >= 0.10f } 
+
+            android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Scores: ${results.joinToString { String.format("%.3f", it.score) }}")
+            android.util.Log.d("ContextManager", "Filtered to ${filtered.size} snippets above 0.10 threshold")
 
             if (filtered.isEmpty()) ""
             else {
-                filtered.groupBy { it.metadata["type"] ?: "TXT" }
-                    .entries.joinToString("\n\n") { (type, chunks) ->
-                        val label = when(type.uppercase()) {
-                            "PDF" -> "[Source: PDF Document]"
-                            "AUDIO" -> "[Source: Audio Transcript]"
-                            "VIDEO" -> "[Source: Video Transcript]"
-                            "IMAGE" -> "[Source: Image OCR]"
-                            "URL" -> "[Source: Web Content]"
-                            else -> "[Source: Text]"
-                        }
-                        "$label\n" + chunks.joinToString("\n---\n") { it.text }
+                "RELEVANT DOCUMENTATION SNIPPETS:\n" +
+                filtered.groupBy { it.metadata["source"] ?: "General Knowledge" }
+                    .entries.joinToString("\n\n") { (source, chunks) ->
+                        val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
+                        "[SOURCE: $sourceName]\n" + chunks.joinToString("\n---\n") { it.text }
                     }
             }
         } catch (e: Exception) {
+            android.util.Log.e("ContextManager", "Long-term memory retrieval failed: ${e.message}")
             "" // Graceful fallback
         }
 

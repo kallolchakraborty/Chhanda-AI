@@ -107,7 +107,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     
                     val now = System.currentTimeMillis()
                     if (now - lastUpdate > 1000) {
-                        val progress = if (totalBytes > 0) (totalRead.toFloat() / totalBytes * 100).toInt() else -1
+                        val progress = if (totalBytes > 0) (totalRead.toFloat() / totalBytes * 100).toInt().coerceIn(0, 99) else -1
                         setProgress(workDataOf(KEY_PROGRESS to progress))
                         setForeground(createForegroundInfo(progress))
                         lastUpdate = now
@@ -115,6 +115,10 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 }
             }
         }
+
+        // Force 100% and Finalizing status
+        setProgress(workDataOf(KEY_PROGRESS to 100))
+        setForeground(createForegroundInfo(100, "Finalizing..."))
 
         if (finalFile.exists()) {
             finalFile.delete()
@@ -127,9 +131,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         }
     }
 
-    private fun createForegroundInfo(progress: Int): ForegroundInfo {
+    private fun createForegroundInfo(progress: Int, status: String? = null): ForegroundInfo {
         val title = "Downloading Model"
-        val content = if (progress >= 0) "$progress%" else "In progress..."
+        val content = status ?: (if (progress >= 0) "$progress%" else "In progress...")
         
         val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
