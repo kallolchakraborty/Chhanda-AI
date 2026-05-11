@@ -21,6 +21,7 @@ class LocalVectorStore @javax.inject.Inject constructor(
             modelId = modelId,
             text = text,
             source = metadata["source"] ?: "Local Device",
+            type = metadata["type"] ?: "TXT",
             embeddingBlob = VectorChunkEntity.fromFloatArray(embedding.vector)
         )
         vectorChunkDao.insert(entity)
@@ -34,7 +35,7 @@ class LocalVectorStore @javax.inject.Inject constructor(
             SearchResult(
                 text = entity.text, 
                 score = score, 
-                metadata = mapOf("source" to entity.source)
+                metadata = mapOf("source" to entity.source, "type" to entity.type)
             )
         }
         .filter { it.score > 0.65f }

@@ -44,7 +44,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 Question: $userText
 
                 Source context:
-                ${if (longTermContext.isEmpty()) "- No relevant local context found." else longTermContext}
+                ${if (longTermContext.trim().isEmpty()) "- No relevant local context found." else longTermContext.take(1500)}
 
                 Instructions:
                 Use the most relevant and recent evidence.

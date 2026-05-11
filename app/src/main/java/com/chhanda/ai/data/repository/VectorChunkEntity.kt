@@ -11,6 +11,7 @@ data class VectorChunkEntity(
     val modelId: String,
     val text: String,
     val source: String,
+    val type: String = "TXT",
     val embeddingBlob: ByteArray
 ) {
     companion object {
@@ -42,6 +43,7 @@ data class VectorChunkEntity(
         if (modelId != other.modelId) return false
         if (text != other.text) return false
         if (source != other.source) return false
+        if (type != other.type) return false
         if (!embeddingBlob.contentEquals(other.embeddingBlob)) return false
 
         return true
@@ -52,6 +54,7 @@ data class VectorChunkEntity(
         result = 31 * result + modelId.hashCode()
         result = 31 * result + text.hashCode()
         result = 31 * result + source.hashCode()
+        result = 31 * result + type.hashCode()
         result = 31 * result + embeddingBlob.contentHashCode()
         return result
     }
