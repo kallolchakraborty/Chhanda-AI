@@ -128,7 +128,7 @@ class LiteRTLMEngine @Inject constructor(
                 val gpuConfig = EngineConfig(
                     modelPath = path,
                     backend = Backend.GPU(),
-                    maxNumTokens = 3072,
+                    maxNumTokens = 2048,
                     cacheDir = context.cacheDir.absolutePath
                 )
                 val engine = Engine(gpuConfig)
@@ -141,7 +141,7 @@ class LiteRTLMEngine @Inject constructor(
                     val cpuConfig = EngineConfig(
                         modelPath = path,
                         backend = Backend.CPU(),
-                        maxNumTokens = 3072,
+                        maxNumTokens = 2048,
                         cacheDir = context.cacheDir.absolutePath
                     )
                     val engine = Engine(cpuConfig)
