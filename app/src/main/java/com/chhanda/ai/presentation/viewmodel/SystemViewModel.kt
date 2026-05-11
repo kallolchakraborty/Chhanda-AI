@@ -690,12 +690,12 @@ class SystemViewModel @Inject constructor(
             }
 
             val url = when {
-                model.name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/google/gemma-2b-it-cpu-int4/resolve/main/gemma-2b-it-cpu-int4.bin"
+                model.name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/google/gemma-2b-it-tflite/resolve/main/gemma-2b-it-cpu-int4.bin"
                 model.name.contains("Gemma-2", ignoreCase = true) -> "https://huggingface.co/litert-community/Gemma2-2B-IT/resolve/main/model.litertlm"
                 model.name.contains("Llama-3.2-1B", ignoreCase = true) -> "https://huggingface.co/litert-community/Llama-3.2-1B-Instruct/resolve/main/model.litertlm"
                 model.name.contains("Phi", ignoreCase = true) -> "https://huggingface.co/litert-community/Phi-3.5-mini-instruct/resolve/main/model.litertlm"
                 model.name.contains("Qwen", ignoreCase = true) -> "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/model.litertlm"
-                else -> "https://huggingface.co/google/gemma-2b-it-cpu-int4/resolve/main/gemma-2b-it-cpu-int4.bin"
+                else -> "https://huggingface.co/google/gemma-2b-it-tflite/resolve/main/gemma-2b-it-cpu-int4.bin"
             }
 
             val inputData = androidx.work.Data.Builder()
@@ -832,7 +832,7 @@ class SystemViewModel @Inject constructor(
 
     private fun getUrlForModel(name: String): String {
         return when {
-            name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/google/gemma-2b-it-cpu-int4/resolve/main/gemma-2b-it-cpu-int4.bin"
+            name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/google/gemma-2b-it-tflite/resolve/main/gemma-2b-it-cpu-int4.bin"
             name.contains("Gemma-2", ignoreCase = true) -> "https://huggingface.co/litert-community/Gemma2-2B-IT/resolve/main/model.litertlm"
             name.contains("Llama-3.2-1B", ignoreCase = true) -> "https://huggingface.co/litert-community/Llama-3.2-1B-Instruct/resolve/main/model.litertlm"
             name.contains("Phi", ignoreCase = true) -> "https://huggingface.co/litert-community/Phi-3.5-mini-instruct/resolve/main/model.litertlm"
