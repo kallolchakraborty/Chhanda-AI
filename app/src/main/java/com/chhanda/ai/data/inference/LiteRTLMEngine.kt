@@ -151,10 +151,22 @@ class LiteRTLMEngine @Inject constructor(
                 } catch (cpuError: Throwable) {
                     Log.e(TAG, "CPU fallback also failed", cpuError)
                     val msg = cpuError.localizedMessage ?: cpuError.javaClass.simpleName
-                    if (msg.contains("OutOfMemory", ignoreCase = true)) {
-                        throw Exception("Out of memory while loading model. This model might be too large for your device.")
+                    
+                    // NEW: Clear cache and throw detailed error
+                    try {
+                        context.cacheDir.deleteRecursively()
+                        Log.w(TAG, "Cleared cacheDir after initialization failure")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to clear cacheDir", e)
                     }
-                    throw Exception("Model load failed on both GPU and CPU: $msg")
+
+                    if (msg.contains("OutOfMemory", ignoreCase = true)) {
+                        throw Exception("Out of memory. Gemma 4 E2B needs ~1.5GB free RAM. Close other apps.")
+                    }
+                    if (msg.contains("metadata", ignoreCase = true)) {
+                        throw Exception("Model metadata mismatch. Ensure you downloaded the exact .litertlm file from litert-community.")
+                    }
+                    throw Exception("Engine Init Failed: $msg. Please restart your device to clear JNI memory.")
                 }
             }
             currentModelPath = path

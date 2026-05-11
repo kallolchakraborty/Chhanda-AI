@@ -403,8 +403,7 @@ class SystemViewModel @Inject constructor(
             try {
                 val potentialModels = listOf(
                     "gemma-4-e2b.litertlm" to "Gemma-4-E2B-IT",
-                    "gemma-4-e4b.litertlm" to "Gemma-4-E4B-IT",
-                    "embedding-gemma-300m.tflite" to "Gemma-Embed-300M"
+                    "gemma-4-e4b.litertlm" to "Gemma-4-E4B-IT"
                 )
 
                 val recommendedName = "Gemma-4-E2B-IT"
@@ -681,14 +680,12 @@ class SystemViewModel @Inject constructor(
             val filename = when {
                 model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
                 model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
-                model.name.contains("Embed", ignoreCase = true) -> "embedding-gemma-300m.tflite"
                 else -> "gemma-4-e2b.litertlm"
             }
 
             val url = when {
                 model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
                 model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
-                model.name.contains("Embed", ignoreCase = true) -> "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite"
                 else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
             }
 
@@ -828,7 +825,6 @@ class SystemViewModel @Inject constructor(
         return when {
             name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
             name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
-            name.contains("Embed", ignoreCase = true) -> "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite"
             else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
         }
     }
@@ -837,7 +833,6 @@ class SystemViewModel @Inject constructor(
         return when {
             name.contains("Gemma-4-E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
             name.contains("Gemma-4-E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
-            name.contains("Embed", ignoreCase = true) -> "embedding-gemma-300m.tflite"
             else -> "gemma-4-e2b.litertlm"
         }
     }
