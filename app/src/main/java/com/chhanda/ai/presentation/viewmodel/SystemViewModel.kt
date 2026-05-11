@@ -690,11 +690,15 @@ class SystemViewModel @Inject constructor(
             }
 
             val url = when {
-                model.name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/google/gemma-2b-it-tflite/resolve/main/gemma-2b-it-cpu-int4.bin"
-                model.name.contains("Gemma-2", ignoreCase = true) -> "https://huggingface.co/litert-community/Gemma2-2B-IT/resolve/main/model.litertlm"
+                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+                model.name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+                model.name.contains("Gemma-2", ignoreCase = true) -> "https://huggingface.co/litert-community/Gemma2-2B-IT/resolve/main/gemma2-2b-it-int8-web.task.bin"
                 model.name.contains("Llama-3.2-1B", ignoreCase = true) -> "https://huggingface.co/litert-community/Llama-3.2-1B-Instruct/resolve/main/model.litertlm"
                 model.name.contains("Phi", ignoreCase = true) -> "https://huggingface.co/litert-community/Phi-3.5-mini-instruct/resolve/main/model.litertlm"
                 model.name.contains("Qwen", ignoreCase = true) -> "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/model.litertlm"
+                model.name.contains("Translate", ignoreCase = true) -> "https://huggingface.co/litert-community/TranslateGemma-4B-IT/resolve/main/model.litertlm"
+                model.name.contains("Embed", ignoreCase = true) -> "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite"
                 else -> "https://huggingface.co/google/gemma-2b-it-tflite/resolve/main/gemma-2b-it-cpu-int4.bin"
             }
 
@@ -832,22 +836,30 @@ class SystemViewModel @Inject constructor(
 
     private fun getUrlForModel(name: String): String {
         return when {
-            name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/google/gemma-2b-it-tflite/resolve/main/gemma-2b-it-cpu-int4.bin"
-            name.contains("Gemma-2", ignoreCase = true) -> "https://huggingface.co/litert-community/Gemma2-2B-IT/resolve/main/model.litertlm"
+            name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+            name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+            name.contains("Gemma-4", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+            name.contains("Gemma-2", ignoreCase = true) -> "https://huggingface.co/litert-community/Gemma2-2B-IT/resolve/main/gemma2-2b-it-int8-web.task.bin"
             name.contains("Llama-3.2-1B", ignoreCase = true) -> "https://huggingface.co/litert-community/Llama-3.2-1B-Instruct/resolve/main/model.litertlm"
             name.contains("Phi", ignoreCase = true) -> "https://huggingface.co/litert-community/Phi-3.5-mini-instruct/resolve/main/model.litertlm"
             name.contains("Qwen", ignoreCase = true) -> "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/model.litertlm"
+            name.contains("Translate", ignoreCase = true) -> "https://huggingface.co/litert-community/TranslateGemma-4B-IT/resolve/main/model.litertlm"
+            name.contains("Embed", ignoreCase = true) -> "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/main/embeddinggemma-300M_seq512_mixed-precision.tflite"
             else -> ""
         }
     }
 
     private fun getFilenameForModel(name: String): String {
         return when {
-            name.contains("Gemma-4", ignoreCase = true) -> "gemma-2b-it.litertlm"
+            name.contains("Gemma-4-E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
+            name.contains("Gemma-4-E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
+            name.contains("Gemma-4", ignoreCase = true) -> "gemma-4.litertlm"
             name.contains("Gemma-2", ignoreCase = true) -> "gemma-2-2b-it.litertlm"
             name.contains("Llama-3.2-1B", ignoreCase = true) -> "llama-3.2-1b-it.litertlm"
             name.contains("Phi", ignoreCase = true) -> "phi-3.5-mini-it.litertlm"
             name.contains("Qwen", ignoreCase = true) -> "qwen-2.5-1.5b-it.litertlm"
+            name.contains("Translate", ignoreCase = true) -> "translate-gemma-4b.litertlm"
+            name.contains("Embed", ignoreCase = true) -> "embedding-gemma-300m.tflite"
             else -> "gemma-2b-it.litertlm"
         }
     }

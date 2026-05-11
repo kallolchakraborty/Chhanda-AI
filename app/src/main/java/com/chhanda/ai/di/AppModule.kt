@@ -47,9 +47,7 @@ object AppModule {
     fun provideVectorChunkDao(db: AppDatabase): VectorChunkDao = db.vectorChunkDao()
 
     @Provides @Singleton
-    fun provideEmbeddingEngine(): EmbeddingEngine = object : EmbeddingEngine {
-        override suspend fun embed(text: String) = Embedding(FloatArray(384) { 0f })
-    }
+    fun provideEmbeddingEngine(impl: LiteRTEmbeddingEngine): EmbeddingEngine = impl
 
 }
 

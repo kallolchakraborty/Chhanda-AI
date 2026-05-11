@@ -79,6 +79,7 @@ dependencies {
 
     // MediaPipe LiteRT LM (Newer API with abort capability)
     implementation 'com.google.ai.edge.litertlm:litertlm-android:0.11.0'
+    implementation 'com.google.mediapipe:tasks-text:0.10.14'
 
     // DataStore
     implementation "androidx.datastore:datastore-preferences:1.1.1"
