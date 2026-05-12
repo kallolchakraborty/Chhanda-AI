@@ -506,6 +506,12 @@ class SystemViewModel @Inject constructor(
             delay(5000)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    
+    fun manualRefreshNetwork() {
+        viewModelScope.launch {
+            chhandaServer.refreshNetworkStatus()
+        }
+    }
 
     val isTunnelActive: StateFlow<Boolean> = flow {
         while(true) {

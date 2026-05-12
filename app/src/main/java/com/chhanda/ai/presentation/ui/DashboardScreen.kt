@@ -1939,8 +1939,14 @@ fun GatewayDialog(
                     Spacer(Modifier.width(12.dp))
                     Text(
                         if (showSetup) "Network Setup" else "Chhanda Gateway", 
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
                     )
+                    if (!showSetup) {
+                        IconButton(onClick = { viewModel.manualRefreshNetwork() }) {
+                            Icon(Icons.Default.Refresh, "Refresh Network", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 }
                 
                 Spacer(Modifier.height(16.dp))
@@ -1989,8 +1995,16 @@ fun GatewayDialog(
                         
                         TextButton(
                             onClick = { 
-                                if (hasValidNetwork) isSetupConfirmed = true 
-                                else android.widget.Toast.makeText(context, "Network not found. Turn on hotspot.", android.widget.Toast.LENGTH_SHORT).show()
+                                viewModel.manualRefreshNetwork()
+                                if (hasValidNetwork) {
+                                    isSetupConfirmed = true 
+                                } else {
+                                    // Try once more after a tiny delay, or just let them through
+                                    isSetupConfirmed = true
+                                    if (!hasValidNetwork) {
+                                        android.widget.Toast.makeText(context, "Scanning for network...", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {

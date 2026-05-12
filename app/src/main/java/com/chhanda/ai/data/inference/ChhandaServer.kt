@@ -101,7 +101,7 @@ class ChhandaServer @Inject constructor(
         return cachedIp
     }
 
-    private fun refreshNetworkStatus() {
+    fun refreshNetworkStatus() {
         val now = System.currentTimeMillis()
         lastIpRefresh = now
         val (bestIp, all, vpn) = scanNetworkInterfaces()
