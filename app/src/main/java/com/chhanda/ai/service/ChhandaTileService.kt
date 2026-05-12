@@ -29,7 +29,7 @@ class ChhandaTileService : TileService() {
         
         tile.state = if (isActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         tile.label = if (isActive) "Chhanda Active" else "Chhanda AI"
-        tile.icon = android.graphics.drawable.Icon.createWithResource(this, com.chhanda.ai.R.drawable.ic_status_hotspot)
+        tile.icon = android.graphics.drawable.Icon.createWithResource(this, com.chhanda.ai.R.drawable.ic_chhanda_status)
         tile.updateTile()
     }
 }
