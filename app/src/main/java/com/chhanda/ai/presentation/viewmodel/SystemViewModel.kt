@@ -438,7 +438,8 @@ class SystemViewModel @Inject constructor(
     val connectedDevices: StateFlow<List<com.chhanda.ai.data.repository.DeviceEntity>> = _connectedDevices
 
     val activeDeviceCount = _connectedDevices.map { devices -> 
-        devices.count { it.isCurrentlyConnected }
+        val cutoff = System.currentTimeMillis() - 40000 // 40s reactive cutoff
+        devices.count { it.isCurrentlyConnected && it.lastActive > cutoff }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 1) // Default 1 for self
 
     val localIpAddress: StateFlow<String> = flow {

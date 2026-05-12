@@ -62,6 +62,8 @@ class ChhandaServer @Inject constructor(
     private val sendMessageUseCase get() = sendMessageUseCaseLazy.get()
     @Volatile private var server: CIOApplicationEngine? = null
     @Volatile private var boundPort: Int = -1
+    private var reaperJob: Job? = null
+    private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var startTime = System.currentTimeMillis()
 
     // Cached IP — getWifiIpAddressRaw() can take 1-3s on Android; never call it on /status
@@ -219,12 +221,14 @@ class ChhandaServer @Inject constructor(
                     server = engine
                     boundPort = port
                     _boundPortFlow.value = port
+                    startReaper()
                     return
                 } else {
                     Log.w(TAG, "Port $port: local probe failed, but proceeding anyway (client-side connection may still work).")
                     server = engine
                     boundPort = port
                     _boundPortFlow.value = port
+                    startReaper()
                     return
                 }
             } catch (e: Exception) {
@@ -234,7 +238,30 @@ class ChhandaServer @Inject constructor(
         _serverErrorFlow.value = "CRITICAL: No ports available for binding."
     }
 
+    private fun startReaper() {
+        reaperJob?.cancel()
+        reaperJob = serverScope.launch {
+            while(isActive) {
+                delay(10000) // Check every 10 seconds
+                try {
+                    val cutoff = System.currentTimeMillis() - 30000 // 30s timeout (3 heartbeats)
+                    val active = deviceDao.getActiveConnections()
+                    active.forEach { device ->
+                        if (device.lastActive < cutoff) {
+                            deviceDao.updateDeviceStatus(device.deviceName, false, device.lastActive)
+                            Log.d(TAG, "Connection Timeout: ${device.deviceName} has been marked offline.")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Reaper failed: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun stop() {
+        reaperJob?.cancel()
+        reaperJob = null
         stopTunnel()
         server?.let { try { it.stop(100, 300) } catch (_: Exception) {} }
         server = null
@@ -1382,7 +1409,7 @@ class ChhandaServer @Inject constructor(
         setInterval(() => {
             fetch('/ping' + (apiKeyParam ? `?key=` + apiKeyParam : ''))
                 .catch(e => console.log('Heartbeat failed'));
-        }, 30000);
+        }, 10000);
 
         btn.onclick=send;
         inp.addEventListener('keypress',e=>{if(e.key==='Enter'&&!btn.disabled)send();});
