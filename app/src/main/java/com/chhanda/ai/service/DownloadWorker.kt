@@ -64,11 +64,16 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 connection.setRequestProperty("Authorization", "Bearer $token")
             }
             
+            // Resume support: check if temp file exists
+            val existingSize = if (tempFile.exists()) tempFile.length() else 0L
+            if (existingSize > 0) {
+                connection.setRequestProperty("Range", "bytes=$existingSize-")
+            }
+            
             responseCode = connection.responseCode
             if (responseCode in 300..399) {
                 val loc = connection.getHeaderField("Location") ?: break
                 val nextUrl = URL(URL(currentUrl), loc).toString()
-                Log.d(TAG, "Redirecting to: $nextUrl")
                 currentUrl = nextUrl
                 redirectCount++
                 connection.disconnect()
@@ -77,58 +82,81 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
         } while (redirectCount < 10)
 
-        Log.d(TAG, "Final response code: $responseCode")
-        if (responseCode !in 200..299) {
+        if (responseCode == 416) { // Range not satisfiable - likely already finished
+            if (tempFile.exists()) {
+                finalizeFile(tempFile, finalFile)
+                return
+            }
+        }
+
+        if (responseCode !in 200..299 && responseCode != 206) {
             throw Exception("Server returned code $responseCode for URL: $currentUrl")
         }
 
-        Log.i(TAG, "Starting download: $urlStr -> ${finalFile.name}")
-        
         val totalBytes = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
             connection.contentLengthLong
         } else {
             connection.contentLength.toLong()
         }
         
-        Log.i(TAG, "Server reported size: $totalBytes bytes")
-        
-        val inputStream = connection.inputStream
-        val outputStream = FileOutputStream(tempFile)
+        val actualTotal = if (responseCode == 206) {
+            val rangeHeader = connection.getHeaderField("Content-Range")
+            if (rangeHeader != null) {
+                rangeHeader.substringAfterLast("/").toLongOrNull() ?: totalBytes
+            } else totalBytes
+        } else totalBytes
 
-        val buffer = ByteArray(8192)
+        val inputStream = connection.inputStream
+        val outputStream = FileOutputStream(tempFile, responseCode == 206)
+
+        val buffer = ByteArray(16384)
         var bytesRead: Int
-        var totalRead = 0L
+        var totalRead = if (responseCode == 206) tempFile.length() else 0L
         var lastUpdate = 0L
 
-        inputStream.use { input ->
-            outputStream.use { output ->
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    output.write(buffer, 0, bytesRead)
-                    totalRead += bytesRead
-                    
-                    val now = System.currentTimeMillis()
-                    if (now - lastUpdate > 1000) {
-                        val progress = if (totalBytes > 0) (totalRead.toFloat() / totalBytes * 100).toInt().coerceIn(0, 99) else -1
-                        setProgress(workDataOf(KEY_PROGRESS to progress))
-                        setForeground(createForegroundInfo(progress))
-                        lastUpdate = now
+        try {
+            inputStream.use { input ->
+                outputStream.use { output ->
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdate > 1000) {
+                            val progress = if (actualTotal > 0) (totalRead.toFloat() / actualTotal * 100).toInt().coerceIn(0, 99) else -1
+                            setProgress(workDataOf(KEY_PROGRESS to progress))
+                            setForeground(createForegroundInfo(progress))
+                            lastUpdate = now
+                        }
                     }
                 }
             }
+            finalizeFile(tempFile, finalFile)
+        } catch (e: Exception) {
+            throw e
         }
+    }
 
+    private suspend fun finalizeFile(tempFile: File, finalFile: File) {
         // Force 100% and Finalizing status
-        setProgress(workDataOf(KEY_PROGRESS to 100))
-        setForeground(createForegroundInfo(100, "Finalizing..."))
+        try {
+            setProgress(workDataOf(KEY_PROGRESS to 100))
+            setForeground(createForegroundInfo(100, "Finalizing..."))
+        } catch (_: Exception) {}
 
         if (finalFile.exists()) {
             finalFile.delete()
         }
-        
         if (tempFile.renameTo(finalFile)) {
             Log.i(TAG, "Download complete: ${finalFile.absolutePath}")
         } else {
-            throw Exception("Failed to finalize download file - rename failed")
+            // Fallback: Copy if rename fails (rare but possible across filesystems)
+            try {
+                tempFile.copyTo(finalFile, overwrite = true)
+                tempFile.delete()
+            } catch (e: Exception) {
+                throw Exception("Failed to finalize download file: ${e.message}")
+            }
         }
     }
 

@@ -24,6 +24,7 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
     interface IngestionEntryPoint {
         fun ingestDocumentUseCase(): IngestDocumentUseCase
         fun uploadedFileDao(): UploadedFileDao
+        fun scrapeUrlUseCase(): com.chhanda.ai.domain.usecase.ScrapeUrlUseCase
     }
 
     companion object {
@@ -50,12 +51,17 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
         return try {
             if (url != null) {
-                useCase.ingestScrapedText(uriString ?: "", url, fileName)
+                val scraper = entryPoint.scrapeUrlUseCase()
+                val isKaggle = url.contains("kaggle.com", ignoreCase = true)
+                
+                val scrapedText = scraper(url, useAi = isKaggle, maxSizeMb = 300)
+                
+                useCase.ingestScrapedText(scrapedText, url, fileName)
                 dao.insertFile(UploadedFileEntity(
                     id = UUID.randomUUID().toString(),
                     name = fileName,
                     format = "WEB_URL",
-                    size = (uriString?.length ?: 0).toLong(),
+                    size = scrapedText.length.toLong(),
                     path = url,
                     timestamp = System.currentTimeMillis()
                 ))

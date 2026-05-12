@@ -72,6 +72,13 @@ class SystemViewModel @Inject constructor(
     private val _ingestionError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val ingestionError = _ingestionError.asStateFlow()
 
+    private val _showVectorStorageWarning = MutableStateFlow(false)
+    val showVectorStorageWarning = _showVectorStorageWarning.asStateFlow()
+
+    fun dismissVectorStorageWarning() {
+        _showVectorStorageWarning.value = false
+    }
+
     var pendingBackgroundPrompt by androidx.compose.runtime.mutableStateOf<IngestionTask?>(null)
         private set
 
@@ -114,6 +121,27 @@ class SystemViewModel @Inject constructor(
 
     fun setShowAllFiles(show: Boolean) {
         _showAllFiles.value = show
+    }
+
+    private val _showInternetWarning = MutableStateFlow(false)
+    val showInternetWarning = _showInternetWarning.asStateFlow()
+
+    fun dismissInternetWarning() {
+        _showInternetWarning.value = false
+    }
+
+    private val _showLlmServerWarning = MutableStateFlow(false)
+    val showLlmServerWarning = _showLlmServerWarning.asStateFlow()
+
+    fun dismissLlmServerWarning() {
+        _showLlmServerWarning.value = false
+    }
+
+    fun isInternetAvailable(): Boolean {
+        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     fun deleteFiles(ids: List<String>) {
@@ -198,6 +226,13 @@ class SystemViewModel @Inject constructor(
 
     fun processIngestDocuments(uris: List<android.net.Uri>, inBackground: Boolean = false) {
         pendingBackgroundPrompt = null
+        
+        // Block ingestion if storage is full
+        if (_vectorDbUsage.value >= _vectorDbCapacityBytes.value * 0.9) {
+            _showVectorStorageWarning.value = true
+            return
+        }
+
         if (inBackground) {
             uris.forEach { uri ->
                 val type = getDocType(uri)
@@ -872,7 +907,15 @@ class SystemViewModel @Inject constructor(
                 }
                 _deviceTemperature.value = celsius
                 _vectorDbUsage.value = vectorUsage
-                
+
+                // Check for 90% capacity threshold
+                if (finalCapacity > 0) {
+                    val usageRatio = vectorUsage.toDouble() / finalCapacity
+                    if (usageRatio >= 0.9) {
+                        _showVectorStorageWarning.value = true
+                        showStorageSystemNotification()
+                    }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("SystemViewModel", "Failed to update stats: ${e.message}")
             }
@@ -893,6 +936,30 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setHfToken(token)
             addLog("CONFIG", "HuggingFace token updated", "INFO")
+        }
+    }
+
+    private fun showStorageSystemNotification() {
+        try {
+            val channelId = "system_alerts"
+            val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(channelId, "System Alerts", android.app.NotificationManager.IMPORTANCE_HIGH)
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+                .setContentTitle("Chhanda Storage Warning")
+                .setContentText("Vector database is 90% full. Empty it or free phone space to continue.")
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            
+            notificationManager.notify(8008, notification)
+        } catch (e: Exception) {
+            Log.e("SystemViewModel", "Failed to show system notification", e)
         }
     }
 
@@ -1230,6 +1297,22 @@ class SystemViewModel @Inject constructor(
 
     fun processScrapeUrl(url: String, label: String, inBackground: Boolean = false) {
         pendingBackgroundPrompt = null
+
+        // Block if no internet
+        if (!isInternetAvailable()) {
+            _showInternetWarning.value = true
+            return
+        }
+
+        // Kaggle detection
+        val isKaggle = url.contains("kaggle.com", ignoreCase = true)
+        
+        // If it's a deep scraping or Kaggle, check if LLM server is needed/running
+        if (isKaggle && !_isServerRunning.value) {
+            _showLlmServerWarning.value = true
+            return
+        }
+
         if (inBackground) {
             activeScrapeJob?.cancel()
             val data = workDataOf(
@@ -1261,7 +1344,17 @@ class SystemViewModel @Inject constructor(
             }
 
             try {
-                val scrapedText = scrapeUrlUseCase(url)
+                // Size limit check (300MB)
+                // Note: For URLs, we often don't know the size until we start downloading.
+                // We'll add a check in the scraping logic to abort if content-length > 300MB.
+                
+                val scrapedText = if (isKaggle) {
+                    _ingestionMessage.value = "AI-Assisted Kaggle Parsing..."
+                    // Call the use case with a flag for AI-assisted parsing if needed
+                    scrapeUrlUseCase(url, useAi = true, maxSizeMb = 300)
+                } else {
+                    scrapeUrlUseCase(url, maxSizeMb = 300)
+                }
                 timerJob.cancel()
                 
                 _ingestionMessage.value = "Ingesting web content into Vector DB..."
@@ -1279,7 +1372,8 @@ class SystemViewModel @Inject constructor(
                     timestamp = System.currentTimeMillis()
                 ))
                 
-                addLog("STORAGE", "Successfully indexed website: $label", "SUCCESS")
+                addLog("STORAGE", "Successfully indexed: $label ($url)", "SUCCESS")
+                showCompletionNotification(label)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1569,6 +1663,26 @@ class SystemViewModel @Inject constructor(
             _tokensPerSec.value = "0.0"
             addLog("SYSTEM", "App shutdown requested. Disconnected all devices and stopped LLM.", "INFO")
         }
+    }
+
+    private fun showCompletionNotification(fileName: String) {
+        val channelId = "rag_ingestion"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(channelId, "Knowledge Base", android.app.NotificationManager.IMPORTANCE_HIGH)
+            val manager = context.getSystemService(android.app.NotificationManager::class.java)
+            manager?.createNotificationChannel(channel)
+        }
+
+        val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+            .setContentTitle("Scraping Completed")
+            .setContentText("$fileName has been successfully indexed and stored in the database.")
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+            .setAutoCancel(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        val manager = context.getSystemService(android.app.NotificationManager::class.java)
+        manager?.notify(7008, notification)
     }
 }
 

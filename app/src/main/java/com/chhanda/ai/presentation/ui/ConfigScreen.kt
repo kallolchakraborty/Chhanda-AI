@@ -148,7 +148,7 @@ fun ConfigScreen(
             
             item {
                 Column {
-                    ChhandaSectionHeader(icon = Icons.Default.Wifi, title = Localization.getString("network_settings", appLanguage))
+                    ChhandaSectionHeader(icon = Icons.Default.Dns, title = Localization.getString("network_settings", appLanguage))
                     Spacer(Modifier.height(12.dp))
                     ChhandaCard {
                         Text(Localization.getString("server_port", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -209,6 +209,14 @@ fun ConfigScreen(
                 }
             }
             
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.DeleteSweep, title = "Auto Delete Settings")
+                    Spacer(Modifier.height(12.dp))
+                    AutoDeleteSettingsCard(viewModel = viewModel, appLanguage = appLanguage)
+                }
+            }
+
             item {
                 Column {
                     var isKeyVisible by remember { mutableStateOf(false) }
@@ -343,3 +351,42 @@ fun ConfigScreen(
             )
         }
     }
+
+@Composable
+fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel, appLanguage: String) {
+    val autoDeleteDays by viewModel.autoDeleteDays.collectAsState()
+    val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsState()
+    
+    ChhandaCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Auto Delete", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("Automatically clear old vector data", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            }
+            Switch(
+                checked = autoDeleteEnabled,
+                onCheckedChange = { viewModel.setAutoDeleteEnabled(it) }
+            )
+        }
+        
+        if (autoDeleteEnabled) {
+            Spacer(Modifier.height(24.dp))
+            Text("Delete files older than $autoDeleteDays days", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(8.dp))
+            Slider(
+                value = autoDeleteDays.toFloat(),
+                onValueChange = { viewModel.setAutoDeleteDays(it.toInt()) },
+                valueRange = 1f..30f,
+                steps = 29
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("1 day", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Text("30 days", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            }
+        }
+    }
+}

@@ -133,13 +133,7 @@ fun KnowledgeBaseScreen(
                 }
             }
             
-            item {
-                Column {
-                    ChhandaSectionHeader(icon = Icons.Default.DeleteSweep, title = "Auto Delete Settings")
-                    Spacer(Modifier.height(12.dp))
-                    AutoDeleteSettingsCard(viewModel = viewModel, appLanguage = appLanguage)
-                }
-            }
+
             
             if (allFiles.isNotEmpty()) {
                 item {
@@ -298,6 +292,8 @@ fun KnowledgeBaseScreen(
                         if (urlLink.contains("youtube.com") || urlLink.contains("youtu.be")) {
                             Text("YouTube scrapping is not allowed.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                        
+                        Text("• 300MB download limit enforced\n• Supports public web pages & Kaggle datasets", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                     }
                 },
                 confirmButton = {
@@ -403,6 +399,57 @@ fun KnowledgeBaseScreen(
                 confirmButton = {
                     Button(onClick = { viewModel.clearIngestionError() }) {
                         Text("OK")
+                    }
+                }
+            )
+        }
+
+        val showInternetWarning by viewModel.showInternetWarning.collectAsState()
+        if (showInternetWarning) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissInternetWarning() },
+                icon = { Icon(Icons.Default.SignalWifiOff, null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text("No Internet Connection") },
+                text = { Text("URL scraping requires an active internet connection. Please turn on your Wi-Fi or Mobile Data to continue.") },
+                confirmButton = {
+                    Button(onClick = { 
+                        viewModel.dismissInternetWarning()
+                        try {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_DATA_ROAMING_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
+                        }
+                    }) {
+                        Text("Turn on Data")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissInternetWarning() }) {
+                        Text("Dismiss")
+                    }
+                }
+            )
+        }
+
+        val showLlmServerWarning by viewModel.showLlmServerWarning.collectAsState()
+        if (showLlmServerWarning) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissLlmServerWarning() },
+                icon = { Icon(Icons.Default.SmartToy, null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Start LLM Server") },
+                text = { Text("Deep scraping/parsing (like Kaggle datasets) requires the on-device AI server to be active. Please start the LLM server from the Dashboard first.") },
+                confirmButton = {
+                    Button(onClick = { 
+                        viewModel.dismissLlmServerWarning()
+                        navController.navigate(Screen.Dashboard.route)
+                    }) {
+                        Text("Go to Dashboard")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissLlmServerWarning() }) {
+                        Text("Dismiss")
                     }
                 }
             )
@@ -521,46 +568,7 @@ fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.rep
     }
 }
 
-@Composable
-fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel, appLanguage: String) {
-    val autoDeleteDays by viewModel.autoDeleteDays.collectAsState()
-    val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsState()
-    
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(32.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column {
-                    Text("Auto Delete", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Automatically clear old vector data", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                }
-                Switch(
-                    checked = autoDeleteEnabled,
-                    onCheckedChange = { viewModel.setAutoDeleteEnabled(it) }
-                )
-            }
-            
-            if (autoDeleteEnabled) {
-                Spacer(Modifier.height(16.dp))
-                Text("Delete files older than $autoDeleteDays days", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                Slider(
-                    value = autoDeleteDays.toFloat(),
-                    onValueChange = { viewModel.setAutoDeleteDays(it.toInt()) },
-                    valueRange = 1f..30f,
-                    steps = 29
-                )
-            }
-        }
-    }
-}
+
 
 @Composable
 fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes: Long) {
