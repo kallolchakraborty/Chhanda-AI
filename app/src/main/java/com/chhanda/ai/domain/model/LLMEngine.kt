@@ -69,6 +69,6 @@ interface LLMEngine {
 
 sealed class TokenUpdate {
     data class Partial(val text: String, val tps: Double = 0.0) : TokenUpdate()
-    data class Final(val fullText: String, val tps: Double = 0.0) : TokenUpdate()
+    data class Final(val fullText: String, val tps: Double = 0.0, val responseTimeMs: Long = 0) : TokenUpdate()
     data class Error(val message: String) : TokenUpdate()
 }

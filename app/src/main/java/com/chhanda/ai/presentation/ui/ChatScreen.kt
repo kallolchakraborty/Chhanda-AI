@@ -398,8 +398,11 @@ fun MessageBubble(message: MessageEntity) {
                 }
 
                 if (message.tps > 0) {
+                    val timeStr = if (message.responseTimeMs > 0) {
+                        String.format(" • %.1fs", message.responseTimeMs / 1000.0)
+                    } else ""
                     Text(
-                        text = String.format("%.1f t/s", message.tps),
+                        text = String.format("%.1f t/s%s", message.tps, timeStr),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                         modifier = Modifier.padding(start = 4.dp)

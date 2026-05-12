@@ -13,5 +13,6 @@ data class MessageEntity(
     val modelName: String = "unknown",
     val sessionId: String = "default_session",
     val tps: Double = 0.0,
-    val isRagUsed: Boolean = false
+    val isRagUsed: Boolean = false,
+    val responseTimeMs: Long = 0
 )

@@ -349,13 +349,14 @@ class LiteRTLMEngine @Inject constructor(
                         override fun onDone() {
                             try {
                                 if (isClosedForSend) return
-                                val duration = (System.currentTimeMillis() - startTime) / 1000.0
+                                val responseTimeMs = System.currentTimeMillis() - startTime
+                                val duration = responseTimeMs / 1000.0
                                 val finalTps = if (duration > 0) tokenCount.get() / duration else 0.0
                                 _performanceMetrics.value = finalTps
                                 Log.i(TAG, "Generation complete. Final TPS: ${String.format("%.1f", finalTps)}")
                                 timeoutJob?.cancel()
                                 isGenerating.set(false)
-                                trySend(TokenUpdate.Final(accumulated.toString().trimEnd(), tps = finalTps))
+                                trySend(TokenUpdate.Final(accumulated.toString().trimEnd(), tps = finalTps, responseTimeMs = responseTimeMs))
                                 this@callbackFlow.close() 
                             } catch (err: Throwable) {
                                 Log.e(TAG, "CRITICAL ERROR inside JNI onDone", err)
@@ -365,9 +366,10 @@ class LiteRTLMEngine @Inject constructor(
                         override fun onError(throwable: Throwable) {
                             if (throwable is java.util.concurrent.CancellationException) {
                                 Log.i(TAG, "The inference is cancelled.")
-                                val duration = (System.currentTimeMillis() - startTime) / 1000.0
+                                val responseTimeMs = System.currentTimeMillis() - startTime
+                                val duration = responseTimeMs / 1000.0
                                 val finalTps = if (duration > 0) tokenCount.get() / duration else 0.0
-                                trySend(TokenUpdate.Final(accumulated.toString().trimEnd(), tps = finalTps))
+                                trySend(TokenUpdate.Final(accumulated.toString().trimEnd(), tps = finalTps, responseTimeMs = responseTimeMs))
                                 isGenerating.set(false)
                                 this@callbackFlow.close()
                             } else {

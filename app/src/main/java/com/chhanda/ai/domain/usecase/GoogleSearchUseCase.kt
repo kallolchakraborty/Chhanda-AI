@@ -25,16 +25,25 @@ class GoogleSearchUseCase @Inject constructor() {
 
             // Google search results are typically contained in div.g
             val elements = doc.select("div.g")
-            for (element in elements) {
-                val title = element.select("h3").text()
-                // Snippet classes change, but we can try to get the text of the description area
-                val snippet = element.select("div.VwiC3b, div.content, div.st").text() 
-                val link = element.select("a").firstOrNull()?.attr("href")
-
-                if (!title.isNullOrBlank() && !link.isNullOrBlank() && link.startsWith("http")) {
-                    results.add(SearchResult(title, snippet, link))
+            if (elements.isEmpty()) {
+                android.util.Log.w("GoogleSearch", "No div.g elements found. Using body text fallback.")
+                // Extract headings and paragraphs to get some context
+                val bodyText = doc.select("h3, span, div").text().take(2000)
+                if (bodyText.isNotBlank()) {
+                    results.add(SearchResult("Google Search Results (Fallback)", bodyText, url))
                 }
-                if (results.size >= 5) break // Get top 5 results
+            } else {
+                for (element in elements) {
+                    val title = element.select("h3").text()
+                    // Snippet classes change, but we can try to get the text of the description area
+                    val snippet = element.select("div.VwiC3b, div.content, div.st").text() 
+                    val link = element.select("a").firstOrNull()?.attr("href")
+
+                    if (!title.isNullOrBlank() && !link.isNullOrBlank() && link.startsWith("http")) {
+                        results.add(SearchResult(title, snippet, link))
+                    }
+                    if (results.size >= 5) break // Get top 5 results
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("GoogleSearch", "Search failed: ${e.message}")
