@@ -92,6 +92,7 @@ fun DashboardScreen(
     var showClearHistoryConfirm by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
     var showHotspotPrompt by remember { mutableStateOf(false) }
+    val hasNetworkState by viewModel.hasNetwork.collectAsState()
     var expandedAssistant by remember { mutableStateOf<String?>(null) }
     var isApiKeyVisibleInQr by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
@@ -254,10 +255,10 @@ fun DashboardScreen(
                     // Network status icon removed - logic moved to QR button click
 
 
+
                     IconButton(
                         onClick = { 
-                            val hasValidNetwork = networkIps.isNotEmpty() && networkIps.first() != "127.0.0.1"
-                            if (!hasValidNetwork) {
+                            if (!hasNetworkState) {
                                 showHotspotPrompt = true 
                             } else {
                                 showQrDialog = true
@@ -659,8 +660,7 @@ fun DashboardScreen(
                 Surface(
                     onClick = { 
                         if (isQrEnabled) {
-                            val currentIp = ipAddress ?: "127.0.0.1"
-                            if (currentIp == "Detecting..." || currentIp == "127.0.0.1" || currentIp == "0.0.0.0" || currentIp.isBlank()) {
+                            if (!hasNetworkState) {
                                 showHotspotPrompt = true
                             } else {
                                 showQrDialog = true
@@ -1912,9 +1912,9 @@ fun GatewayDialog(
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val networkIps by viewModel.networkIps.collectAsState()
-    val hasValidNetwork = networkIps.isNotEmpty() && networkIps.first() != "127.0.0.1"
+    val hasNetworkState by viewModel.hasNetwork.collectAsState()
     var isSetupConfirmed by remember { mutableStateOf(false) }
-    val showSetup = !hasValidNetwork && !isSetupConfirmed
+    val showSetup = !hasNetworkState && !isSetupConfirmed
 
     androidx.compose.ui.window.Dialog(onDismissRequest = { 
         isSetupConfirmed = false
@@ -1996,12 +1996,12 @@ fun GatewayDialog(
                         TextButton(
                             onClick = { 
                                 viewModel.manualRefreshNetwork()
-                                if (hasValidNetwork) {
+                                if (hasNetworkState) {
                                     isSetupConfirmed = true 
                                 } else {
                                     // Try once more after a tiny delay, or just let them through
                                     isSetupConfirmed = true
-                                    if (!hasValidNetwork) {
+                                    if (!hasNetworkState) {
                                         android.widget.Toast.makeText(context, "Scanning for network...", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }

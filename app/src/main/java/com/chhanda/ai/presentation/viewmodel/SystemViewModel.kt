@@ -506,6 +506,11 @@ class SystemViewModel @Inject constructor(
             delay(5000)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
+    val hasNetwork: StateFlow<Boolean> = networkIps.map { ips: List<String> ->
+        ips.isNotEmpty() && ips.first() != "127.0.0.1" 
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
     
     fun manualRefreshNetwork() {
         viewModelScope.launch {
