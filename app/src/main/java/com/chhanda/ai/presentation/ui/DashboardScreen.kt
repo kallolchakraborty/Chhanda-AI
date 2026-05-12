@@ -1914,6 +1914,7 @@ fun GatewayDialog(
     val networkIps by viewModel.networkIps.collectAsState()
     val hasNetworkState by viewModel.hasNetwork.collectAsState()
     var isSetupConfirmed by remember { mutableStateOf(false) }
+    var isApiKeyMasked by remember { mutableStateOf(true) }
     val showSetup = !hasNetworkState && !isSetupConfirmed
 
     androidx.compose.ui.window.Dialog(onDismissRequest = { 
@@ -1942,11 +1943,6 @@ fun GatewayDialog(
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f)
                     )
-                    if (!showSetup) {
-                        IconButton(onClick = { viewModel.manualRefreshNetwork() }) {
-                            Icon(Icons.Default.Refresh, "Refresh Network", tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
                 }
                 
                 Spacer(Modifier.height(16.dp))
@@ -2089,7 +2085,10 @@ fun GatewayDialog(
                                 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("API KEY", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.weight(1f))
+                                    IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }, modifier = Modifier.size(20.dp)) {
+                                        Icon(if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, modifier = Modifier.size(12.dp))
+                                    }
+                                    Spacer(Modifier.width(8.dp))
                                     IconButton(onClick = {
                                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API Key", apiKey))
@@ -2097,7 +2096,12 @@ fun GatewayDialog(
                                         Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(12.dp))
                                     }
                                 }
-                                Text(apiKey, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                                Text(
+                                    if (isApiKeyMasked) "••••••••••••••••" else apiKey, 
+                                    fontSize = 11.sp, 
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    modifier = Modifier.clickable { isApiKeyMasked = !isApiKeyMasked }
+                                )
                             }
                         }
                         
