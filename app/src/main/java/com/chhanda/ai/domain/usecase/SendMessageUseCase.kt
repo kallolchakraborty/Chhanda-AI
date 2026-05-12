@@ -71,7 +71,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 sanitizedUserText
             }
 
-            val systemInstruction = """
+            val systemInstruction = if (isContextFound) {
+                """
                     You are a helpful and accurate RAG assistant.
 
                     Your job is to answer using the provided documentation context first.
@@ -83,6 +84,18 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     CONSTRAINTS:
                     - RESPONSE LANGUAGE: $preferredLanguage
                 """.trimIndent()
+            } else {
+                """
+                    You are a helpful and accurate assistant.
+
+                    Your job is to answer the user's question accurately using your internal knowledge.
+                    - Do not invent facts or hallucinate if you do not know the answer.
+                    - Answer directly and concisely.
+
+                    CONSTRAINTS:
+                    - RESPONSE LANGUAGE: $preferredLanguage
+                """.trimIndent()
+            }
 
             // STEP 4: Streamed Generation — emit tokens as they arrive
             llmEngine.generateResponse(prompt, history, systemInstruction, attachments).collect { update ->

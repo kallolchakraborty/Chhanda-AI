@@ -8,7 +8,8 @@ Chhanda is a 100% offline, privacy-first AI application designed for high-perfor
 - **100% Offline Inference**: No data leaves the device; LLM execution is strictly local.
 - **On-Device RAG**: Real-time vector similarity search for context-aware responses.
 - **Multimodal Ingestion**: On-device OCR (Images), ASR (Audio), and PDF parsing.
-- **Web Fallback**: Automatically falls back to Google Search when local knowledge is missing.
+- **Voice Interaction**: Local Speech-to-Text (STT) and Text-to-Speech (TTS) with voice selection.
+- **Crash-Proof Logging**: Intercepts fatal crashes and displays them in-app on restart.
 - **Pixel-Inspired Design**: Premium "Chromatic Architect" aesthetic with glassmorphism and tonal elevations.
 
 ---
@@ -30,7 +31,6 @@ graph TD
     VM -->|Executes| UC[Use Cases Business Logic]
     UC -->|Queries| VS[Local Vector Store Room DB]
     UC -->|Inference| LE[LiteRT LM Engine]
-    UC -->|Web Search| GS[Google Search Scraper]
     
     Docs[(Local Documents PDF/Img/Aud)] -->|Ingested by| IW[IngestionWorker]
     IW -->|Parses| MI[Multimodal Ingestor OCR]
@@ -97,15 +97,14 @@ graph TB
 ### 🔵 3.1 Presentation Layer
 *   **`MainActivity.kt`**: Single Activity entry point. Hosts navigation.
 *   **`ui/DashboardScreen.kt`**: The main control center (Model management, server status).
-*   **`ui/ChatScreen.kt`**: Real-time streaming chat interface.
-*   **`ui/ConfigScreen.kt`**: Settings panel (Context length, TurboQuant toggle).
+*   **ui/ChatScreen.kt**: Real-time streaming chat interface with voice input/output.
+*   **ui/ConfigScreen.kt**: Settings panel (Context length, TurboQuant, Voice selection).
 *   **`ui/LogsScreen.kt`**: Real-time log viewer for debugging.
 *   **`viewmodel/SystemViewModel.kt`**: Global state holder.
 
 ### 🟢 3.2 Domain Layer
 *   **`usecase/SendMessageUseCase.kt`**: Orchestrates RAG and LLM inference.
-*   **`usecase/ScrapeUrlUseCase.kt`**: Fetches content from a URL using `Jsoup`.
-*   **`usecase/GoogleSearchUseCase.kt`**: Scrapes Google results for live web fallback.
+*   **usecase/ScrapeUrlUseCase.kt**: Fetches content from a URL using `Jsoup`. (Unused after web search removal).
 *   **`model/ContextManager.kt`**: Orchestrates short-term and long-term memory.
 
 ### 🟡 3.3 Data Layer
@@ -141,10 +140,7 @@ sequenceDiagram
     alt Local Context Found
         CM-->>UC: Return longTermContext
     else No Local Context
-        CM-->>UC: Return empty
-        UC->>GS: Search(text)
-        GS-->>UC: Return top links & snippets
-        UC->>UC: Scrape content (up to 2 sources)
+        CM-->>UC: Return empty (Fallback to pretrained knowledge)
     end
     
     UC->>LE: generateResponse(prompt, context)

@@ -32,6 +32,7 @@ class SettingsRepository @Inject constructor(
         val AUTO_DELETE_DAYS = intPreferencesKey("auto_delete_days")
         val AUTO_DELETE_ENABLED = booleanPreferencesKey("auto_delete_enabled")
         val TURBOQUANT_ENABLED = booleanPreferencesKey("turboquant_enabled")
+        val SELECTED_VOICE = stringPreferencesKey("selected_voice")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -80,6 +81,10 @@ class SettingsRepository @Inject constructor(
 
     val turboQuantEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.TURBOQUANT_ENABLED] ?: false
+    }
+
+    val selectedVoiceFlow: Flow<String> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.SELECTED_VOICE] ?: "Default"
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -151,6 +156,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setTurboQuantEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.TURBOQUANT_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setSelectedVoice(voice: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SELECTED_VOICE] = voice
         }
     }
 }

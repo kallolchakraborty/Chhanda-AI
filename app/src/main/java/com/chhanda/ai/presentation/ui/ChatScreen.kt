@@ -28,6 +28,8 @@ import androidx.compose.ui.text.AnnotatedString
 import android.content.Intent
 import android.speech.tts.TextToSpeech
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 import androidx.compose.material.icons.filled.Mic
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +59,8 @@ import androidx.navigation.NavController
 fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnly: Boolean = false) {
     val uiState by viewModel.uiState.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
+    val systemViewModel: SystemViewModel = hiltViewModel()
+    val selectedVoice by systemViewModel.selectedVoice.collectAsState()
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
@@ -70,12 +74,19 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
         else -> java.util.Locale.ENGLISH
     }
 
-    DisposableEffect(ttsLocale) {
+    DisposableEffect(ttsLocale, selectedVoice) {
         var ttsInstance: TextToSpeech? = null
         try {
             ttsInstance = TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     ttsInstance?.language = ttsLocale
+                    if (selectedVoice != "Default") {
+                        val voices = ttsInstance?.voices
+                        val targetVoice = voices?.find { it.name == selectedVoice }
+                        if (targetVoice != null) {
+                            ttsInstance?.voice = targetVoice
+                        }
+                    }
                 }
             }
             tts = ttsInstance

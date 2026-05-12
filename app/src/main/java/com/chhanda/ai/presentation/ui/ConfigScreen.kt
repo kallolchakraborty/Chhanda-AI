@@ -137,6 +137,54 @@ fun ConfigScreen(
                                 }
                             }
                         }
+                        
+                        Spacer(Modifier.height(24.dp))
+                        Text("TTS Voice", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(8.dp))
+                        
+                        val availableVoices by viewModel.availableVoices.collectAsState()
+                        val selectedVoice by viewModel.selectedVoice.collectAsState()
+                        var voiceExpanded by remember { mutableStateOf(false) }
+                        
+                        ExposedDropdownMenuBox(
+                            expanded = voiceExpanded,
+                            onExpandedChange = { voiceExpanded = !voiceExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedVoice,
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = voiceExpanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                    unfocusedBorderColor = Color.Transparent,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            ExposedDropdownMenu(
+                                expanded = voiceExpanded,
+                                onDismissRequest = { voiceExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Default") },
+                                    onClick = {
+                                        viewModel.setSelectedVoice("Default")
+                                        voiceExpanded = false
+                                    }
+                                )
+                                availableVoices.forEach { voice ->
+                                    DropdownMenuItem(
+                                        text = { Text(voice) },
+                                        onClick = {
+                                            viewModel.setSelectedVoice(voice)
+                                            voiceExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

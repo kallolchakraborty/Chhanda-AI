@@ -193,6 +193,21 @@ class SystemViewModel @Inject constructor(
                 // Ignore
             }
 
+            // Query available TTS voices
+            try {
+                var tts: android.speech.tts.TextToSpeech? = null
+                tts = android.speech.tts.TextToSpeech(context) { status ->
+                    if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                        val voices = tts?.voices
+                        val voiceNames = voices?.map { it.name } ?: emptyList()
+                        _availableVoices.value = voiceNames
+                        tts?.shutdown()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("SystemViewModel", "Failed to query voices", e)
+            }
+
             while(true) {
                 try {
                     val fiveMinutesAgo = System.currentTimeMillis() - 5 * 60 * 1000
@@ -367,6 +382,9 @@ class SystemViewModel @Inject constructor(
     val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 7)
     val autoDeleteEnabled = settingsRepository.autoDeleteEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+    val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Default")
+    private val _availableVoices = MutableStateFlow<List<String>>(emptyList())
+    val availableVoices: kotlinx.coroutines.flow.StateFlow<List<String>> = _availableVoices.asStateFlow()
     private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
     val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
@@ -1000,6 +1018,13 @@ class SystemViewModel @Inject constructor(
             settingsRepository.setAppLanguage(language)
             _showRestartDialog.value = true
             addLog("CONFIG", "App language set to $language. Restart required.", "INFO")
+        }
+    }
+
+    fun setSelectedVoice(voice: String) {
+        viewModelScope.launch {
+            settingsRepository.setSelectedVoice(voice)
+            addLog("CONFIG", "Selected voice set to $voice", "INFO")
         }
     }
 
