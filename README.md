@@ -65,9 +65,7 @@ graph TB
         direction TB
         SMUC[SendMessageUseCase]
         IDUC[IngestDocumentUseCase]
-        GSP[GemmaPromptBuilder]
         SUUC[ScrapeUrlUseCase]
-        GSUC[GoogleSearchUseCase]
     end
     
     subgraph DTL["Data Layer (Persistence & AI Engines)"]
