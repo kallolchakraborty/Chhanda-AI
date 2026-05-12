@@ -355,6 +355,7 @@ class SystemViewModel @Inject constructor(
     val appLanguage = settingsRepository.appLanguageFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "English")
     val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 7)
     val autoDeleteEnabled = settingsRepository.autoDeleteEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
     private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
     val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
@@ -949,6 +950,13 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setHfToken(token)
             addLog("CONFIG", "HuggingFace token updated", "INFO")
+        }
+    }
+
+    fun toggleTurboQuant(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setTurboQuantEnabled(enabled)
+            addLog("CONFIG", "TurboQuant set to $enabled", "INFO")
         }
     }
 

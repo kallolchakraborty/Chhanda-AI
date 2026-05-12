@@ -139,6 +139,9 @@ class LiteRTLMEngine @Inject constructor(
             val contextLengthStr = settingsRepository.contextLengthFlow.first()
             val contextLength = contextLengthStr.toIntOrNull() ?: 2048
             Log.d(TAG, "Dynamic context length: $contextLength")
+            
+            val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.first()
+            Log.d(TAG, "TurboQuant feature requested: $turboQuantEnabled")
 
             var currentContextLength = contextLength
             var loaded = false

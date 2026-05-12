@@ -453,25 +453,11 @@ class ChhandaServer @Inject constructor(
                     
                     trackDevice(remoteIp, userAgent)
                     
-                    val chunks = try { vectorChunkDao.getAll() } catch (e: Exception) { emptyList() }
-                    val uniqueSources = chunks.map { it.source }.distinct().take(5)
-                    val suggestions = uniqueSources.mapIndexed { index, source ->
-                        val cleanSource = if (source.startsWith("http")) {
-                            try { java.net.URL(source).host } catch (e: Exception) { "online resource" }
-                        } else { source }
-                        
-                        when (index % 3) {
-                            0 -> "Can you provide a summary of $cleanSource?"
-                            1 -> "What are the key topics discussed in $cleanSource?"
-                            else -> "Tell me more about the information from $cleanSource."
-                        }
-                    }
-                    
                     val sessions = try { chatDao.getSessionIdsForDevice(remoteIp).firstOrNull() ?: emptyList() } catch(e: Exception) { emptyList() }
                     
                     call.response.headers.append("Cache-Control", "no-store")
                     call.respondText(
-                        buildChatHtml(capturedPort, clientUsedHost, suggestions, hasConnectedEarlier, savedName, sessions),
+                        buildChatHtml(capturedPort, clientUsedHost, emptyList(), hasConnectedEarlier, savedName, sessions),
                         io.ktor.http.ContentType.Text.Html
                     )
                 }
@@ -1042,13 +1028,8 @@ class ChhandaServer @Inject constructor(
     <div id="msgs">
         <div class="msg-container s"><div class="msg s">Connection established with Node at ${ip}:${port}</div></div>
     </div>
-    <div id="ftr">
-        <div id="suggestions" style="display:flex; gap:8px; overflow-x:auto; padding:8px 16px; margin-bottom:4px;">
-            ${suggestions.joinToString("") { suggestion ->
-                """<button class="suggest-btn" onclick="if(!document.getElementById('inp').disabled){document.getElementById('inp').value='${suggestion.replace("'", "\\'")}';document.getElementById('btn').click();}">$suggestion</button>"""
-            }}
-        </div>
-        <div id="row">
+        <div id="ftr">
+            <div id="row">
             <button id="clip-btn" style="background:transparent; border:none; color:var(--muted); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>

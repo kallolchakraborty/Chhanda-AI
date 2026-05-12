@@ -47,6 +47,7 @@ fun ConfigScreen(
     val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
     val showRestart by viewModel.showRestartDialog.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
+    val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsState()
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
@@ -79,13 +80,7 @@ fun ConfigScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                Text(Localization.getString("settings", appLanguage), fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    Localization.getString("settings", appLanguage),
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Spacer(Modifier.height(8.dp))
             }
             
             item {
@@ -180,7 +175,20 @@ fun ConfigScreen(
                             Text("32,768", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                         }
 
-                        Spacer(Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("TurboQuant", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text("Enable KV-cache compression to reduce memory use during long-context inference.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(
+                                checked = turboQuantEnabled,
+                                onCheckedChange = { viewModel.toggleTurboQuant(it) }
+                            )
+                        }
 
                         Spacer(Modifier.height(24.dp))
                         Text(Localization.getString("max_devices", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

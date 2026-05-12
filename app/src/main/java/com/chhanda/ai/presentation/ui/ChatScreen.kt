@@ -188,35 +188,6 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                 }
             }
 
-            // Suggestions
-            val suggestions by viewModel.suggestions.collectAsState()
-            val primaryColor = MaterialTheme.colorScheme.primary
-            val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
-            
-            if (suggestions.isNotEmpty() && inputText.isBlank()) {
-                androidx.compose.foundation.lazy.LazyRow(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(suggestions) { suggestion ->
-                        Surface(
-                            onClick = { viewModel.sendMessage(suggestion) },
-                            color = surfaceVariantColor,
-                            shape = RoundedCornerShape(16.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, primaryColor.copy(alpha = 0.3f))
-                        ) {
-                            Text(
-                                text = suggestion,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                fontSize = 12.sp,
-                                color = primaryColor,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-            }
-
             // Input Area
             ChatInput(
                 text = inputText,
