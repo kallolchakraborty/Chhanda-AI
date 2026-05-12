@@ -26,6 +26,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import android.content.Intent
+import android.speech.tts.TextToSpeech
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Mic
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
@@ -57,6 +60,33 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    
+    val ttsLocale = when (appLanguage) {
+        "Bengali" -> java.util.Locale("bn", "BD")
+        "Hindi" -> java.util.Locale("hi", "IN")
+        else -> java.util.Locale.ENGLISH
+    }
+
+    DisposableEffect(ttsLocale) {
+        var ttsInstance: TextToSpeech? = null
+        try {
+            ttsInstance = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    ttsInstance?.language = ttsLocale
+                }
+            }
+            tts = ttsInstance
+        } catch (e: Exception) {
+            android.util.Log.e("ChatScreen", "Failed to initialize TTS", e)
+        }
+        onDispose {
+            ttsInstance?.stop()
+            ttsInstance?.shutdown()
+        }
+    }
 
     // Auto-scroll to bottom on new messages or partial tokens
     val totalItems = uiState.messages.size + (if (uiState.currentPartialResponse.isNotEmpty()) 1 else 0)
@@ -159,7 +189,7 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                     items = uiState.messages,
                     key = { it.id }
                 ) { message ->
-                    MessageBubble(message)
+                    MessageBubble(message, tts)
                 }
 
                 if (uiState.currentPartialResponse.isNotEmpty()) {
@@ -286,7 +316,7 @@ fun parseMessageContent(rawText: String): Pair<String?, String> {
 }
 
 @Composable
-fun MessageBubble(message: MessageEntity) {
+fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
     val isUser = message.role == "user"
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val bubbleColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -362,6 +392,20 @@ fun MessageBubble(message: MessageEntity) {
                     Icon(
                         Icons.Default.Share, 
                         contentDescription = "Share", 
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        tts?.speak(responseText, TextToSpeech.QUEUE_FLUSH, null, null)
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Default.VolumeUp, 
+                        contentDescription = "Speak", 
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
@@ -626,6 +670,24 @@ fun ChatInput(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { onAttach(it) } }
 
+    val locale = when (appLanguage) {
+        "Bengali" -> java.util.Locale("bn", "BD")
+        "Hindi" -> java.util.Locale("hi", "IN")
+        else -> java.util.Locale.ENGLISH
+    }
+
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data
+            val spokenText = data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                onTextChange(text + spokenText)
+            }
+        }
+    }
+
     if (isReadOnly) {
         Surface(
             modifier = Modifier
@@ -670,6 +732,22 @@ fun ChatInput(
                     maxLines = 4
                 )
                 
+                val context = androidx.compose.ui.platform.LocalContext.current
+                IconButton(onClick = {
+                    try {
+                        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, locale.toString())
+                            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Speak now...")
+                        }
+                        voiceLauncher.launch(intent)
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "Voice search not supported on this device", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) {
+                    Icon(Icons.Default.Mic, null, tint = Color.Gray)
+                }
+
                 IconButton(
                     onClick = if (isGenerating) onStop else onSend,
                     enabled = (text.isNotBlank() || isGenerating),

@@ -47,7 +47,7 @@ class SettingsRepository @Inject constructor(
     }
 
     val hfTokenFlow: Flow<String> = dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.HF_TOKEN] ?: "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"
+        preferences[PreferencesKeys.HF_TOKEN] ?: ""
     }
 
     val maxDevicesFlow: Flow<Int> = dataStore.data.map { preferences ->

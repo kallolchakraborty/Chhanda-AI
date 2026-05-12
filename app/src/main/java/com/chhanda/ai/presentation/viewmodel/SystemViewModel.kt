@@ -182,6 +182,17 @@ class SystemViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            try {
+                val file = java.io.File(context.filesDir, "crash_log.txt")
+                if (file.exists()) {
+                    val crashLog = file.readText()
+                    addLog("CRASH", crashLog, "ERROR")
+                    file.delete()
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+
             while(true) {
                 try {
                     val fiveMinutesAgo = System.currentTimeMillis() - 5 * 60 * 1000
