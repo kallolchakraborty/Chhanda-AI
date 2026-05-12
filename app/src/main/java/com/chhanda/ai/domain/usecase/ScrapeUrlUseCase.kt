@@ -14,36 +14,52 @@ class ScrapeUrlUseCase @Inject constructor() {
         val tempFile = java.io.File.createTempFile("scrape_", ".tmp")
         try {
             val connection = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
                 .timeout(30000)
                 .followRedirects(true)
                 .ignoreContentType(true)
 
-            // Check content length first
-            val response = connection.execute()
-            val contentLength = response.header("Content-Length")?.toLongOrNull() ?: 0L
-            if (maxSizeMb > 0 && contentLength > maxSizeMb * 1024 * 1024) {
-                throw Exception("Resource too large: ${(contentLength / (1024.0 * 1024.0)).format(1)}MB. Limit is ${maxSizeMb}MB.")
+            val response = try {
+                connection.execute()
+            } catch (e: Exception) {
+                // Fallback for some blocked user agents
+                Jsoup.connect(url)
+                    .userAgent("Googlebot/2.1 (+http://www.google.com/bot.html)")
+                    .timeout(30000)
+                    .execute()
             }
 
-            // Stream content to temp file to avoid OOM
-            tempFile.outputStream().use { output ->
-                output.write(response.bodyAsBytes())
+            val doc = response.parse()
+
+            // Remove noise
+            doc.select("script, style, nav, footer, header, noscript, iframe, link, .ads, .sidebar").remove()
+
+            // If useAi is true (e.g. for Kaggle/Research sites), focus on data-rich areas
+            val contentElement = if (useAi) {
+                doc.select("article, main, .main-content, #main-content, .dataset-description, .notebook-content").firstOrNull() ?: doc.body()
+            } else {
+                doc.body()
             }
 
-            val doc = Jsoup.parse(tempFile, "UTF-8", url)
+            // Extract structured text to preserve context
+            val builder = StringBuilder()
+            contentElement.select("h1, h2, h3, p, li, table").forEach { element ->
+                val text = element.text().trim()
+                if (text.length > 20) {
+                    builder.append(text).append("\n\n")
+                }
+            }
 
-            // Remove scripts, styles, and other non-content elements
-            doc.select("script, style, nav, footer, header, noscript, iframe, link").remove()
-
-            // Extract main content
-            val mainContent = doc.body().text()
+            val mainContent = builder.toString().trim()
             
             if (mainContent.isBlank()) {
-                throw Exception("No readable text content found on this page.")
+                // Fallback to raw body text if structured extraction failed
+                val rawText = doc.body().text().trim()
+                if (rawText.isBlank()) throw Exception("No readable text content found.")
+                rawText
+            } else {
+                mainContent
             }
-            
-            mainContent
         } catch (e: Exception) {
             throw Exception("Scrape error: ${e.message}")
         } finally {

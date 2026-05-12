@@ -31,10 +31,10 @@ class ContextManager @javax.inject.Inject constructor(
             val results = vectorStore.search(queryEmbedding, topK = 6, modelId = "shared_rag_db")
             
             val filtered = results
-                .filter { it.score >= 0.05f } 
+                .filter { it.score >= 0.02f } 
 
             android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Scores: ${results.joinToString { String.format("%.3f", it.score) }}")
-            android.util.Log.d("ContextManager", "Filtered to ${filtered.size} snippets above 0.05 threshold")
+            android.util.Log.d("ContextManager", "Filtered to ${filtered.size} snippets above 0.02 threshold")
 
             if (filtered.isEmpty()) ""
             else {
