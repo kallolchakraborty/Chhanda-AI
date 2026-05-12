@@ -46,10 +46,14 @@ fun ConfigScreen(
     val appLanguage by viewModel.appLanguage.collectAsState()
     val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
     val showRestart by viewModel.showRestartDialog.collectAsState()
+    val apiKey by viewModel.apiKey.collectAsState()
     val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     var tempPort by remember(port) { mutableStateOf(port) }
     var tempHfToken by remember(hfToken) { mutableStateOf(hfToken) }
+    var tempApiKey by remember(apiKey) { mutableStateOf(apiKey) }
+    var showSaveConfirmDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -61,7 +65,7 @@ fun ConfigScreen(
                         }
 
                         Spacer(Modifier.width(12.dp))
-                        Text(Localization.getString("config", appLanguage), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text(Localization.getString("settings", appLanguage), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             )
@@ -77,7 +81,7 @@ fun ConfigScreen(
             item {
                 Text(Localization.getString("settings", appLanguage), fontSize = 32.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    Localization.getString("config", appLanguage),
+                    Localization.getString("settings", appLanguage),
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.padding(top = 8.dp)
@@ -207,8 +211,6 @@ fun ConfigScreen(
             
             item {
                 Column {
-                    val apiKey by viewModel.apiKey.collectAsState()
-                    var tempApiKey by remember(apiKey) { mutableStateOf(apiKey) }
                     var isKeyVisible by remember { mutableStateOf(false) }
 
                     ChhandaSectionHeader(icon = Icons.Default.Lock, title = Localization.getString("security", appLanguage))
@@ -224,8 +226,21 @@ fun ConfigScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             trailingIcon = { 
-                                IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
-                                    Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
+                                Row {
+                                    IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                                        Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
+                                    }
+                                    IconButton(onClick = { 
+                                        val newKey = "CH-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
+                                        tempApiKey = newKey
+                                    }) {
+                                        Icon(Icons.Default.Refresh, null)
+                                    }
+                                    IconButton(onClick = { 
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempApiKey))
+                                    }) {
+                                        Icon(Icons.Default.ContentCopy, null)
+                                    }
                                 }
                             },
                             colors = OutlinedTextFieldDefaults.colors(
@@ -234,33 +249,9 @@ fun ConfigScreen(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary
                             )
                         )
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(8.dp))
                         
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { 
-                                    val newKey = "chhanda_${(1000..9999).random()}_${System.currentTimeMillis().toString().takeLast(4)}"
-                                    tempApiKey = newKey
-                                    viewModel.setApiKey(newKey)
-                                },
-                                modifier = Modifier.weight(1f).height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), contentColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
-                                Text(" " + Localization.getString("generate_new", appLanguage))
-                            }
-                            
-                            Button(
-                                onClick = { viewModel.setApiKey(tempApiKey) },
-                                modifier = Modifier.weight(1f).height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                            ) {
-                                Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
-                                Text(" " + Localization.getString("save_key", appLanguage))
-                            }
-                        }
+                        Spacer(Modifier.height(8.dp))
 
                         Spacer(Modifier.height(24.dp))
                         Text(Localization.getString("hf_token", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -272,6 +263,18 @@ fun ConfigScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             placeholder = { Text("hf_...") },
+                            trailingIcon = {
+                                Row {
+                                    IconButton(onClick = { clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempHfToken)) }) {
+                                        Icon(Icons.Default.ContentCopy, null)
+                                    }
+                                    IconButton(onClick = { 
+                                        clipboardManager.getText()?.text?.let { tempHfToken = it }
+                                    }) {
+                                        Icon(Icons.Default.ContentPaste, null)
+                                    }
+                                }
+                            },
                             colors = OutlinedTextFieldDefaults.colors(
                                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                                 unfocusedBorderColor = Color.Transparent,
@@ -285,10 +288,7 @@ fun ConfigScreen(
             item {
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { 
-                        viewModel.setServerPort(tempPort) 
-                        viewModel.setHfToken(tempHfToken)
-                    },
+                    onClick = { showSaveConfirmDialog = true },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
@@ -297,6 +297,30 @@ fun ConfigScreen(
                 }
                 Spacer(Modifier.height(40.dp))
             }
+        }
+
+        if (showSaveConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showSaveConfirmDialog = false },
+                title = { Text("Confirm Changes") },
+                text = { Text("Are you sure you want to save the changes?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.setServerPort(tempPort)
+                        viewModel.setHfToken(tempHfToken)
+                        viewModel.setApiKey(tempApiKey)
+                        showSaveConfirmDialog = false
+                    }) {
+                        Text("Confirm")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSaveConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
         }
 
         if (showRestart) {
@@ -319,4 +343,3 @@ fun ConfigScreen(
             )
         }
     }
-}

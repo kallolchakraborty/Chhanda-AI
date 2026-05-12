@@ -133,6 +133,14 @@ fun KnowledgeBaseScreen(
                 }
             }
             
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.DeleteSweep, title = "Auto Delete Settings")
+                    Spacer(Modifier.height(12.dp))
+                    AutoDeleteSettingsCard(viewModel = viewModel, appLanguage = appLanguage)
+                }
+            }
+            
             if (allFiles.isNotEmpty()) {
                 item {
                     RecentUploadsSectionHeader(
@@ -172,10 +180,25 @@ fun KnowledgeBaseScreen(
         }
 
         if (showConfirmUpload) {
+            val autoDeleteDays by viewModel.autoDeleteDays.collectAsState()
+            val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsState()
+            
             AlertDialog(
                 onDismissRequest = { showConfirmUpload = false },
                 title = { Text("Confirm Ingestion") },
-                text = { Text("Are you sure you want to ingest ${selectedUris.size} files into the Knowledge Base?") },
+                text = { 
+                    Column {
+                        Text("Are you sure you want to ingest ${selectedUris.size} files into the Knowledge Base?")
+                        if (autoDeleteEnabled) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Note: The vector database will be emptied after $autoDeleteDays days. If you want to change then close the window and make the changes at the memory screen.",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                },
                 confirmButton = {
                     TextButton(onClick = {
                         viewModel.ingestDocuments(selectedUris)
@@ -493,6 +516,47 @@ fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.rep
                     Icon(Icons.Default.TrendingUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Text(" $growthStr% growth this week", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel, appLanguage: String) {
+    val autoDeleteDays by viewModel.autoDeleteDays.collectAsState()
+    val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsState()
+    
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(32.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column {
+                    Text("Auto Delete", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Automatically clear old vector data", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                }
+                Switch(
+                    checked = autoDeleteEnabled,
+                    onCheckedChange = { viewModel.setAutoDeleteEnabled(it) }
+                )
+            }
+            
+            if (autoDeleteEnabled) {
+                Spacer(Modifier.height(16.dp))
+                Text("Delete files older than $autoDeleteDays days", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Slider(
+                    value = autoDeleteDays.toFloat(),
+                    onValueChange = { viewModel.setAutoDeleteDays(it.toInt()) },
+                    valueRange = 1f..30f,
+                    steps = 29
+                )
             }
         }
     }

@@ -44,16 +44,20 @@ class ChhandaForegroundService : Service() {
         private const val SERVICE_TYPE = "_http._tcp."
         private const val SERVICE_NAME = "Chhanda-AI-Node"
 
-        const val ACTION_START = "ACTION_START"
-        const val ACTION_STOP  = "ACTION_STOP"
         const val EXTRA_PORT   = "EXTRA_PORT"
         const val EXTRA_MAX    = "EXTRA_MAX_DEVICES"
+        const val EXTRA_SSID   = "EXTRA_SSID"
+        const val ACTION_START = "ACTION_START"
+        const val ACTION_STOP  = "ACTION_STOP"
+        const val ACTION_UPDATE = "ACTION_UPDATE"
+        const val ACTION_STOP_NODE = "ACTION_STOP_NODE"
 
-        fun start(context: Context, port: Int, maxDevices: Int) {
+        fun start(context: Context, port: Int, maxDevices: Int, ssid: String? = null) {
             val intent = Intent(context, ChhandaForegroundService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_PORT, port)
                 putExtra(EXTRA_MAX, maxDevices)
+                if (ssid != null) putExtra(EXTRA_SSID, ssid)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 context.startForegroundService(intent)
@@ -117,14 +121,19 @@ class ChhandaForegroundService : Service() {
                 }
 
                 // 1. Post foreground notification FIRST (prevents ANR window)
+                val ssid = intent?.getStringExtra(EXTRA_SSID)
+                val isHotspot = ssid != null
+                val title = if (isHotspot) "Chhanda Hotspot: $ssid" else "Chhanda AI Node"
+                val icon = if (isHotspot) com.chhanda.ai.R.drawable.ic_status_hotspot else com.chhanda.ai.R.drawable.ic_status_wifi
+                
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     startForeground(
                         NOTIFICATION_ID, 
-                        buildNotification("Chhanda AI Node", "Listening on :$currentPort"),
+                        buildNotification(title, "Listening on :$currentPort", icon),
                         android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                     )
                 } else {
-                    startForeground(NOTIFICATION_ID, buildNotification("Chhanda AI Node", "Listening on :$currentPort"))
+                    startForeground(NOTIFICATION_ID, buildNotification(title, "Listening on :$currentPort", icon))
                 }
 
                 // 2. Acquire locks
@@ -147,7 +156,24 @@ class ChhandaForegroundService : Service() {
                 registerMdns(currentPort)
             }
 
-            ACTION_STOP -> {
+            ACTION_UPDATE -> {
+                val ssid = intent?.getStringExtra(EXTRA_SSID)
+                val isHotspot = ssid != null
+                val title = if (isHotspot) "Chhanda Hotspot: $ssid" else "Chhanda AI Node"
+                val content = "Listening on :$currentPort"
+                val icon = if (isHotspot) com.chhanda.ai.R.drawable.ic_status_hotspot else com.chhanda.ai.R.drawable.ic_status_wifi
+                
+                val notification = buildNotification(title, content, icon)
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIFICATION_ID, notification)
+            }
+
+            ACTION_STOP_NODE -> {
+                Log.i(TAG, "Stop node requested via action")
+                shutdown()
+            }
+ 
+             ACTION_STOP -> {
                 Log.i(TAG, "Stop requested")
                 shutdown()
             }
@@ -167,6 +193,7 @@ class ChhandaForegroundService : Service() {
     private fun shutdown() {
         unregisterMdns()
         try { chhandaServer.stop() } catch (e: Exception) { Log.w(TAG, "Server stop: ${e.message}") }
+        com.chhanda.ai.util.GlobalState.setHotspotActive(false)
         releaseLocks()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -205,19 +232,27 @@ class ChhandaForegroundService : Service() {
         if (wifiLock?.isHeld == true) wifiLock?.release()
     }
 
-    private fun buildNotification(title: String, content: String): Notification {
+    private fun buildNotification(title: String, content: String, iconRes: Int = com.chhanda.ai.R.mipmap.ic_launcher): Notification {
         val pi = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        
+        val stopIntent = Intent(this, ChhandaForegroundService::class.java).apply { action = ACTION_STOP_NODE }
+        val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title).setContentText(content)
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setColor(0x3B82F6)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setSmallIcon(iconRes)
+            .setColor(android.graphics.Color.parseColor("#3B82F6"))
             .setContentIntent(pi)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setTicker(title)
+            .addAction(com.chhanda.ai.R.drawable.ic_status_hotspot, "STOP SERVER", stopPendingIntent)
             .build()
     }
 

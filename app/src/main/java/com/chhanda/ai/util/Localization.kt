@@ -5,7 +5,7 @@ object Localization {
         "English" to mapOf(
             "dashboard" to "Home",
             "models" to "Models",
-            "config" to "Config",
+            "settings" to "Settings",
             "logs" to "Logs",
             "app_storage" to "App Storage",
             "vector_db" to "Vector DB",
@@ -81,6 +81,7 @@ object Localization {
             "no_downloaded_models" to "No downloaded models",
             "global_connectivity" to "Global Connectivity",
             "storage_management" to "Storage Management",
+            "chat_management" to "Chat Management",
             "ssh_tunnel" to "Global SSH Tunnel",
             "ssh_tunnel_desc_active" to "Global access enabled via secure SSH.",
             "ssh_tunnel_desc_inactive" to "Bypass router firewalls with a public URL.",
@@ -107,12 +108,19 @@ object Localization {
             "clear_logs_desc" to "This will permanently remove all activity logs. This cannot be undone.",
             "confirm" to "Confirm",
             "delete_model_confirm" to "Delete Model?",
-            "delete_model_desc" to "This will remove the model file from your device. You will need to download it again to use it."
+            "delete_model_desc" to "This will remove the model file from your device. You will need to download it again to use it.",
+            "create_hotspot_title" to "No Network Detected",
+            "create_hotspot_text" to "Would you like to create a private network so other devices can join via QR code?",
+            "hotspot_ssid" to "Network Name (SSID)",
+            "hotspot_pass" to "Password",
+            "hotspot_starting" to "Starting hotspot...",
+            "hotspot_active_desc" to "Private network active. Join this network first, then scan the QR code.",
+            "start_hotspot" to "Create Network"
         ),
         "Bengali" to mapOf(
             "dashboard" to "মূল পাতা",
             "models" to "মডেল",
-            "config" to "সেটিংস",
+            "settings" to "সেটিংস",
             "logs" to "লগ",
             "app_storage" to "অ্যাপ স্টোরেজ",
             "vector_db" to "ভেক্টর ডাটাবেস",
@@ -188,6 +196,7 @@ object Localization {
             "no_downloaded_models" to "কোনো ডাউনলোড করা মডেল নেই",
             "global_connectivity" to "গ্লোবাল কানেক্টিভিটি",
             "storage_management" to "স্টোরেজ ম্যানেজমেন্ট",
+            "chat_management" to "চ্যাট ম্যানেজমেন্ট",
             "ssh_tunnel" to "গ্লোবাল SSH টানেল",
             "ssh_tunnel_desc_active" to "সুরক্ষিত SSH এর মাধ্যমে গ্লোবাল অ্যাক্সেস সক্ষম করা হয়েছে।",
             "ssh_tunnel_desc_inactive" to "পাবলিক URL এর মাধ্যমে রাউটার ফায়ারওয়াল বাইপাস করুন।",
@@ -213,12 +222,19 @@ object Localization {
             "clear_logs_desc" to "এটি সব অ্যাক্টিভিটি লগ স্থায়ীভাবে মুছে ফেলবে। এটি আর ফিরে পাওয়া সম্ভব নয়।",
             "confirm" to "নিশ্চিত করুন",
             "delete_model_confirm" to "মডেল মুছে ফেলবেন?",
-            "delete_model_desc" to "এটি আপনার ডিভাইস থেকে মডেল ফাইলটি মুছে ফেলবে। এটি ব্যবহার করতে আপনাকে আবার ডাউনলোড করতে হবে।"
+            "delete_model_desc" to "এটি আপনার ডিভাইস থেকে মডেল ফাইলটি মুছে ফেলবে। এটি ব্যবহার করতে আপনাকে আবার ডাউনলোড করতে হবে।",
+            "create_hotspot_title" to "কোনো নেটওয়ার্ক পাওয়া যায়নি",
+            "create_hotspot_text" to "আপনি কি একটি প্রাইভেট নেটওয়ার্ক তৈরি করতে চান যাতে অন্যান্য ডিভাইস QR কোডের মাধ্যমে সংযুক্ত হতে পারে?",
+            "hotspot_ssid" to "নেটওয়ার্ক নাম (SSID)",
+            "hotspot_pass" to "পাসওয়ার্ড",
+            "hotspot_starting" to "হটস্পট চালু হচ্ছে...",
+            "hotspot_active_desc" to "প্রাইভেট নেটওয়ার্ক সক্রিয়। প্রথমে এই নেটওয়ার্কে যুক্ত হন, তারপর QR কোড স্ক্যান করুন।",
+            "start_hotspot" to "নেটওয়ার্ক তৈরি করুন"
         ),
         "Hindi" to mapOf(
             "dashboard" to "मुख्य",
             "models" to "मॉडल",
-            "config" to "सेटिंग्स",
+            "settings" to "सेटिंग्स",
             "logs" to "लॉग",
             "app_storage" to "ऐप स्टोरेज",
             "vector_db" to "वेक्टर डेटाबेस",
@@ -294,6 +310,7 @@ object Localization {
             "no_downloaded_models" to "कोई डाउनलोड किया गया मॉडल नहीं",
             "global_connectivity" to "वैश्विक कनेक्टिविटी",
             "storage_management" to "स्टोरेज प्रबंधन",
+            "chat_management" to "चैट प्रबंधन",
             "ssh_tunnel" to "वैश्विक SSH टनल",
             "ssh_tunnel_desc_active" to "सुरक्षित SSH के माध्यम से वैश्विक पहुंच सक्षम है।",
             "ssh_tunnel_desc_inactive" to "पब्लिक URL के साथ राउटर फ़ायरवॉल को बायपास करें।",
@@ -319,7 +336,14 @@ object Localization {
             "clear_logs_desc" to "यह सभी गतिविधि लॉग स्थायी रूप से हटा देगा। इसे पूर्ववत नहीं किया जा सकता है।",
             "confirm" to "पुष्टि करें",
             "delete_model_confirm" to "मॉडल हटाएं?",
-            "delete_model_desc" to "यह आपके डिवाइस से मॉडल फ़ाइल को हटा देगा। इसका उपयोग करने के लिए आपको इसे फिर से डाउनलोड करना होगा."
+            "delete_model_desc" to "यह आपके डिवाइस से मॉडल फ़ाइल को हटा देगा। इसका उपयोग करने के लिए आपको इसे फिर से डाउनलोड करना होगा.",
+            "create_hotspot_title" to "कोई नेटवर्क नहीं मिला",
+            "create_hotspot_text" to "क्या आप एक निजी नेटवर्क बनाना चाहेंगे ताकि अन्य डिवाइस QR कोड के माध्यम से जुड़ सकें?",
+            "hotspot_ssid" to "नेटवर्क नाम (SSID)",
+            "hotspot_pass" to "पासवर्ड",
+            "hotspot_starting" to "हॉटस्पॉट शुरू हो रहा है...",
+            "hotspot_active_desc" to "निजी नेटवर्क सक्रिय है। पहले इस नेटवर्क से जुड़ें, फिर QR कोड स्कैन करें।",
+            "start_hotspot" to "नेटवर्क बनाएं"
         ),
 
     )

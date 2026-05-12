@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.asImageBitmap
@@ -90,9 +91,64 @@ fun DashboardScreen(
     var deviceIdToClear by remember { mutableStateOf<String?>(null) }
     var showClearHistoryConfirm by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
+    var showHotspotPrompt by remember { mutableStateOf(false) }
     var expandedAssistant by remember { mutableStateOf<String?>(null) }
     var isApiKeyVisibleInQr by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
+    var showBackgroundExitDialog by remember { mutableStateOf(false) }
+
+    // Detect exit/background state
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    
+    // BACK HANDLER: If server is active, ask if user wants to keep it in background
+    androidx.activity.compose.BackHandler(enabled = isServerRunning) {
+        showBackgroundExitDialog = true
+    }
+
+    // LIFECYCLE: Show toast when app goes to background in offline mode
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                if (isServerRunning) { 
+                    android.widget.Toast.makeText(
+                        context, 
+                        "AI Node is active in background. Use notification to STOP.", 
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Background Exit Dialog
+    if (showBackgroundExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackgroundExitDialog = false },
+            title = { Text("Chhanda Gateway") },
+            text = { Text("The AI server is running. Do you want to STOP the server or keep it running in the background for other devices?") },
+            confirmButton = {
+                TextButton(onClick = { 
+                    showBackgroundExitDialog = false
+                    (context as? android.app.Activity)?.moveTaskToBack(true)
+                }) {
+                    Text("Keep Running")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showBackgroundExitDialog = false
+                    com.chhanda.ai.service.ChhandaForegroundService.stop(context)
+                    (context as? android.app.Activity)?.finish()
+                }) {
+                    Text("Stop Server", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        )
+    }
     var showHistorySheet by remember { mutableStateOf(false) }
     var selectedModelForHistory by remember { mutableStateOf<String?>(null) }
     val selectedSessions = remember { mutableStateListOf<String>() }
@@ -144,7 +200,7 @@ fun DashboardScreen(
                 actions = {
                     val isServerRunning by viewModel.isServerRunning.collectAsState()
                     val ipAddress by viewModel.localIpAddress.collectAsState()
-                    val isQrEnabled = isServerRunning && anyActiveModel && ipAddress != "Detecting..." && ipAddress != "127.0.0.1"
+                    val isQrEnabled = (isServerRunning || isModelLoading) && anyActiveModel
                     
                     var showPulse by remember { mutableStateOf(false) }
                     LaunchedEffect(isQrEnabled) {
@@ -168,10 +224,30 @@ fun DashboardScreen(
                         label = "QrPulse"
                     )
 
+                    val networkIps by viewModel.networkIps.collectAsState()
+                    val isHotspot = networkIps.any { it.startsWith("192.168.43.") || it.startsWith("192.168.44.") }
+                    val hasNetwork = networkIps.isNotEmpty() && networkIps.first() != "127.0.0.1"
+
+                    if (hasNetwork) {
+                        IconButton(onClick = { showHotspotPrompt = true }) {
+                            Icon(
+                                if (isHotspot) Icons.Default.WifiTethering else Icons.Default.Wifi,
+                                contentDescription = "Network Status",
+                                tint = if (isServerRunning) MaterialTheme.colorScheme.primary else Color.Gray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = { 
                             if (isQrEnabled) {
-                                showQrDialog = true
+                                val currentIp = ipAddress ?: "127.0.0.1"
+                                if (currentIp == "Detecting..." || currentIp == "127.0.0.1" || currentIp == "0.0.0.0" || currentIp.isBlank()) {
+                                    showHotspotPrompt = true
+                                } else {
+                                    showQrDialog = true
+                                }
                                 showPulse = false
                             }
                         },
@@ -375,7 +451,7 @@ fun DashboardScreen(
             
 
             item {
-                ChhandaSectionHeader(icon = Icons.Default.Storage, title = Localization.getString("storage_management", appLanguage), badge = Localization.getString("secure_badge", appLanguage))
+                ChhandaSectionHeader(icon = Icons.Default.Chat, title = Localization.getString("chat_management", appLanguage), badge = Localization.getString("secure_badge", appLanguage))
             }
 
             item {
@@ -563,12 +639,21 @@ fun DashboardScreen(
                 
                 val ipAddress by viewModel.localIpAddress.collectAsState()
                 val anyActiveModel = (ownedModels + sharedModels).any { it.isActive }
-                val isQrEnabled = isServerRunning && anyActiveModel && ipAddress != "Detecting..." && ipAddress != "127.0.0.1"
+                val isQrEnabled = (isServerRunning || isModelLoading) && anyActiveModel
                 
                 val contentColor = if (isQrEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                 
                 Surface(
-                    onClick = { if (isQrEnabled) showQrDialog = true },
+                    onClick = { 
+                        if (isQrEnabled) {
+                            val currentIp = ipAddress ?: "127.0.0.1"
+                            if (currentIp == "Detecting..." || currentIp == "127.0.0.1" || currentIp == "0.0.0.0" || currentIp.isBlank()) {
+                                showHotspotPrompt = true
+                            } else {
+                                showQrDialog = true
+                            }
+                        }
+                    },
                     color = if (isQrEnabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -606,6 +691,14 @@ fun DashboardScreen(
                                     Text(device.deviceName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text("${device.ipAddress} • ${device.userAgent}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                 }
+                                Text(
+                                    if (device.isCurrentlyConnected) "Connected" else "Disconnected",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (device.isCurrentlyConnected) Color(0xFF4ADE80) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Spacer(Modifier.width(12.dp))
+
                                 Column(horizontalAlignment = Alignment.End) {
                                     val dateStr = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(device.connectionTime))
                                     Text(dateStr, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -879,7 +972,7 @@ fun DashboardScreen(
                       - name: Gemma 4 Local
                         provider: openai
                         model: gemma-4
-                        apiBase: $baseServerUrl
+                        apiBase: $baseServerUrl/v1
                         apiKey: $apiKey
                         roles:
                           - chat
@@ -893,76 +986,114 @@ fun DashboardScreen(
                         horizontalAlignment = Alignment.CenterHorizontally, 
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())
                     ) {
-                        if (isVpnActive && !isTunnelActive) {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            ) {
-                                Text(
-                                    Localization.getString("vpn_warning", appLanguage),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.padding(8.dp)
-                                )
+                        // Simple Manual Instruction Card
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)),
+                            modifier = Modifier.padding(bottom = 20.dp).fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("Manual Connection Steps", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                Text("1. Turn on your Mobile Hotspot in phone Settings.", fontSize = 12.sp)
+                                Text("2. Connect the other device to this phone's WiFi.", fontSize = 12.sp)
+                                Text("3. Scan the QR code below to start chatting.", fontSize = 12.sp)
                             }
                         }
 
-                        // Side-by-side QR and Basic Info
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Compact QR Code
-                            Surface(
-                                modifier = Modifier
-                                    .size(110.dp)
-                                    .scale(qrScale),
-                                color = Color.White,
-                                shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(2.dp, qrBorderColor)
+                        // Single QR Code System (Chat Only)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "Open Chhanda AI Chat",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
-                                    val chatUrl = "$baseServerUrl?key=$apiKey"
-                                    val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
-                                    if (qrBitmap != null) {
-                                        Image(
-                                            bitmap = qrBitmap.asImageBitmap(),
-                                            contentDescription = "QR Code",
-                                            modifier = Modifier.fillMaxSize()
-                                        )
+                                // Chat QR
+                                Surface(
+                                    modifier = Modifier.size(120.dp),
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
+                                        // Senior IP Selection:
+                                        // We prioritize the 192.168.43.1 (hotspot gateway) if it exists,
+                                        // as it's the most reliable path for guest devices.
+                                        val qrIp = when {
+                                            networkIps.any { it.startsWith("192.168.43.") || it.startsWith("192.168.44.") } -> {
+                                                networkIps.find { it.endsWith(".1") } ?: networkIps.find { it.startsWith("192.168.43.") } ?: networkIps.first()
+                                            }
+                                            networkIps.isNotEmpty() && networkIps.first() != "127.0.0.1" -> {
+                                                networkIps.find { it.startsWith("192.168.") || it.startsWith("10.") || it.startsWith("172.") } ?: networkIps.first()
+                                            }
+                                            else -> "192.168.43.1" // Senior Fallback for Hotspot mode
+                                        }
+                                        
+                                        val chatUrl = "http://$qrIp:$displayPort?key=$apiKey"
+                                        val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
+                                        if (qrBitmap != null) {
+                                            Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Chat QR", modifier = Modifier.fillMaxSize())
+                                        }
+                                    }
+                                }
+                                
+                                Spacer(Modifier.width(16.dp))
+                                
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Chat URL:", fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary)
+                                    val serverIp = when {
+                                        networkIps.any { it.startsWith("192.168.43.") || it.startsWith("192.168.44.") } -> {
+                                            networkIps.find { it.endsWith(".1") } ?: networkIps.find { it.startsWith("192.168.43.") } ?: networkIps.first()
+                                        }
+                                        networkIps.isNotEmpty() -> {
+                                            networkIps.find { it.startsWith("192.168.") || it.startsWith("10.") || it.startsWith("172.") } ?: networkIps.first()
+                                        }
+                                        else -> "127.0.0.1"
+                                    }
+                                    Text("http://$serverIp:$displayPort", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    
+                                    Row(modifier = Modifier.padding(top = 4.dp)) {
+                                        IconButton(
+                                            onClick = {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val chatUrl = "http://$serverIp:$displayPort?key=$apiKey"
+                                                val clip = android.content.ClipData.newPlainText("Chat URL", chatUrl)
+                                                clipboard.setPrimaryClip(clip)
+                                                android.widget.Toast.makeText(context, "Link copied!", android.widget.Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
+                                        }
+                                        
+                                        Spacer(Modifier.width(8.dp))
+                                        
+                                        IconButton(
+                                            onClick = {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("API Key", apiKey)
+                                                clipboard.setPrimaryClip(clip)
+                                                android.widget.Toast.makeText(context, "Key copied!", android.widget.Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(Icons.Default.Key, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.secondary)
+                                        }
                                     }
                                 }
                             }
                             
-                            Spacer(Modifier.width(16.dp))
-                            
-                            Column(modifier = Modifier.weight(1f)) {
-                                    // API Endpoint
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
-                                            Text("API Endpoint", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                                            Text(apiUrl, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                    
-                                    Spacer(Modifier.height(8.dp))
-                                    
-                                    // API Key
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
-                                            Text("API Key", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
-                                            Text(apiKey, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
                         }
                         
                         Spacer(Modifier.height(12.dp))
@@ -990,14 +1121,14 @@ fun DashboardScreen(
                         
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Continue Config", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Continue Setup", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.weight(1f))
                                 IconButton(
                                     onClick = {
                                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("Config", continueConfig)
+                                        val clip = android.content.ClipData.newPlainText("Setup", continueConfig)
                                         clipboard.setPrimaryClip(clip)
-                                        android.widget.Toast.makeText(context, "Config copied!", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(context, "Setup copied!", android.widget.Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.size(24.dp)
                                 ) {
@@ -1096,6 +1227,60 @@ fun DashboardScreen(
             dismissButton = {
                 TextButton(onClick = { modelToDelete = null }) {
                     Text("CANCEL")
+                }
+            }
+        )
+    }
+
+    if (showHotspotPrompt) {
+        AlertDialog(
+            onDismissRequest = { showHotspotPrompt = false },
+            icon = { Icon(Icons.Default.Wifi, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Manual Hotspot Setup") },
+            text = { 
+                val activeCount by viewModel.activeDeviceCount.collectAsState()
+                Column {
+                    Text("To use Chhanda AI in offline mode, please follow these steps:")
+                    Spacer(Modifier.height(12.dp))
+                    Text("1. Turn on your phone's 'Mobile Hotspot'.", fontSize = 12.sp)
+                    Text("2. Connect your other device (laptop/tablet) to this phone's network.", fontSize = 12.sp)
+                    Text("3. Once connected, the chat QR code will appear.", fontSize = 12.sp)
+                    
+                    if (activeCount > 0) {
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Devices, null, tint = Color(0xFF4ADE80), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("$activeCount device(s) connected! Tap 'I've Connected' to show QR.", color = Color(0xFF4ADE80), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        try {
+                            val intent = android.content.Intent().apply {
+                                action = "android.settings.TETHER_WIFI_SETTINGS"
+                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+                            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            context.startActivity(intent)
+                        }
+                    }
+                ) {
+                    Text("Open Hotspot Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showHotspotPrompt = false
+                    showQrDialog = true
+                }) {
+                    Text("I've Connected")
                 }
             }
         )

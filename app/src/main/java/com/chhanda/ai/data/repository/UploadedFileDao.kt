@@ -11,6 +11,9 @@ interface UploadedFileDao {
     @Query("SELECT * FROM uploaded_files WHERE isDeleted = 0 ORDER BY timestamp DESC")
     fun getAllFiles(): Flow<List<UploadedFileEntity>>
 
+    @Query("SELECT * FROM uploaded_files WHERE isDeleted = 0 AND timestamp < :threshold")
+    suspend fun getFilesOlderThan(threshold: Long): List<UploadedFileEntity>
+
     @Query("SELECT * FROM uploaded_files WHERE name = :name AND size = :size AND isDeleted = 0 LIMIT 1")
     suspend fun findByNameAndSize(name: String, size: Long): UploadedFileEntity?
 

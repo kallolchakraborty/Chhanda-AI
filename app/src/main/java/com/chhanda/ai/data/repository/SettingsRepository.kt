@@ -29,6 +29,8 @@ class SettingsRepository @Inject constructor(
         val PUBLIC_URL = stringPreferencesKey("public_url")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val VECTOR_DB_CAPACITY = intPreferencesKey("vector_db_capacity")
+        val AUTO_DELETE_DAYS = intPreferencesKey("auto_delete_days")
+        val AUTO_DELETE_ENABLED = booleanPreferencesKey("auto_delete_enabled")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -65,6 +67,14 @@ class SettingsRepository @Inject constructor(
 
     val vectorDbCapacityFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.VECTOR_DB_CAPACITY] ?: 1
+    }
+
+    val autoDeleteDaysFlow: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.AUTO_DELETE_DAYS] ?: 7
+    }
+
+    val autoDeleteEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.AUTO_DELETE_ENABLED] ?: true
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -118,6 +128,18 @@ class SettingsRepository @Inject constructor(
     suspend fun setVectorDbCapacity(gb: Int) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.VECTOR_DB_CAPACITY] = gb
+        }
+    }
+
+    suspend fun setAutoDeleteDays(days: Int) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AUTO_DELETE_DAYS] = days
+        }
+    }
+
+    suspend fun setAutoDeleteEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AUTO_DELETE_ENABLED] = enabled
         }
     }
 }

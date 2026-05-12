@@ -54,8 +54,12 @@ class SystemViewModel @Inject constructor(
     private val ingestDocumentUseCase get() = ingestDocumentUseCaseLazy.get()
     private val scrapeUrlUseCase get() = scrapeUrlUseCaseLazy.get()
     
-    private var activeScrapeJob: kotlinx.coroutines.Job? = null
+
     
+    // Removed automated HotspotManager logic in favor of Manual System Hotspot.
+    
+    private var activeScrapeJob: kotlinx.coroutines.Job? = null
+
     private val _ramUsage = kotlinx.coroutines.flow.MutableStateFlow("0 / 0 GB")
     val ramUsage: kotlinx.coroutines.flow.StateFlow<String> = _ramUsage.asStateFlow()
     
@@ -127,13 +131,52 @@ class SystemViewModel @Inject constructor(
                         val physicalFile = java.io.File(path)
                         if (physicalFile.exists()) physicalFile.delete()
                     }
+                    // Also delete from vector store
+                    vectorChunkDao.deleteBySource(path)
                 } catch (e: Exception) {
-                    addLog("STORAGE", "Failed to delete physical file: ${file.name}", "WARNING")
+                    addLog("STORAGE", "Failed to delete file or chunks: ${file.name}", "WARNING")
                 }
             }
-            addLog("STORAGE", "Deleted ${ids.size} files from disk and DB", "SUCCESS")
+            addLog("STORAGE", "Deleted ${ids.size} files from disk, DB and vector store", "SUCCESS")
         }
     }
+
+    fun checkAndPerformCleanup() {
+        viewModelScope.launch {
+            val enabled = autoDeleteEnabled.first()
+            if (!enabled) return@launch
+            
+            val days = autoDeleteDays.first()
+            val threshold = System.currentTimeMillis() - days * 24 * 60 * 60 * 1000L
+            
+            val filesToDelete = uploadedFileDao.getFilesOlderThan(threshold)
+            if (filesToDelete.isNotEmpty()) {
+                val ids = filesToDelete.map { it.id }
+                deleteFiles(ids)
+            }
+        }
+    }
+
+    init {
+        viewModelScope.launch {
+            while(true) {
+                try {
+                    val fiveMinutesAgo = System.currentTimeMillis() - 5 * 60 * 1000
+                    val activeDevices = deviceDao.getActiveConnections()
+                    activeDevices.forEach { device ->
+                        if (device.lastActive < fiveMinutesAgo) {
+                            deviceDao.updateDeviceStatus(device.deviceName, false, device.lastActive)
+                            addLog("NETWORK", "Device ${device.deviceName} timed out and marked as disconnected.", "INFO")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("SystemViewModel", "Error in device monitor: ${e.message}")
+                }
+                delay(10000) // Check every 10 seconds for better responsiveness
+            }
+        }
+    }
+
     private val workManager by lazy { androidx.work.WorkManager.getInstance(context) }
 
     fun ingestDocuments(uris: List<android.net.Uri>) {
@@ -280,6 +323,8 @@ class SystemViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Detecting...")
     val publicUrl = settingsRepository.publicUrlFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val appLanguage = settingsRepository.appLanguageFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "English")
+    val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 7)
+    val autoDeleteEnabled = settingsRepository.autoDeleteEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
     val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
@@ -402,7 +447,10 @@ class SystemViewModel @Inject constructor(
             // Use local IP detection until server is explicitly running.
             val ip = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 if (_isServerRunning.value) {
-                    try { chhandaServer.boundIp.ifBlank { getIpAddress() } } catch (e: Exception) { getIpAddress() }
+                    try { 
+                        val bound = chhandaServer.boundIp
+                        if (bound.isBlank() || bound == "0.0.0.0" || bound == "127.0.0.1") getIpAddress() else bound
+                    } catch (e: Exception) { getIpAddress() }
                 } else {
                     getIpAddress()
                 }
@@ -464,17 +512,18 @@ class SystemViewModel @Inject constructor(
                     if (port > 0) {
                         val isOk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
-                                val client = java.net.URL("http://127.0.0.1:$port/ping")
-                                    .openConnection() as java.net.HttpURLConnection
+                                val client = java.net.URL("http://127.0.0.1:$port/ping").openConnection() as java.net.HttpURLConnection
                                 client.connectTimeout = 1000
                                 client.readTimeout = 1000
                                 client.inputStream.bufferedReader().readText() == "pong"
-                            } catch (e: Exception) { false }
+                            } catch (e: Exception) {
+                                false
+                            }
                         }
                         _isLocalLinkOk.value = isOk
                     }
                 }
-                delay(8000)
+                delay(if (_isLocalLinkOk.value) 30000 else 10000)
             }
         }
     }
@@ -499,12 +548,18 @@ class SystemViewModel @Inject constructor(
                 }
             }
             
-            return candidates.sortedWith(compareBy { (name, _) ->
+            // Senior IP Sorting: Prioritize Wi-Fi and Hotspot interfaces.
+
+            return candidates.sortedWith(compareBy { (name, ip) ->
                 when {
-                    name.startsWith("wlan") -> 0
-                    name.startsWith("eth") -> 1
-                    name.startsWith("ap") || name.startsWith("softap") -> 2
-                    name.startsWith("rndis") -> 3
+                    // Highest priority: Hotspot standard gateway IP
+                    ip == "192.168.43.1" || ip == "192.168.44.1" || ip == "192.168.45.1" -> 0
+                    // Second: Hotspot interfaces
+                    name.contains("ap0") || name.contains("softap") || name.contains("swlan") -> 1
+                    // Third: WLAN
+                    name.startsWith("wlan") -> 2
+                    // Fourth: Ethernet
+                    name.startsWith("eth") -> 3
                     else -> 4
                 }
             }).firstOrNull()?.second ?: "127.0.0.1"
@@ -514,6 +569,7 @@ class SystemViewModel @Inject constructor(
 
     init {
         _logs.value = loadLogsFromFile()
+        checkAndPerformCleanup()
         viewModelScope.launch {
             try {
                 // Safety Delay: Give Room and Hilt 1 second to settle before firing heavy scans
@@ -757,6 +813,18 @@ class SystemViewModel @Inject constructor(
     fun setVectorDbCapacity(gb: Int) {
         viewModelScope.launch {
             settingsRepository.setVectorDbCapacity(gb)
+        }
+    }
+
+    fun setAutoDeleteDays(days: Int) {
+        viewModelScope.launch {
+            settingsRepository.setAutoDeleteDays(days)
+        }
+    }
+
+    fun setAutoDeleteEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAutoDeleteEnabled(enabled)
         }
     }
 

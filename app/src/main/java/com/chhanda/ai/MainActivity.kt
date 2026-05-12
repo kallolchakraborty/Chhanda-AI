@@ -52,6 +52,12 @@ class MainActivity : ComponentActivity() {
                 permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
             
+            // Critical: Hotspot (LocalOnlyHotspot) needs location on all Android versions
+            permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                permissions.add("android.permission.NEARBY_WIFI_DEVICES")
+            }
+            
             val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
             ) { result ->
@@ -84,7 +90,7 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
     val items = listOf(
         Screen.Dashboard,
         Screen.Models,
-        Screen.Config,
+        Screen.Settings,
         Screen.Logs
     )
 
@@ -167,7 +173,7 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
             composable("welcome") { WelcomeScreen(navController) }
             composable(Screen.Dashboard.route) { DashboardScreen(navController, systemViewModel) }
             composable(Screen.Models.route) { KnowledgeBaseScreen(navController, systemViewModel) }
-            composable(Screen.Config.route) { ConfigScreen(navController, systemViewModel) }
+            composable(Screen.Settings.route) { ConfigScreen(navController, systemViewModel) }
             composable(Screen.Logs.route) { LogsScreen(navController, systemViewModel) }
             composable(
                 "chat/{modelName}?sessionId={sessionId}&readOnly={readOnly}",
@@ -195,6 +201,6 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
 sealed class Screen(val route: String, val translationKey: String, val icon: ImageVector) {
     object Dashboard : Screen("dashboard", "dashboard", Icons.Default.Home)
     object Models : Screen("models", "models", Icons.Default.LibraryBooks)
-    object Config : Screen("config", "config", Icons.Default.Code)
+    object Settings : Screen("settings", "settings", Icons.Default.Settings)
     object Logs : Screen("logs", "logs", Icons.Default.Terminal)
 }

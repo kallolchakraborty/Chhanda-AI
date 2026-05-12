@@ -115,9 +115,14 @@ class ChhandaServer @Inject constructor(
             val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
             while (ifaces?.hasMoreElements() == true) {
                 val iface = ifaces.nextElement()
-                if (!iface.isUp) continue
+                if (!iface.isUp || iface.isLoopback) continue
+                
                 val name = iface.name.lowercase()
-                if (name.contains("tun") || name.contains("ppp") || name.contains("vpn")) vpnFound = true
+                // VPN detection
+                if (name.contains("tun") || name.contains("ppp") || name.contains("vpn") || name.contains("ipsec")) {
+                    vpnFound = true
+                }
+                
                 val addrs = iface.inetAddresses
                 while (addrs.hasMoreElements()) {
                     val addr = addrs.nextElement()
@@ -127,15 +132,25 @@ class ChhandaServer @Inject constructor(
                 }
             }
         } catch (_: Exception) {}
-        val sortedIps = ips.sortedWith(compareBy { (name, _) ->
+        
+        // SENIOR SORTING: Prioritize Hotspot interfaces and subnets
+        val sortedIps = ips.sortedWith(compareBy { (name, ip) ->
             when {
-                name.startsWith("wlan") -> 0
-                name.startsWith("ap") || name.startsWith("softap") -> 1
-                name.startsWith("eth") -> 2
-                name.startsWith("rndis") -> 3
-                else -> 4
+                // Highest priority: Known Android Hotspot interface names
+                name.contains("ap0") || name.contains("softap") || name.contains("wlan1") || name.contains("swlan") -> 0
+                // Second priority: Known Android Hotspot standard subnets
+                ip.startsWith("192.168.43.") || ip.startsWith("192.168.44.") || ip.startsWith("192.168.45.") -> 1
+                // Third priority: Standard WLAN
+                name.startsWith("wlan0") -> 2
+                // Fourth priority: Ethernet
+                name.startsWith("eth") -> 3
+                // Fifth priority: Other LAN IPs
+                ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.") -> 4
+                else -> 5
             }
         }).map { it.second }.distinct()
+        
+        Log.d(TAG, "Senior Interface Discovery: $sortedIps (VPN: $vpnFound)")
         return Triple(sortedIps.firstOrNull(), sortedIps, vpnFound)
     }
 
@@ -147,46 +162,53 @@ class ChhandaServer @Inject constructor(
         lastIpRefresh = 0L
         val ip = freshIp()
 
-        if (ip == "127.0.0.1") {
-            Log.w(TAG, "No WiFi detected; server will be loopback-only.")
-        }
-
-        // Force Android to keep the network interface active (Critical for SIM-less)
+        // SENIOR DIAGNOSTIC: Log all interfaces for troubleshooting
         try {
-            val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-            val request = android.net.NetworkRequest.Builder()
-                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI)
-                .build()
-            cm?.requestNetwork(request, object : android.net.ConnectivityManager.NetworkCallback() {})
+            val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
+            Log.i(TAG, "--- NETWORK INTERFACE MAP ---")
+            while (ifaces?.hasMoreElements() == true) {
+                val iface = ifaces.nextElement()
+                val addrs = iface.inetAddresses.asSequence().filter { it is java.net.Inet4Address }.map { it.hostAddress }.toList()
+                Log.d(TAG, "IFACE: ${iface.name} | UP: ${iface.isUp} | ADDRS: $addrs")
+            }
+            Log.i(TAG, "-----------------------------")
         } catch (_: Exception) {}
+
+        if (ip == "127.0.0.1") {
+            Log.w(TAG, "No WiFi/Hotspot detected; server will be loopback-only.")
+        }
 
         _serverErrorFlow.value = null
         for (port in requestedPort..requestedPort + 10) {
-            Log.i(TAG, "Trying CIO on 0.0.0.0:$port …")
+            Log.i(TAG, "Binding Chhanda Node to 0.0.0.0:$port (Best IP: $ip)")
             try {
                 val engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
                     configureEngine(this, port)
                 }
                 engine.start(wait = false)
 
-                // PRO PROBE: Verify via loopback OR current detected IP
+                // SENIOR PROBE: Verify cross-interface reachability
                 var ok = false
-                val probeIps = listOf("127.0.0.1", ip)
+                val probeIps = mutableListOf("127.0.0.1")
+                if (ip != "127.0.0.1") probeIps.add(0, ip)
                 
+                // Also probe common hotspot gateways just in case
+                listOf("192.168.43.1", "192.168.44.1", "192.168.45.1").forEach {
+                    if (it !in probeIps) probeIps.add(it)
+                }
+
                 outer@for (pIp in probeIps) {
                     val probeUrl = java.net.URL("http://$pIp:$port/ping")
-                    Log.d(TAG, "Probing server on $pIp:$port...")
-                    for (i in 1..20) { // Up to 4 seconds total
+                    for (i in 1..10) { 
                         Thread.sleep(200)
                         try {
                             val connection = probeUrl.openConnection() as java.net.HttpURLConnection
-                            connection.connectTimeout = 400
-                            connection.readTimeout = 400
+                            connection.connectTimeout = 300
+                            connection.readTimeout = 300
                             val text = connection.inputStream.bufferedReader().readText()
                             if (text == "pong") {
                                 ok = true
-                                Log.i(TAG, "Probe successful on $pIp")
+                                Log.i(TAG, "✅ Reachability confirmed on $pIp:$port")
                                 break@outer
                             }
                         } catch (_: Exception) {}
@@ -197,24 +219,19 @@ class ChhandaServer @Inject constructor(
                     server = engine
                     boundPort = port
                     _boundPortFlow.value = port
-                    Log.i(TAG, "✅ Server Verified: http://$ip:$port")
                     return
                 } else {
-                    // SENIOR FIX: If we can't probe it but no exception was thrown, 
-                    // it might just be local network isolation. Start it anyway as fallback.
-                    Log.w(TAG, "Port $port: probe timed out. Starting in unverified mode.")
+                    Log.w(TAG, "Port $port: local probe failed, but proceeding anyway (client-side connection may still work).")
                     server = engine
                     boundPort = port
                     _boundPortFlow.value = port
                     return
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Port $port startup error: ${e.message}")
-                _serverErrorFlow.value = "Port $port: ${e.message}"
+                Log.w(TAG, "Port $port binding failed: ${e.message}")
             }
         }
-        _serverErrorFlow.value = "CRITICAL: No port bound in range $requestedPort..${requestedPort + 10}"
-        Log.e(TAG, _serverErrorFlow.value!!)
+        _serverErrorFlow.value = "CRITICAL: No ports available for binding."
     }
 
     fun stop() {
@@ -300,10 +317,7 @@ class ChhandaServer @Inject constructor(
             }
             routing {
 
-                // /ping — bare minimum, useful for connectivity check
-                get("/ping") { call.respondText("pong") }
-
-                // /status — < 1ms, uses cached IP
+                // /status — < 1ms, high-priority diagnostic
                 get("/status") {
                     val loaded    = llmEngine.isModelLoaded()
                     val uptime    = (System.currentTimeMillis() - startTime) / 1000
@@ -311,10 +325,18 @@ class ChhandaServer @Inject constructor(
                     val liteRt    = llmEngine as? LiteRTLMEngine
                     val isLoading = liteRt?.isLoading ?: !loaded
                     val loadErr   = (liteRt?.lastLoadError ?: "").replace("\"", "'")
+                    
+                    call.response.headers.append("Access-Control-Allow-Origin", "*")
                     call.respondText(
                         """{"ok":true,"modelLoaded":$loaded,"isLoading":$isLoading,"loadError":"$loadErr","ip":"$addr","port":$capturedPort,"uptime":$uptime}""",
                         io.ktor.http.ContentType.Application.Json
                     )
+                }
+
+                // /ping — Bare minimum for connectivity verification
+                get("/ping") {
+                    call.response.headers.append("Access-Control-Allow-Origin", "*")
+                    call.respondText("pong")
                 }
 
                 post("/register") {
@@ -342,6 +364,27 @@ class ChhandaServer @Inject constructor(
                     call.respondText(json, io.ktor.http.ContentType.Application.Json)
                 }
 
+                // Captive Portal Detection Routes (Android, iOS, Windows, Chrome)
+                val portalRoutes = listOf(
+                    "/generate_204", "/gen_204", "/check_network_status", 
+                    "/hotspot-detect.html", "/library/test/success.html",
+                    "/success.txt", "/ncsi.txt", "/connecttest.txt",
+                    "/redirect", "/wpad.dat"
+                )
+                portalRoutes.forEach { route ->
+                    get(route) {
+                        Log.d(TAG, "Captive portal probe on $route")
+                        if (route.contains("204")) {
+                            call.respond(io.ktor.http.HttpStatusCode.NoContent)
+                        } else if (route.contains("success") || route.contains("connecttest")) {
+                            call.respondText("success")
+                        } else {
+                            val apiKey = settingsRepository.apiKeyFlow.firstOrNull() ?: ""
+                            call.respondRedirect("/?key=$apiKey")
+                        }
+                    }
+                }
+
                 // / — Chat UI — no-store prevents stale cached page
                 get("/") {
                     val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
@@ -357,10 +400,27 @@ class ChhandaServer @Inject constructor(
                         return@get
                     }
 
+                    // SENIOR MOVE: Use the host requested by the client, NOT the detected IP
+                    // This is fail-proof because if the client reached this GET, they know the route.
+                    val clientUsedHost = call.request.host()
                     val remoteIp = call.request.local.remoteHost
                     val userAgent = call.request.headers["User-Agent"] ?: "Unknown"
                     
+                    val maxAllowed = settingsRepository.maxDevicesFlow.firstOrNull() ?: 5
+                    val fiveMinutesAgo = System.currentTimeMillis() - 5 * 60 * 1000
+                    val activeConnections = deviceDao.getActiveConnections().filter { it.lastActive > fiveMinutesAgo }
                     val existingDevice = deviceDao.getDeviceByIp(remoteIp)
+                    
+                    if (existingDevice == null && activeConnections.size >= maxAllowed) {
+                        call.response.headers.append("Cache-Control", "no-store")
+                        call.respondText(
+                            "<h1>Access Denied</h1><p>Maximum device limit reached (${maxAllowed}). Please disconnect other devices or increase the limit in settings.</p>",
+                            io.ktor.http.ContentType.Text.Html,
+                            io.ktor.http.HttpStatusCode.Forbidden
+                        )
+                        return@get
+                    }
+                    
                     val hasConnectedEarlier = existingDevice != null
                     val savedName = existingDevice?.deviceName ?: ""
                     
@@ -370,14 +430,8 @@ class ChhandaServer @Inject constructor(
                     val uniqueSources = chunks.map { it.source }.distinct().take(5)
                     val suggestions = uniqueSources.mapIndexed { index, source ->
                         val cleanSource = if (source.startsWith("http")) {
-                            try {
-                                java.net.URL(source).host
-                            } catch (e: Exception) {
-                                "this online resource"
-                            }
-                        } else {
-                            source
-                        }
+                            try { java.net.URL(source).host } catch (e: Exception) { "online resource" }
+                        } else { source }
                         
                         when (index % 3) {
                             0 -> "Can you provide a summary of $cleanSource?"
@@ -390,9 +444,15 @@ class ChhandaServer @Inject constructor(
                     
                     call.response.headers.append("Cache-Control", "no-store")
                     call.respondText(
-                        buildChatHtml(capturedPort, freshIp(), suggestions, hasConnectedEarlier, savedName, sessions),
+                        buildChatHtml(capturedPort, clientUsedHost, suggestions, hasConnectedEarlier, savedName, sessions),
                         io.ktor.http.ContentType.Text.Html
                     )
+                }
+
+                // CATCH-ALL REDIRECT: Redirect any unknown path to the home page (Captive Portal style)
+                get("{...}") {
+                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull() ?: ""
+                    call.respondRedirect("/?key=$apiKey")
                 }
 
                 post("/chat") {
@@ -529,11 +589,9 @@ class ChhandaServer @Inject constructor(
     <meta charset="UTF-8">
     <title>Chhanda</title>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
+            --font: system-ui, -apple-system, sans-serif;
             /* Material You (M3) Dark Theme Colors */
             --bg: #141218;
             --surface: #1D1B20;
@@ -556,7 +614,7 @@ class ChhandaServer @Inject constructor(
         }
         
         body {
-            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: var(--font);
             background: var(--bg);
             color: var(--fg);
             display: flex;
@@ -912,6 +970,9 @@ class ChhandaServer @Inject constructor(
         
         @media (max-width: 600px) {
             .msg-container { max-width: 85%; }
+            #title { display: none; }
+            #badge span { display: none; }
+            #hdr { padding: 4px 8px; }
         }
     </style>
 </head>
@@ -993,7 +1054,13 @@ class ChhandaServer @Inject constructor(
         
         const urlParams = new URLSearchParams(window.location.search);
         const apiKeyParam = urlParams.get('key');
-        let currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+        
+        let currentSessionId = localStorage.getItem('currentSessionId');
+        if (!currentSessionId) {
+            currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('currentSessionId', currentSessionId);
+        }
+        
         const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),
               btn=document.getElementById('btn'),badge=document.getElementById('badge'),
               bt=document.getElementById('bt'),ovl=document.getElementById('ovl'),
@@ -1236,6 +1303,7 @@ class ChhandaServer @Inject constructor(
             const val = sessionSel.value;
             if (val === 'new') {
                 currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('currentSessionId', currentSessionId);
                 msgs.innerHTML = ''; // Clear chat
                 const ai = document.createElement('div');
                 ai.className = 'msg s';
@@ -1243,6 +1311,7 @@ class ChhandaServer @Inject constructor(
                 msgs.appendChild(ai);
             } else {
                 currentSessionId = val;
+                localStorage.setItem('currentSessionId', currentSessionId);
                 loadChatHistory(val);
             }
         };
@@ -1308,6 +1377,12 @@ class ChhandaServer @Inject constructor(
                 });
             } catch(e) { console.error(e); }
         }
+
+        // Heartbeat to keep connection active
+        setInterval(() => {
+            fetch('/ping' + (apiKeyParam ? `?key=` + apiKeyParam : ''))
+                .catch(e => console.log('Heartbeat failed'));
+        }, 30000);
 
         btn.onclick=send;
         inp.addEventListener('keypress',e=>{if(e.key==='Enter'&&!btn.disabled)send();});
