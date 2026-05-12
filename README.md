@@ -51,7 +51,7 @@ This diagram illustrates the separation of concerns and how layers depend on eac
 
 ```mermaid
 graph TB
-    subgraph "Presentation Layer (UI & State)"
+    subgraph PL["Presentation Layer (UI & State)"]
         direction TB
         CS[ChatScreen]
         DS[DashboardScreen]
@@ -61,7 +61,7 @@ graph TB
         DS -.-> SVM
     end
     
-    subgraph "Domain Layer (Pure Business Logic)"
+    subgraph DL["Domain Layer (Pure Business Logic)"]
         direction TB
         SMUC[SendMessageUseCase]
         IDUC[IngestDocumentUseCase]
@@ -70,7 +70,7 @@ graph TB
         GSUC[GoogleSearchUseCase]
     end
     
-    subgraph "Data Layer (Persistence & AI Engines)"
+    subgraph DTL["Data Layer (Persistence & AI Engines)"]
         direction TB
         LE[LiteRTLMEngine]
         EE[LiteRTEmbeddingEngine]
@@ -78,16 +78,16 @@ graph TB
         RD[(Room Database)]
     end
     
-    subgraph "Infrastructure (System Services)"
+    subgraph INF["Infrastructure (System Services)"]
         direction TB
         CServ[ChhandaServer Ktor]
         IW[IngestionWorker]
     end
     
-    Presentation Layer --> Domain Layer
-    Domain Layer --> Data Layer
-    Infrastructure --> Domain Layer
-    Infrastructure --> Data Layer
+    PL --> DL
+    DL --> DTL
+    INF --> DL
+    INF --> DTL
 ```
 
 ---
