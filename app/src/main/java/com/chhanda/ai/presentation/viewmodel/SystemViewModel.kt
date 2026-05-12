@@ -291,6 +291,25 @@ class SystemViewModel @Inject constructor(
     private val _vectorDbUsage = MutableStateFlow(0L)
     val vectorDbUsage: StateFlow<Long> = _vectorDbUsage.asStateFlow()
 
+    val vectorStorageMetrics: StateFlow<String> = combine(vectorDbUsage, vectorDbCapacityBytes) { usage, capacity ->
+        val usageStr = if (usage > 1024 * 1024 * 1024) {
+            String.format(Locale.US, "%.2f GB", usage.toDouble() / (1024 * 1024 * 1024))
+        } else {
+            String.format(Locale.US, "%.1f MB", usage.toDouble() / (1024 * 1024))
+        }
+        
+        val capacityStr = if (capacity > 1024 * 1024 * 1024) {
+            String.format(Locale.US, "%.2f GB", capacity.toDouble() / (1024 * 1024 * 1024))
+        } else {
+            String.format(Locale.US, "%.1f MB", capacity.toDouble() / (1024 * 1024))
+        }
+        
+        "$usageStr / $capacityStr"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Calculating...")
+
+    private val _processorInfo = MutableStateFlow("Detecting...")
+    val processorInfo: StateFlow<String> = _processorInfo.asStateFlow()
+
     private val _tokensPerSec = MutableStateFlow("0.0")
     val tokensPerSec: StateFlow<String> = _tokensPerSec
 
@@ -749,6 +768,11 @@ class SystemViewModel @Inject constructor(
                 
                 // 2. Vector DB Size (Database file + WAL + SHM)
                 val vectorUsage = getVectorDbSize()
+                
+                // Processor Info
+                val cpuName = getCpuName()
+                val cores = Runtime.getRuntime().availableProcessors()
+                _processorInfo.value = "$cpuName ($cores Cores)"
                 
                 // 3. Hardware Metrics
                 val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
@@ -1244,6 +1268,27 @@ class SystemViewModel @Inject constructor(
             }
         }
         return size
+    }
+
+    private fun getCpuName(): String {
+        try {
+            val file = java.io.File("/proc/cpuinfo")
+            if (file.exists()) {
+                val reader = file.bufferedReader()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    if (line!!.startsWith("Hardware") || line!!.startsWith("model name")) {
+                        val parts = line!!.split(":")
+                        if (parts.size > 1) {
+                            return parts[1].trim()
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SystemViewModel", "Failed to read cpuinfo: ${e.message}")
+        }
+        return android.os.Build.HARDWARE ?: android.os.Build.BOARD ?: "Unknown"
     }
 
     fun stopDownload(modelName: String) {

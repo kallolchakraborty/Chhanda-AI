@@ -68,6 +68,8 @@ fun DashboardScreen(
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val networkIps by viewModel.networkIps.collectAsState()
     val isTunnelActive by viewModel.isTunnelActive.collectAsState()
+    val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsState()
+    val processorInfo by viewModel.processorInfo.collectAsState()
     val tunnelUrl by viewModel.tunnelUrl.collectAsState()
     val publicUrl by viewModel.publicUrl.collectAsState()
     val displayPort = if (actualPort > 0) actualPort else 8888
@@ -239,10 +241,14 @@ fun DashboardScreen(
                     StatCard(
                         Modifier.weight(1f), 
                         Localization.getString("processor", appLanguage), 
-                        "${Runtime.getRuntime().availableProcessors()} Cores / Threads", 
+                        processorInfo, 
                         Icons.Default.Bolt
                     )
                 }
+            }
+            
+            item {
+                StatCard(Modifier.fillMaxWidth(), "Vector Storage", vectorStorageMetrics, androidx.compose.material.icons.Icons.Default.Save)
             }
             
             item {
@@ -862,14 +868,28 @@ fun DashboardScreen(
                     
                     val currentIp = if (selectedIp.isNotEmpty()) selectedIp else ip
                     val apiKey by viewModel.apiKey.collectAsState()
-                    val chatUrl = if (publicUrl.isNotBlank()) {
-                        "${publicUrl.removeSuffix("/")}?key=$apiKey"
+                    val baseServerUrl = if (publicUrl.isNotBlank()) {
+                        publicUrl.removeSuffix("/")
                     } else if (tunnelUrl.isNotEmpty()) {
-                        "$tunnelUrl?key=$apiKey"
+                        tunnelUrl.removeSuffix("/")
                     } else {
-                        "http://$currentIp:$displayPort?key=$apiKey"
+                        "http://$currentIp:$displayPort"
                     }
-                    val apiUrl = if (publicUrl.isNotBlank()) "$chatUrl/v1" else if (tunnelUrl.isNotEmpty()) "$chatUrl/v1" else "$chatUrl/$deviceModel/$activeModelName/v1"
+
+                    val continueConfig = """
+                    models:
+                      - name: Gemma 4 Local
+                        provider: openai
+                        model: gemma-4
+                        apiBase: $baseServerUrl
+                        apiKey: $apiKey
+                        roles:
+                          - chat
+                          - edit
+                          - autocomplete
+                    """.trimIndent()
+                    
+                    val apiUrl = "$baseServerUrl/v1"
                     
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally, 
@@ -904,7 +924,7 @@ fun DashboardScreen(
                                 border = androidx.compose.foundation.BorderStroke(2.dp, qrBorderColor)
                             ) {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
-                                    val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
+                                    val qrBitmap = remember(continueConfig) { QRCodeGenerator.generate(continueConfig, 300) }
                                     if (qrBitmap != null) {
                                         Image(
                                             bitmap = qrBitmap.asImageBitmap(),
@@ -918,13 +938,26 @@ fun DashboardScreen(
                             Spacer(Modifier.width(16.dp))
                             
                             Column(modifier = Modifier.weight(1f)) {
-                                ConnectionDetailCard(title = "API Endpoint", value = apiUrl)
-                                ConnectionDetailCard(
-                                    title = "API Key", 
-                                    value = if (isApiKeyVisibleInQr) apiKey else "••••••••••••",
-                                    trailingIcon = if (isApiKeyVisibleInQr) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    onIconClick = { isApiKeyVisibleInQr = !isApiKeyVisibleInQr }
+                                Text(
+                                    "Continue IDE Config",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
+                                Spacer(Modifier.height(4.dp))
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        continueConfig,
+                                        fontSize = 10.sp,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
                             }
                         }
                         
