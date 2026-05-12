@@ -137,12 +137,7 @@ class SystemViewModel @Inject constructor(
         _showLlmServerWarning.value = false
     }
 
-    fun isInternetAvailable(): Boolean {
-        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
+
 
     fun deleteFiles(ids: List<String>) {
         viewModelScope.launch {
@@ -1182,7 +1177,7 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    private fun isInternetAvailable(): Boolean {
+    fun isInternetAvailable(): Boolean {
         val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivityManager.activeNetwork ?: return false
         val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
