@@ -47,7 +47,7 @@ object GemmaPromptBuilder {
     }
 
     /**
-     * Constructs an augmented prompt for RAG scenarios.
+     * Constructs an augmented prompt for RAG scenarios with optimized inference instructions.
      */
     fun buildAugmentedPrompt(
         userMessage: String, 
@@ -56,18 +56,53 @@ object GemmaPromptBuilder {
     ): String {
         val stringBuilder = StringBuilder()
 
-        // Inject Context as a System Instruction if present
+        stringBuilder.append(START_TURN)
+            .append("system")
+            .append("\n")
+            .append("You are a fast, precise assistant.\n\n")
+            .append("Task:\n")
+            .append("Answer the user’s request using the fewest tokens possible while staying correct.\n\n")
+            .append("Output rules:\n")
+            .append("- Be concise.\n")
+            .append("- Prefer bullet points or short paragraphs.\n")
+            .append("- Avoid long explanations unless asked.\n")
+            .append("- If producing structured data, use valid JSON only.\n")
+            .append("- Do not add extra commentary.\n")
+            .append("- Keep the response deterministic and focused.\n")
+            .append("- If the request is ambiguous, ask one short clarifying question.\n\n")
+        
         if (context.isNotEmpty()) {
-            stringBuilder.append(START_TURN)
-                .append("system")
-                .append("\n")
-                .append("Use the following pieces of context to answer the user's question. If you don't know the answer, just say that you don't know, don't try to make up an answer.\n\nContext:\n")
+            stringBuilder.append("Context:\n")
                 .append(context)
+                .append("\n\n")
+        }
+        
+        stringBuilder.append(END_TURN)
+            .append("\n")
+
+        // Append historical context
+        history.forEach { (role, text) ->
+            stringBuilder.append(START_TURN)
+                .append(role)
+                .append("\n")
+                .append(text)
                 .append(END_TURN)
                 .append("\n")
         }
 
-        // Append historical context and current message
-        return stringBuilder.append(buildPrompt(userMessage, history)).toString()
+        // Append current user message
+        stringBuilder.append(START_TURN)
+            .append(USER_ROLE)
+            .append("\n")
+            .append("User request:\n")
+            .append(userMessage)
+            .append(END_TURN)
+            .append("\n")
+
+        // Append model start token
+        stringBuilder.append(START_TURN)
+            .append(MODEL_ROLE)
+            .append("\n")
+            return stringBuilder.toString()
     }
 }
