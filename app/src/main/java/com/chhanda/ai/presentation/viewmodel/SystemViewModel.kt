@@ -880,9 +880,16 @@ class SystemViewModel @Inject constructor(
                 val vectorUsage = getVectorDbSize()
                 
                 // Processor Info
-                val cpuName = getCpuName()
+                val rawCpu = getCpuName()
+                val cpuName = when {
+                    rawCpu.contains("qcom", ignoreCase = true) || rawCpu.contains("sm", ignoreCase = true) -> "Snapdragon"
+                    rawCpu.contains("exynos", ignoreCase = true) -> "Exynos"
+                    rawCpu.contains("mt", ignoreCase = true) || rawCpu.contains("mediatek", ignoreCase = true) -> "MediaTek"
+                    rawCpu.contains("tensor", ignoreCase = true) -> "Google Tensor"
+                    else -> rawCpu
+                }
                 val cores = Runtime.getRuntime().availableProcessors()
-                _processorInfo.value = "$cpuName ($cores Cores)"
+                _processorInfo.value = "$cpuName\n$cores Cores | $cores Threads"
                 
                 // 3. Hardware Metrics
                 val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager

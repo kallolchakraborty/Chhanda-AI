@@ -332,7 +332,7 @@ fun DashboardScreen(
                         Modifier.weight(1f), 
                         Localization.getString("processor", appLanguage), 
                         processorInfo, 
-                        Icons.Default.Bolt
+                        Icons.Default.DeveloperBoard
                     )
                 }
             }
@@ -1547,12 +1547,28 @@ fun StatCard(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Text(
-                value, 
-                fontSize = 20.sp, 
-                fontWeight = FontWeight.Black,
-                color = if (isAlert) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            val lines = value.split("\n")
+            if (lines.size > 1) {
+                Text(
+                    lines[0], 
+                    fontSize = 18.sp, 
+                    fontWeight = FontWeight.Black,
+                    color = if (isAlert) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    lines[1], 
+                    fontSize = 12.sp, 
+                    fontWeight = FontWeight.Medium,
+                    color = if (isAlert) Color.Red.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            } else {
+                Text(
+                    value, 
+                    fontSize = 20.sp, 
+                    fontWeight = FontWeight.Black,
+                    color = if (isAlert) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
