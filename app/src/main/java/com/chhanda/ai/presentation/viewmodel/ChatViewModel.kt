@@ -18,7 +18,8 @@ class ChatViewModel @Inject constructor(
     private val sendMessageUseCase: dagger.Lazy<SendMessageUseCase>,
     private val chatDao: ChatDao,
     private val settingsRepository: SettingsRepository,
-    private val llmEngineLazy: dagger.Lazy<LLMEngine>
+    private val llmEngineLazy: dagger.Lazy<LLMEngine>,
+    private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao
 ) : ViewModel() {
     private val llmEngine get() = llmEngineLazy.get()
     
@@ -33,6 +34,25 @@ class ChatViewModel @Inject constructor(
 
     private val _selectedFiles = MutableStateFlow<List<android.net.Uri>>(emptyList())
     val selectedFiles: StateFlow<List<android.net.Uri>> = _selectedFiles
+
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    val suggestions: StateFlow<List<String>> = _suggestions
+
+    init {
+        loadSuggestions()
+    }
+
+    fun loadSuggestions() {
+        viewModelScope.launch {
+            try {
+                val chunks = vectorChunkDao.getAll()
+                val uniqueSources = chunks.map { it.source }.distinct().take(5)
+                _suggestions.value = uniqueSources.map { "Summarize $it" }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
 
     val messages: StateFlow<List<com.chhanda.ai.data.repository.MessageEntity>> =
         chatDao.getMessagesForSession(sessionId)

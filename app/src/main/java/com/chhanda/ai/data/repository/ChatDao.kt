@@ -19,6 +19,9 @@ interface ChatDao {
     @Query("SELECT DISTINCT sessionId FROM chat_messages WHERE modelName = :modelName")
     fun getSessionIdsForModel(modelName: String): Flow<List<String>>
 
+    @Query("SELECT DISTINCT sessionId FROM chat_messages WHERE deviceId = :deviceId")
+    fun getSessionIdsForDevice(deviceId: String): Flow<List<String>>
+
     @Query("SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentMessages(limit: Int): List<MessageEntity>
 

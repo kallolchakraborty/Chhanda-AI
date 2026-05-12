@@ -140,50 +140,66 @@ class LiteRTLMEngine @Inject constructor(
             val contextLength = contextLengthStr.toIntOrNull() ?: 2048
             Log.d(TAG, "Dynamic context length: $contextLength")
 
-            try {
-                Log.d(TAG, "Attempting GPU initialization...")
-                val gpuConfig = EngineConfig(
-                    modelPath = path,
-                    backend = Backend.GPU(),
-                    maxNumTokens = contextLength,
-                    cacheDir = context.cacheDir.absolutePath
-                )
-                val engine = Engine(gpuConfig)
-                engine.initialize()
-                llmInference = engine
-                Log.i(TAG, "Model loaded successfully on GPU")
-            } catch (gpuError: Throwable) {
-                Log.w(TAG, "GPU initialization failed (${gpuError.localizedMessage}), falling back to CPU...")
+            var currentContextLength = contextLength
+            var loaded = false
+            var attempts = 0
+            
+            while (!loaded && attempts < 3) {
                 try {
-                    val cpuConfig = EngineConfig(
+                    Log.d(TAG, "Attempting GPU initialization with context: $currentContextLength")
+                    val gpuConfig = EngineConfig(
                         modelPath = path,
-                        backend = Backend.CPU(),
-                        maxNumTokens = contextLength,
+                        backend = Backend.GPU(),
+                        maxNumTokens = currentContextLength,
                         cacheDir = context.cacheDir.absolutePath
                     )
-                    val engine = Engine(cpuConfig)
+                    val engine = Engine(gpuConfig)
                     engine.initialize()
                     llmInference = engine
-                    Log.i(TAG, "Model loaded successfully on CPU")
-                } catch (cpuError: Throwable) {
-                    Log.e(TAG, "CPU fallback also failed", cpuError)
-                    val msg = cpuError.localizedMessage ?: cpuError.javaClass.simpleName
-                    
-                    // NEW: Clear cache and throw detailed error
+                    loaded = true
+                    Log.i(TAG, "Model loaded successfully on GPU")
+                } catch (gpuError: Throwable) {
+                    val gpuMsg = gpuError.localizedMessage ?: gpuError.javaClass.simpleName
+                    Log.w(TAG, "GPU failed: $gpuMsg, trying CPU fallback...")
                     try {
-                        context.cacheDir.deleteRecursively()
-                        Log.w(TAG, "Cleared cacheDir after initialization failure")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to clear cacheDir", e)
+                        val cpuConfig = EngineConfig(
+                            modelPath = path,
+                            backend = Backend.CPU(),
+                            maxNumTokens = currentContextLength,
+                            cacheDir = context.cacheDir.absolutePath
+                        )
+                        val engine = Engine(cpuConfig)
+                        engine.initialize()
+                        llmInference = engine
+                        loaded = true
+                        Log.i(TAG, "Model loaded successfully on CPU")
+                    } catch (cpuError: Throwable) {
+                        val msg = cpuError.localizedMessage ?: cpuError.javaClass.simpleName
+                        Log.e(TAG, "CPU fallback also failed: $msg")
+                        
+                        if (msg.contains("OutOfMemory", ignoreCase = true) || msg.contains("OOM", ignoreCase = true)) {
+                            currentContextLength /= 2
+                            if (currentContextLength < 512) {
+                                try {
+                                    context.cacheDir.deleteRecursively()
+                                    Log.w(TAG, "Cleared cacheDir after initialization failure")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to clear cacheDir", e)
+                                }
+                                throw Exception("Out of memory even with minimal context. Gemma needs ~1.5GB free RAM.")
+                            }
+                            Log.w(TAG, "OOM detected. Retrying with context length: $currentContextLength")
+                            attempts++
+                        } else {
+                            try {
+                                context.cacheDir.deleteRecursively()
+                            } catch (_: Exception) {}
+                            if (msg.contains("metadata", ignoreCase = true)) {
+                                throw Exception("Model metadata mismatch. Ensure you downloaded the exact .litertlm file.")
+                            }
+                            throw Exception("Engine Init Failed: $msg. Please restart your device.")
+                        }
                     }
-
-                    if (msg.contains("OutOfMemory", ignoreCase = true)) {
-                        throw Exception("Out of memory. Gemma 4 E2B needs ~1.5GB free RAM. Close other apps.")
-                    }
-                    if (msg.contains("metadata", ignoreCase = true)) {
-                        throw Exception("Model metadata mismatch. Ensure you downloaded the exact .litertlm file from litert-community.")
-                    }
-                    throw Exception("Engine Init Failed: $msg. Please restart your device to clear JNI memory.")
                 }
             }
             currentModelPath = path

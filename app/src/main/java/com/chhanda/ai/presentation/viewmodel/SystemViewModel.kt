@@ -393,12 +393,7 @@ class SystemViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Detecting...")
 
-    val serverActualPort: StateFlow<Int> = flow {
-        while(true) {
-            emit(chhandaServer.port)
-            delay(5000)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), -1)
+    val serverActualPort: StateFlow<Int> = chhandaServer.boundPortFlow
 
     val isVpnActive: StateFlow<Boolean> = flow {
         while(true) {
@@ -822,8 +817,15 @@ class SystemViewModel @Inject constructor(
 
     fun setServerPort(port: String) {
         viewModelScope.launch {
-            settingsRepository.setServerPort(port)
-            addLog("CONFIG", "Server port changed to $port", "INFO")
+            val oldPort = settingsRepository.serverPortFlow.first()
+            if (oldPort != port) {
+                settingsRepository.setServerPort(port)
+                addLog("CONFIG", "Server port changed to $port. Restarting server...", "INFO")
+                
+                val portInt = port.toIntOrNull() ?: 8888
+                val finalPort = if (portInt == 8000 || portInt == 8080) 8888 else portInt
+                com.chhanda.ai.service.ChhandaForegroundService.start(context, finalPort, maxDevices.value)
+            }
         }
     }
 
@@ -875,13 +877,21 @@ class SystemViewModel @Inject constructor(
             _sharedModels.value = _sharedModels.value.map { it.copy(isActive = it.name == modelName) }
             addLog("SYSTEM", "Initializing model: $modelName", "INFO")
 
-            // Set default context length based on model
-            val defaultContextLength = when {
-                modelName.contains("Gemma-4-E2B", ignoreCase = true) -> 2048
-                modelName.contains("Gemma-4-E4B", ignoreCase = true) -> 4096
-                else -> 2048
+            // Automatic calculation of optimized context length based on available RAM
+            val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val memoryInfo = android.app.ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memoryInfo)
+            val availableMegs = memoryInfo.availMem / (1024 * 1024)
+            
+            val optimizedContextLength = when {
+                availableMegs < 1000 -> 512  // Very low memory
+                availableMegs < 2000 -> 1024 // Low memory
+                availableMegs < 3000 -> 2048 // Medium memory
+                else -> 4096                 // High memory
             }
-            setContextLength(defaultContextLength)
+            
+            addLog("SYSTEM", "Auto-calculated optimized context length: $optimizedContextLength based on ${availableMegs}MB free RAM", "INFO")
+            setContextLength(optimizedContextLength)
 
             try {
                 _isModelLoading.value = true
@@ -1300,6 +1310,7 @@ class SystemViewModel @Inject constructor(
             uploadedFileDao.markMultipleAsDeleted(ids)
             vectorStore.clear()
             _vectorDbUsage.value = 0L
+            updateStats()
             addLog("STORAGE", "Deep purge complete: Files and DB cleared", "SUCCESS")
         }
     }

@@ -69,8 +69,7 @@ fun KnowledgeBaseScreen(
     }
     val context = LocalContext.current
     
-    var showWipeConfirm by remember { mutableStateOf(false) }
-    var showEmptyVectorConfirm by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
     
     var showUrlDialog by remember { mutableStateOf(false) }
@@ -167,30 +166,16 @@ fun KnowledgeBaseScreen(
             
             item {
                 Spacer(Modifier.height(24.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = { showWipeConfirm = true },
-                        enabled = !isIngesting,
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
-                    ) {
-                        Icon(Icons.Default.DeleteForever, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(Localization.getString("wipe_memory", appLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    Button(
-                        onClick = { showEmptyVectorConfirm = true },
-                        enabled = !isIngesting,
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4B5563))
-                    ) {
-                        Icon(Icons.Default.LayersClear, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(Localization.getString("empty_vector_db", appLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
+                Button(
+                    onClick = { showResetDialog = true },
+                    enabled = !isIngesting,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
+                ) {
+                    Icon(Icons.Default.DeleteForever, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Localization.getString("wipe_memory", appLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(80.dp))
             }
@@ -220,48 +205,50 @@ fun KnowledgeBaseScreen(
             onDismiss = { viewModel.dismissIngestionProgress() }
         )
 
-        if (showWipeConfirm) {
+        if (showResetDialog) {
             AlertDialog(
-                onDismissRequest = { showWipeConfirm = false },
-                title = { Text(Localization.getString("purge_history_title", appLanguage)) },
-                text = { Text(Localization.getString("purge_history_text", appLanguage)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.clearAllData()
-                            showWipeConfirm = false
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text(Localization.getString("confirm", appLanguage))
+                onDismissRequest = { showResetDialog = false },
+                title = { Text(Localization.getString("wipe_memory", appLanguage), fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Choose deletion type:", fontWeight = FontWeight.Bold)
+                        
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.clearVectorStore()
+                                    showResetDialog = false
+                                },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(Localization.getString("empty_vector_db", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.height(4.dp))
+                                Text(Localization.getString("empty_vector_db_text", appLanguage), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.clearAllData()
+                                    showResetDialog = false
+                                },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(Localization.getString("wipe_memory", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.height(4.dp))
+                                Text(Localization.getString("purge_history_text", appLanguage), fontSize = 12.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        }
                     }
                 },
+                confirmButton = {},
                 dismissButton = {
-                    TextButton(onClick = { showWipeConfirm = false }) {
-                        Text(Localization.getString("cancel", appLanguage))
-                    }
-                }
-            )
-        }
-
-        if (showEmptyVectorConfirm) {
-            AlertDialog(
-                onDismissRequest = { showEmptyVectorConfirm = false },
-                title = { Text(Localization.getString("empty_vector_db", appLanguage)) },
-                text = { Text(Localization.getString("empty_vector_db_text", appLanguage)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.clearVectorStore()
-                            showEmptyVectorConfirm = false
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text(Localization.getString("confirm", appLanguage))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showEmptyVectorConfirm = false }) {
+                    TextButton(onClick = { showResetDialog = false }) {
                         Text(Localization.getString("cancel", appLanguage))
                     }
                 }

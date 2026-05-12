@@ -13,6 +13,7 @@ import kotlin.math.sqrt
  */
 
 class LocalVectorStore @javax.inject.Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val vectorChunkDao: VectorChunkDao,
     private val settingsRepository: SettingsRepository
 ) : VectorStore {
@@ -37,7 +38,7 @@ class LocalVectorStore @javax.inject.Inject constructor(
 
     override suspend fun search(query: Embedding, topK: Int, modelId: String): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         // Universal RAG: Search across all relevant knowledge
-        val entities = try { vectorChunkDao.getAll() } catch (e: Exception) { 
+        val entities = try { vectorChunkDao.getAllForModel(modelId) } catch (e: Exception) { 
             android.util.Log.e("LocalVectorStore", "Search failed: ${e.message}")
             emptyList() 
         }
@@ -71,7 +72,6 @@ class LocalVectorStore @javax.inject.Inject constructor(
         android.util.Log.d("LocalVectorStore", "Search complete. Max score found: $maxScore. Using threshold 0.10")
         
         results
-            .filter { it.score >= 0.10f } 
             .sortedByDescending { it.score }
             .take(topK)
     }
@@ -97,10 +97,15 @@ class LocalVectorStore @javax.inject.Inject constructor(
 
     override suspend fun getStorageUsage(): StorageStats {
         val entities = vectorChunkDao.getAll()
-        val capacityGb = settingsRepository.vectorDbCapacityFlow.first()
+        
+        val statFs = android.os.StatFs(context.filesDir.path)
+        val availableBytes = statFs.availableBlocksLong * statFs.blockSizeLong
+        val dynamicLimit = (availableBytes * 0.15).toLong()
+        val finalCapacity = maxOf(1024L * 1024 * 1024, dynamicLimit)
+        
         return StorageStats(
             usedBytes = entities.size * 2048L,
-            totalCapacityBytes = capacityGb.toLong() * 1024 * 1024 * 1024,
+            totalCapacityBytes = finalCapacity,
             fileCount = entities.size
         )
     }

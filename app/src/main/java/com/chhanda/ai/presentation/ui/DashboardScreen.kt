@@ -234,25 +234,13 @@ fun DashboardScreen(
             }
             
             item {
-                val usageGb = vectorDbUsage.toDouble() / (1024 * 1024 * 1024)
-                val capacityGb = vectorDbCapacityBytes.toDouble() / (1024 * 1024 * 1024)
-                val isDbAlert = vectorDbUsage.toDouble() >= (vectorDbCapacityBytes.toDouble() * 0.9)
-                val usageMb = vectorDbUsage.toDouble() / (1024 * 1024)
-                
-                val displayValue = if (usageGb >= 1.0) {
-                    String.format(java.util.Locale.US, "%.2f / %.1f GB", usageGb, capacityGb)
-                } else {
-                    String.format(java.util.Locale.US, "%.1f MB / %.1f GB", usageMb, capacityGb)
-                }
-                
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     StatCard(Modifier.weight(1f), Localization.getString("app_storage", appLanguage), appStorageUsage, Icons.Default.Storage)
                     StatCard(
                         Modifier.weight(1f), 
-                        Localization.getString("vector_db", appLanguage), 
-                        displayValue, 
-                        Icons.Default.Dns,
-                        isAlert = isDbAlert
+                        Localization.getString("processor", appLanguage), 
+                        "${Runtime.getRuntime().availableProcessors()} Cores / Threads", 
+                        Icons.Default.Bolt
                     )
                 }
             }
@@ -849,6 +837,29 @@ fun DashboardScreen(
                     var selectedIp by remember { mutableStateOf("") }
                     LaunchedEffect(networkIps) { if (selectedIp.isEmpty() && networkIps.isNotEmpty()) selectedIp = networkIps.first() }
                     
+                    val activeDevices = connectedDevices.filter { it.isCurrentlyConnected }
+                    var previousActiveCount by remember { mutableStateOf(activeDevices.size) }
+                    var showConnectionAnimation by remember { mutableStateOf(false) }
+                    
+                    LaunchedEffect(activeDevices.size) {
+                        if (activeDevices.size > previousActiveCount) {
+                            showConnectionAnimation = true
+                            android.widget.Toast.makeText(context, "New device connected!", android.widget.Toast.LENGTH_SHORT).show()
+                            kotlinx.coroutines.delay(2000)
+                            showConnectionAnimation = false
+                        }
+                        previousActiveCount = activeDevices.size
+                    }
+                    
+                    val qrScale by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (showConnectionAnimation) 1.1f else 1.0f,
+                        animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioHighBouncy)
+                    )
+                    
+                    val qrBorderColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = if (showConnectionAnimation) Color(0xFF4ADE80) else Color.LightGray.copy(alpha = 0.3f)
+                    )
+                    
                     val currentIp = if (selectedIp.isNotEmpty()) selectedIp else ip
                     val apiKey by viewModel.apiKey.collectAsState()
                     val chatUrl = if (publicUrl.isNotBlank()) {
@@ -885,10 +896,12 @@ fun DashboardScreen(
                         ) {
                             // Compact QR Code
                             Surface(
-                                modifier = Modifier.size(110.dp),
+                                modifier = Modifier
+                                    .size(110.dp)
+                                    .scale(qrScale),
                                 color = Color.White,
                                 shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+                                border = androidx.compose.foundation.BorderStroke(2.dp, qrBorderColor)
                             ) {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
                                     val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
@@ -937,21 +950,72 @@ fun DashboardScreen(
                         }
                         
                         // Configs - Stacked and leaner
-                        AssistantConfigSection(
-                            name = "Continue Config",
-                            isExpanded = expandedAssistant == "continue",
-                            onToggle = { expandedAssistant = if (expandedAssistant == "continue") null else "continue" },
-                            config = """{"title": "Chhanda", "provider": "openai", "model": "$activeModelName", "apiBase": "$apiUrl", "apiKey": "$apiKey"}"""
-                        )
+                        val combinedConfig = """
+                            // Continue (.continue/config.json)
+                            {
+                              "title": "Chhanda",
+                              "provider": "openai",
+                              "model": "$activeModelName",
+                              "apiBase": "$apiUrl",
+                              "apiKey": "$apiKey"
+                            }
+                            
+                            // Cline (UI Settings)
+                            Provider: OpenAI
+                            Base URL: $apiUrl
+                            Model ID: $activeModelName
+                            API Key: $apiKey
+                        """.trimIndent()
                         
-                        Spacer(Modifier.height(8.dp))
+                        val context = androidx.compose.ui.platform.LocalContext.current
                         
-                        AssistantConfigSection(
-                            name = "Cline Config",
-                            isExpanded = expandedAssistant == "cline",
-                            onToggle = { expandedAssistant = if (expandedAssistant == "cline") null else "cline" },
-                            config = """provider: "openai", model: "$activeModelName", apiBase: "$apiUrl", apiKey: "$apiKey""""
-                        )
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("IDE Configuration", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.weight(1f))
+                                IconButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("Config", combinedConfig)
+                                        clipboard.setPrimaryClip(clip)
+                                        android.widget.Toast.makeText(context, "Config copied!", android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = {
+                                        val sendIntent: android.content.Intent = android.content.Intent().apply {
+                                            action = android.content.Intent.ACTION_SEND
+                                            putExtra(android.content.Intent.EXTRA_TEXT, combinedConfig)
+                                            type = "text/plain"
+                                        }
+                                        val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                                        context.startActivity(shareIntent)
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Surface(
+                                color = Color.Black.copy(alpha = 0.05f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    combinedConfig,
+                                    modifier = Modifier.padding(8.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
                     }
                     
                     Spacer(Modifier.height(16.dp))

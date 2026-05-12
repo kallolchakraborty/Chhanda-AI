@@ -31,7 +31,7 @@ import java.net.ServerSocket
 data class WebAttachment(val name: String, val type: String, val data: String)
 
 @Serializable
-data class WebMessage(val text: String, val role: String = "user", val attachments: List<WebAttachment> = emptyList(), val language: String = "en")
+data class WebMessage(val text: String, val role: String = "user", val attachments: List<WebAttachment> = emptyList(), val language: String = "en", val sessionId: String? = null)
 
 @Serializable
 data class RegisterRequest(val name: String)
@@ -55,7 +55,8 @@ class ChhandaServer @Inject constructor(
     private val chatDao: ChatDao,
     private val deviceDao: DeviceDao,
     private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
-    private val sendMessageUseCaseLazy: dagger.Lazy<SendMessageUseCase>
+    private val sendMessageUseCaseLazy: dagger.Lazy<SendMessageUseCase>,
+    private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao
 ) {
     private val llmEngine get() = llmEngineLazy.get()
     private val sendMessageUseCase get() = sendMessageUseCaseLazy.get()
@@ -332,6 +333,15 @@ class ChhandaServer @Inject constructor(
                     call.respond(mapOf("success" to true))
                 }
 
+                get("/chat/history/{sessionId}") {
+                    val sessionId = call.parameters["sessionId"] ?: return@get call.respond(io.ktor.http.HttpStatusCode.BadRequest)
+                    val messages = chatDao.getMessagesForSession(sessionId).firstOrNull() ?: emptyList()
+                    val json = messages.joinToString(",", "[", "]") { msg ->
+                        """{"text":"${msg.text.replace("\"", "\\\"").replace("\n", "\\n")}","role":"${msg.role}","timestamp":${msg.timestamp}}"""
+                    }
+                    call.respondText(json, io.ktor.http.ContentType.Application.Json)
+                }
+
                 // / — Chat UI — no-store prevents stale cached page
                 get("/") {
                     val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
@@ -349,11 +359,22 @@ class ChhandaServer @Inject constructor(
 
                     val remoteIp = call.request.local.remoteHost
                     val userAgent = call.request.headers["User-Agent"] ?: "Unknown"
+                    
+                    val existingDevice = deviceDao.getDeviceByIp(remoteIp)
+                    val hasConnectedEarlier = existingDevice != null
+                    val savedName = existingDevice?.deviceName ?: ""
+                    
                     trackDevice(remoteIp, userAgent)
+                    
+                    val chunks = try { vectorChunkDao.getAll() } catch (e: Exception) { emptyList() }
+                    val uniqueSources = chunks.map { it.source }.distinct().take(5)
+                    val suggestions = uniqueSources.map { "Summarize $it" }
+                    
+                    val sessions = try { chatDao.getSessionIdsForDevice(remoteIp).firstOrNull() ?: emptyList() } catch(e: Exception) { emptyList() }
                     
                     call.response.headers.append("Cache-Control", "no-store")
                     call.respondText(
-                        buildChatHtml(capturedPort, freshIp()),
+                        buildChatHtml(capturedPort, freshIp(), suggestions, hasConnectedEarlier, savedName, sessions),
                         io.ktor.http.ContentType.Text.Html
                     )
                 }
@@ -391,12 +412,12 @@ class ChhandaServer @Inject constructor(
                             val languageName = when(msg.language) {
                                 "bn" -> "Bengali"
                                 "hi" -> "Hindi"
-                                "es" -> "Spanish"
                                 "fr" -> "French"
                                 "de" -> "German"
                                 else -> "English"
                             }
-                            sendMessageUseCase(msg.text, remoteIp, llmEngine.getCurrentModelName(), "api_session", uris, languageName).collect { upd ->
+                            val sessionIdToUse = msg.sessionId ?: "api_session"
+                            sendMessageUseCase(msg.text, remoteIp, llmEngine.getCurrentModelName(), sessionIdToUse, uris, languageName).collect { upd ->
                                 when (upd) {
                                     is TokenUpdate.Partial -> { write("data: ${upd.text.replace("\n","\\n")}\n\n"); flush() }
                                     is TokenUpdate.Final   -> { write("data: [DONE]\n\n"); flush() }
@@ -486,7 +507,7 @@ class ChhandaServer @Inject constructor(
 
     // ── HTML ───────────────────────────────────────────────────────────────────
 
-    private fun buildChatHtml(port: Int, ip: String) = """<!DOCTYPE html>
+    private fun buildChatHtml(port: Int, ip: String, suggestions: List<String> = emptyList(), hasConnectedEarlier: Boolean, savedName: String, sessions: List<String>) = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -805,6 +826,22 @@ class ChhandaServer @Inject constructor(
             display: inline-block;
             animation: pulse-op 1.5s infinite;
         }
+        
+        .suggest-btn {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--primary);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .suggest-btn:hover {
+            background: var(--border);
+            color: var(--fg);
+        }
         @keyframes pulse-op {
             0% { opacity: 0.6; }
             50% { opacity: 1; }
@@ -882,9 +919,11 @@ class ChhandaServer @Inject constructor(
         </div>
         <span id="title"></span>
         <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
+        <select id="session-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px; margin-left:8px;">
+            <option value="new">New Chat</option>
+        </select>
         <select id="lang-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px; margin-left:8px;">
             <option value="en">English</option>
-            <option value="es">Español</option>
             <option value="fr">Français</option>
             <option value="de">Deutsch</option>
             <option value="hi">Hindi</option>
@@ -900,6 +939,11 @@ class ChhandaServer @Inject constructor(
         <div class="msg-container s"><div class="msg s">Connection established with Node at ${ip}:${port}</div></div>
     </div>
     <div id="ftr">
+        <div id="suggestions" style="display:flex; gap:8px; overflow-x:auto; padding:8px 16px; margin-bottom:4px;">
+            ${suggestions.joinToString("") { suggestion ->
+                """<button class="suggest-btn" onclick="if(!document.getElementById('inp').disabled){document.getElementById('inp').value='${suggestion.replace("'", "\\'")}';document.getElementById('btn').click();}">$suggestion</button>"""
+            }}
+        </div>
         <div id="row">
             <button id="clip-btn" style="background:transparent; border:none; color:var(--muted); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -927,8 +971,13 @@ class ChhandaServer @Inject constructor(
         </div>
     </div>
     <script>
+        const initialSessions = ${sessions.joinToString(",", "[", "]") { "\"$it\"" }};
+        const hasConnectedEarlier = $hasConnectedEarlier;
+        const savedName = "$savedName";
+        
         const urlParams = new URLSearchParams(window.location.search);
         const apiKeyParam = urlParams.get('key');
+        let currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
         const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),
               btn=document.getElementById('btn'),badge=document.getElementById('badge'),
               bt=document.getElementById('bt'),ovl=document.getElementById('ovl'),
@@ -1010,13 +1059,13 @@ class ChhandaServer @Inject constructor(
             if(!ready)return;
             const txt=inp.value.trim();if(!txt)return;
             inp.value='';inp.disabled=true;btn.disabled=true;
-            addMsg(txt,'u');const ai=addMsg('Thinking…','a');
+            addMsg(txt,'u');const ai=addMsg('Thinking…','a');ai.innerHTML = `<div class="think-loader">⚡ Thinking...</div>`;
             let tokenCount = 0;
             let startTime = null;
             try {
                 const res=await fetch('/chat?key='+apiKeyParam,{method:'POST',
                     headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({text:txt,role:'user', attachments: selectedFiles, language: document.getElementById('lang-sel').value})});
+                    body:JSON.stringify({text:txt,role:'user', attachments: selectedFiles, language: document.getElementById('lang-sel').value, sessionId: currentSessionId})});
                 
                 selectedFiles = [];
                 clipBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>`;
@@ -1156,9 +1205,65 @@ class ChhandaServer @Inject constructor(
             container.appendChild(actions);
         }
 
+        // Session Management
+        const sessionSel = document.getElementById('session-sel');
+        
+        // Populate sessions
+        initialSessions.forEach(sid => {
+            const opt = document.createElement('option');
+            opt.value = sid;
+            opt.textContent = sid.substring(0, 8) + '...'; // truncate for UI
+            sessionSel.appendChild(opt);
+        });
+        
+        sessionSel.onchange = () => {
+            const val = sessionSel.value;
+            if (val === 'new') {
+                currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
+                msgs.innerHTML = ''; // Clear chat
+                const ai = document.createElement('div');
+                ai.className = 'msg s';
+                ai.textContent = 'Started a new chat session.';
+                msgs.appendChild(ai);
+            } else {
+                currentSessionId = val;
+                loadChatHistory(val);
+            }
+        };
+        
+        function loadChatHistory(sid) {
+            msgs.innerHTML = '<div class="think-loader">⚡ Loading history...</div>'; // Show loader
+            fetch(`/chat/history/` + sid + (apiKeyParam ? `?key=` + apiKeyParam : ''))
+                .then(r => r.json())
+                .then(data => {
+                    msgs.innerHTML = '';
+                    if (data.length === 0) {
+                        const ai = document.createElement('div');
+                        ai.className = 'msg s';
+                        ai.textContent = 'No messages in this chat.';
+                        msgs.appendChild(ai);
+                    } else {
+                        data.forEach(m => {
+                            const div = document.createElement('div');
+                            div.className = m.role === 'user' ? 'msg u' : 'msg a';
+                            div.textContent = m.text;
+                            msgs.appendChild(div);
+                        });
+                        msgs.scrollTop = msgs.scrollHeight;
+                    }
+                })
+                .catch(e => {
+                    msgs.innerHTML = '';
+                    const ai = document.createElement('div');
+                    ai.className = 'msg s';
+                    ai.textContent = 'Failed to load history.';
+                    msgs.appendChild(ai);
+                });
+        }
+
         // Name Prompt Logic
-        let userName = localStorage.getItem('userName');
-        if (!userName) {
+        let userName = localStorage.getItem('userName') || savedName;
+        if (!userName && !hasConnectedEarlier) {
             nameModal.style.display = 'flex';
             nameBtn.onclick = () => {
                 const val = nameInp.value.trim();
@@ -1170,7 +1275,12 @@ class ChhandaServer @Inject constructor(
             };
             nameInp.addEventListener('keypress', e => { if (e.key === 'Enter') nameBtn.click(); });
         } else {
-            registerName(userName);
+            if (userName) {
+                localStorage.setItem('userName', userName);
+                registerName(userName);
+            } else {
+                registerName("Device"); // fallback
+            }
         }
         
         async function registerName(name) {

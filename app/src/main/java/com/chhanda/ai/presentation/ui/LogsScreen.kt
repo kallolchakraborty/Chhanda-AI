@@ -49,6 +49,8 @@ fun LogsScreen(
     var selectedStatus by remember { mutableStateOf("ALL") }
     var sortDescending by remember { mutableStateOf(true) }
     var filterExpanded by remember { mutableStateOf(false) }
+    var sortBy by remember { mutableStateOf("DATE") }
+    var sortExpanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -76,7 +78,7 @@ fun LogsScreen(
         }
     )
     
-    val filteredLogs = remember(logs, searchQuery, selectedStatus, sortDescending) {
+    val filteredLogs = remember(logs, searchQuery, selectedStatus, sortBy, sortDescending) {
         val baseList = if (searchQuery.isBlank()) {
             logs
         } else {
@@ -93,7 +95,14 @@ fun LogsScreen(
             baseList.filter { it.status == selectedStatus }
         }
 
-        if (sortDescending) filtered else filtered.reversed()
+        val sorted = when(sortBy) {
+            "DATE" -> filtered
+            "TAG" -> filtered.sortedBy { it.tag }
+            "STATUS" -> filtered.sortedBy { it.status }
+            else -> filtered
+        }
+
+        if (sortDescending) sorted.reversed() else sorted
     }
 
     Scaffold(
@@ -208,6 +217,56 @@ fun LogsScreen(
                 }
 
                 // Sorting Button
+                Box {
+                    Surface(
+                        onClick = { sortExpanded = true },
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(44.dp).width(100.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                when(sortBy) {
+                                    "DATE" -> "Date"
+                                    "TAG" -> "Type"
+                                    "STATUS" -> "Status"
+                                    else -> "Sort"
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Icon(Icons.Default.Sort, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = sortExpanded,
+                        onDismissRequest = { sortExpanded = false }
+                    ) {
+                        listOf("DATE", "TAG", "STATUS").forEach { option ->
+                            DropdownMenuItem(
+                                text = { 
+                                    Text(when(option) {
+                                        "DATE" -> "Date"
+                                        "TAG" -> "Type"
+                                        "STATUS" -> "Status"
+                                        else -> option
+                                    })
+                                },
+                                onClick = {
+                                    sortBy = option
+                                    sortExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Direction Toggle
                 Surface(
                     onClick = { sortDescending = !sortDescending },
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -216,8 +275,8 @@ fun LogsScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = if (sortDescending) Icons.Default.Sort else Icons.Default.SortByAlpha,
-                            contentDescription = "Sort Order",
+                            imageVector = if (sortDescending) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                            contentDescription = "Sort Direction",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
