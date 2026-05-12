@@ -77,8 +77,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
         } while (redirectCount < 10)
 
+        Log.d(TAG, "Final response code: $responseCode")
         if (responseCode !in 200..299) {
-            throw Exception("Server returned code $responseCode")
+            throw Exception("Server returned code $responseCode for URL: $currentUrl")
         }
 
         Log.i(TAG, "Starting download: $urlStr -> ${finalFile.name}")

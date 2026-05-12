@@ -47,7 +47,23 @@ class ChatViewModel @Inject constructor(
             try {
                 val chunks = vectorChunkDao.getAll()
                 val uniqueSources = chunks.map { it.source }.distinct().take(5)
-                _suggestions.value = uniqueSources.map { "Summarize $it" }
+                _suggestions.value = uniqueSources.mapIndexed { index, source ->
+                    val cleanSource = if (source.startsWith("http")) {
+                        try {
+                            java.net.URL(source).host
+                        } catch (e: Exception) {
+                            "this online resource"
+                        }
+                    } else {
+                        source
+                    }
+                    
+                    when (index % 3) {
+                        0 -> "Can you provide a summary of $cleanSource?"
+                        1 -> "What are the key topics discussed in $cleanSource?"
+                        else -> "Tell me more about the information from $cleanSource."
+                    }
+                }
             } catch (e: Exception) {
                 // Ignore
             }

@@ -368,7 +368,23 @@ class ChhandaServer @Inject constructor(
                     
                     val chunks = try { vectorChunkDao.getAll() } catch (e: Exception) { emptyList() }
                     val uniqueSources = chunks.map { it.source }.distinct().take(5)
-                    val suggestions = uniqueSources.map { "Summarize $it" }
+                    val suggestions = uniqueSources.mapIndexed { index, source ->
+                        val cleanSource = if (source.startsWith("http")) {
+                            try {
+                                java.net.URL(source).host
+                            } catch (e: Exception) {
+                                "this online resource"
+                            }
+                        } else {
+                            source
+                        }
+                        
+                        when (index % 3) {
+                            0 -> "Can you provide a summary of $cleanSource?"
+                            1 -> "What are the key topics discussed in $cleanSource?"
+                            else -> "Tell me more about the information from $cleanSource."
+                        }
+                    }
                     
                     val sessions = try { chatDao.getSessionIdsForDevice(remoteIp).firstOrNull() ?: emptyList() } catch(e: Exception) { emptyList() }
                     
@@ -550,8 +566,8 @@ class ChhandaServer @Inject constructor(
         #hdr {
             display: flex;
             align-items: center;
-            gap: 16px;
-            padding: 12px 16px;
+            gap: 8px;
+            padding: 8px 12px;
             background: var(--surface);
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
@@ -559,9 +575,9 @@ class ChhandaServer @Inject constructor(
         }
         
         #logo {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
             background: #ffffff;
             display: flex;
             align-items: center;
@@ -571,7 +587,7 @@ class ChhandaServer @Inject constructor(
         
         #title {
             font-weight: 500;
-            font-size: 20px;
+            font-size: 16px;
             color: var(--fg);
         }
         
@@ -583,10 +599,10 @@ class ChhandaServer @Inject constructor(
             margin-left: auto;
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 12px;
+            gap: 4px;
+            font-size: 11px;
             font-weight: 500;
-            padding: 6px 16px;
+            padding: 4px 8px;
             border-radius: 100px;
             border: 1px solid var(--border);
             color: var(--muted);
@@ -919,10 +935,10 @@ class ChhandaServer @Inject constructor(
         </div>
         <span id="title"></span>
         <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
-        <select id="session-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px; margin-left:8px;">
+        <select id="session-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px;">
             <option value="new">New Chat</option>
         </select>
-        <select id="lang-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px; margin-left:8px;">
+        <select id="lang-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px;">
             <option value="en">English</option>
             <option value="fr">Français</option>
             <option value="de">Deutsch</option>

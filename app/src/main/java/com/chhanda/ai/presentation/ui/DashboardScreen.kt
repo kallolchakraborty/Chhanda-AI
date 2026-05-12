@@ -68,7 +68,7 @@ fun DashboardScreen(
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val networkIps by viewModel.networkIps.collectAsState()
     val isTunnelActive by viewModel.isTunnelActive.collectAsState()
-    val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsState()
+
     val processorInfo by viewModel.processorInfo.collectAsState()
     val tunnelUrl by viewModel.tunnelUrl.collectAsState()
     val publicUrl by viewModel.publicUrl.collectAsState()
@@ -247,9 +247,7 @@ fun DashboardScreen(
                 }
             }
             
-            item {
-                StatCard(Modifier.fillMaxWidth(), "Vector Storage", vectorStorageMetrics, androidx.compose.material.icons.Icons.Default.Save)
-            }
+
             
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -924,7 +922,8 @@ fun DashboardScreen(
                                 border = androidx.compose.foundation.BorderStroke(2.dp, qrBorderColor)
                             ) {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(8.dp)) {
-                                    val qrBitmap = remember(continueConfig) { QRCodeGenerator.generate(continueConfig, 300) }
+                                    val chatUrl = "$baseServerUrl?key=$apiKey"
+                                    val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 300) }
                                     if (qrBitmap != null) {
                                         Image(
                                             bitmap = qrBitmap.asImageBitmap(),
@@ -938,27 +937,32 @@ fun DashboardScreen(
                             Spacer(Modifier.width(16.dp))
                             
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Continue IDE Config",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        continueConfig,
-                                        fontSize = 10.sp,
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(8.dp)
-                                    )
+                                    // API Endpoint
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text("API Endpoint", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                            Text(apiUrl, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    
+                                    Spacer(Modifier.height(8.dp))
+                                    
+                                    // API Key
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text("API Key", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                            Text(apiKey, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
                                 }
-                            }
                         }
                         
                         Spacer(Modifier.height(12.dp))
@@ -982,34 +986,16 @@ fun DashboardScreen(
                             Spacer(Modifier.height(12.dp))
                         }
                         
-                        // Configs - Stacked and leaner
-                        val combinedConfig = """
-                            // Continue (.continue/config.json)
-                            {
-                              "title": "Chhanda",
-                              "provider": "openai",
-                              "model": "$activeModelName",
-                              "apiBase": "$apiUrl",
-                              "apiKey": "$apiKey"
-                            }
-                            
-                            // Cline (UI Settings)
-                            Provider: OpenAI
-                            Base URL: $apiUrl
-                            Model ID: $activeModelName
-                            API Key: $apiKey
-                        """.trimIndent()
-                        
                         val context = androidx.compose.ui.platform.LocalContext.current
                         
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("IDE Configuration", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Continue Config", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.weight(1f))
                                 IconButton(
                                     onClick = {
                                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("Config", combinedConfig)
+                                        val clip = android.content.ClipData.newPlainText("Config", continueConfig)
                                         clipboard.setPrimaryClip(clip)
                                         android.widget.Toast.makeText(context, "Config copied!", android.widget.Toast.LENGTH_SHORT).show()
                                     },
@@ -1022,7 +1008,7 @@ fun DashboardScreen(
                                     onClick = {
                                         val sendIntent: android.content.Intent = android.content.Intent().apply {
                                             action = android.content.Intent.ACTION_SEND
-                                            putExtra(android.content.Intent.EXTRA_TEXT, combinedConfig)
+                                            putExtra(android.content.Intent.EXTRA_TEXT, continueConfig)
                                             type = "text/plain"
                                         }
                                         val shareIntent = android.content.Intent.createChooser(sendIntent, null)
@@ -1040,7 +1026,7 @@ fun DashboardScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    combinedConfig,
+                                    continueConfig,
                                     modifier = Modifier.padding(8.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface,

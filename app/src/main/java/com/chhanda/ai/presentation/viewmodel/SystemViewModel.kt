@@ -975,14 +975,14 @@ class SystemViewModel @Inject constructor(
     fun downloadModel(model: com.chhanda.ai.presentation.ui.DownloadModelInfo, isResume: Boolean = false) {
         try {
             val filename = when {
-                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
-                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
+                model.name.contains("E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
+                model.name.contains("E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
                 else -> "gemma-4-e2b.litertlm"
             }
 
             val url = when {
-                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
-                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+                model.name.contains("E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+                model.name.contains("E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
                 else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
             }
 

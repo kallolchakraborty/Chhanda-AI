@@ -293,25 +293,25 @@ class LiteRTLMEngine @Inject constructor(
 
                 withContext(inferenceDispatcher) {
                     // 1. Establish the session
-                    val session = persistentSession ?: run {
-                        val initialMessages = history.map { (role, text) ->
-                            if (role.equals("user", ignoreCase = true)) {
-                                Message.user(text)
-                            } else {
-                                Message.model(text)
-                            }
+                    try { persistentSession?.close() } catch (e: Exception) { Log.w(TAG, "Failed to close old session: ${e.message}") }
+                    
+                    val initialMessages = history.map { (role, text) ->
+                        if (role.equals("user", ignoreCase = true)) {
+                            Message.user(text)
+                        } else {
+                            Message.model(text)
                         }
-                        
-                        llmInference!!.createConversation(
-                            ConversationConfig(
-                                samplerConfig = SamplerConfig(temperature = 0.8, topK = 40, topP = 0.95),
-                                systemInstruction = systemInstruction?.let { Contents.of(it) },
-                                initialMessages = initialMessages
-                            )
-                        ).also {
-                            persistentSession = it
-                            Log.d(TAG, "Created new Conversation with ${initialMessages.size} history messages.")
-                        }
+                    }
+                    
+                    val session = llmInference!!.createConversation(
+                        ConversationConfig(
+                            samplerConfig = SamplerConfig(temperature = 0.8, topK = 40, topP = 0.95),
+                            systemInstruction = systemInstruction?.let { Contents.of(it) },
+                            initialMessages = initialMessages
+                        )
+                    ).also {
+                        persistentSession = it
+                        Log.d(TAG, "Created new Conversation with ${initialMessages.size} history messages.")
                     }
 
                     // 2. Clear any lingering generating flags just before starting

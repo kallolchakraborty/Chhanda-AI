@@ -46,6 +46,7 @@ fun KnowledgeBaseScreen(
     val ownedModels by viewModel.ownedModels.collectAsState()
     val allFiles by viewModel.allFiles.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
+    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
     var showAllFiles by remember { mutableStateOf(false) }
     var selectedUris by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
     var showConfirmUpload by remember { mutableStateOf(false) }
@@ -102,18 +103,7 @@ fun KnowledgeBaseScreen(
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            item {
-                Spacer(Modifier.height(16.dp))
-                Text(Localization.getString("data_management", appLanguage), fontSize = 12.sp, color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Text(Localization.getString("models", appLanguage), fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(vertical = 8.dp))
-                
-                TargetContextSelector(
-                    ownedModels = ownedModels,
-                    activeModelName = activeModelName,
-                    appLanguage = appLanguage,
-                    onModelSelected = { viewModel.activateModel(it) }
-                )
-            }
+
             
             item {
                 Column {
@@ -131,7 +121,7 @@ fun KnowledgeBaseScreen(
                 Column {
                     ChhandaSectionHeader(icon = Icons.Default.BarChart, title = Localization.getString("stats", appLanguage))
                     Spacer(Modifier.height(12.dp))
-                    IndexedStatsCard(appLanguage = appLanguage, fileCount = allFiles.size)
+                    IndexedStatsCard(appLanguage = appLanguage, allFiles = allFiles)
                 }
             }
             
@@ -139,7 +129,7 @@ fun KnowledgeBaseScreen(
                 Column {
                     ChhandaSectionHeader(icon = Icons.Default.Storage, title = Localization.getString("storage_metrics", appLanguage))
                     Spacer(Modifier.height(12.dp))
-                    VectorStorageStatusCard(appLanguage = appLanguage, totalSize = allFiles.sumOf { it.size })
+                    VectorStorageStatusCard(appLanguage = appLanguage, totalSize = allFiles.sumOf { it.size }, capacityBytes = vectorDbCapacityBytes)
                 }
             }
             
@@ -398,104 +388,6 @@ fun KnowledgeBaseScreen(
 }
 
 @Composable
-fun TargetContextSelector(
-    ownedModels: List<ModelInfo>,
-    activeModelName: String,
-    appLanguage: String,
-    onModelSelected: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Target\nContext:", 
-                fontSize = 11.sp, 
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), 
-                lineHeight = 12.sp
-            )
-            Spacer(Modifier.width(16.dp))
-            Box(modifier = Modifier.weight(1f)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(999.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = ownedModels.size > 1) { expanded = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer, 
-                                shape = CircleShape, 
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.AutoAwesome, 
-                                    null, 
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer, 
-                                    modifier = Modifier.padding(4.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                activeModelName, 
-                                fontSize = 13.sp, 
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        
-                        if (ownedModels.size > 1) {
-                            Icon(
-                                Icons.Default.KeyboardArrowDown, 
-                                null, 
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-                
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                ) {
-                    if (ownedModels.isEmpty()) {
-                        DropdownMenuItem(
-                            text = { Text(Localization.getString("no_downloaded_models", appLanguage)) },
-                            onClick = { expanded = false }
-                        )
-                    } else {
-                        ownedModels.forEach { model ->
-                            DropdownMenuItem(
-                                text = { Text(model.name) },
-                                onClick = {
-                                    onModelSelected(model.name)
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () -> Unit) {
     Box(
         modifier = Modifier
@@ -564,7 +456,19 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
 }
 
 @Composable
-fun IndexedStatsCard(appLanguage: String, fileCount: Int) {
+fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.repository.UploadedFileEntity>) {
+    val fileCount = allFiles.size
+    val filesThisWeek = allFiles.count { it.timestamp > System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L }
+    val state7DaysAgo = fileCount - filesThisWeek
+    val growth = if (state7DaysAgo > 0) {
+        (filesThisWeek.toDouble() / state7DaysAgo) * 100
+    } else if (filesThisWeek > 0) {
+        100.0
+    } else {
+        0.0
+    }
+    val growthStr = "%.1f".format(growth)
+    
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = RoundedCornerShape(32.dp),
@@ -587,7 +491,7 @@ fun IndexedStatsCard(appLanguage: String, fileCount: Int) {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.TrendingUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                    Text(" 12% growth this week", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text(" $growthStr% growth this week", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -595,10 +499,11 @@ fun IndexedStatsCard(appLanguage: String, fileCount: Int) {
 }
 
 @Composable
-fun VectorStorageStatusCard(appLanguage: String, totalSize: Long) {
+fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes: Long) {
     val totalSizeGB = totalSize.toDouble() / (1024.0 * 1024.0 * 1024.0)
-    val limitGB = 20.0
-    val progress = (totalSizeGB / limitGB).toFloat().coerceIn(0f, 1f)
+    val limitGB = capacityBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+    val calculatedProgress = (totalSizeGB / limitGB).toFloat()
+    val progress = if (totalSize > 0) calculatedProgress.coerceIn(0.05f, 1f) else 0f
     
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
@@ -620,7 +525,8 @@ fun VectorStorageStatusCard(appLanguage: String, totalSize: Long) {
             } else {
                 "%.2f GB".format(totalSizeGB)
             }
-            Text("$sizeStr / $limitGB GB " + Localization.getString("used", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            val limitStr = "%.1f".format(limitGB)
+            Text("$sizeStr / $limitStr GB " + Localization.getString("used", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
     }
 }
