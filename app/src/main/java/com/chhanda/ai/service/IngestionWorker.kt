@@ -53,18 +53,53 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
             if (url != null) {
                 val scraper = entryPoint.scrapeUrlUseCase()
                 val isKaggle = url.contains("kaggle.com", ignoreCase = true)
+                val urlLower = url.lowercase()
                 
-                val scrapedText = scraper(url, useAi = isKaggle, maxSizeMb = 300)
-                
-                useCase.ingestScrapedText(scrapedText, url, fileName)
-                dao.insertFile(UploadedFileEntity(
-                    id = UUID.randomUUID().toString(),
-                    name = fileName,
-                    format = "WEB_URL",
-                    size = scrapedText.length.toLong(),
-                    path = url,
-                    timestamp = System.currentTimeMillis()
-                ))
+                when {
+                    urlLower.endsWith(".pdf") || urlLower.endsWith(".docx") || urlLower.endsWith(".txt") -> {
+                        // Direct file download and ingestion
+                        val ext = when {
+                            urlLower.endsWith(".pdf") -> "pdf"
+                            urlLower.endsWith(".docx") -> "docx"
+                            else -> "txt"
+                        }
+                        val tempFile = java.io.File(applicationContext.cacheDir, "downloaded_${System.currentTimeMillis()}.$ext")
+                        java.net.URL(url).openStream().use { input ->
+                            tempFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        val uri = Uri.fromFile(tempFile)
+                        val docType = when (ext) {
+                            "pdf" -> DocType.PDF
+                            "docx" -> DocType.WORD
+                            else -> DocType.TXT
+                        }
+                        useCase(uri, docType)
+                        
+                        dao.insertFile(UploadedFileEntity(
+                            id = UUID.randomUUID().toString(),
+                            name = fileName,
+                            format = "${ext.uppercase()}_URL",
+                            size = tempFile.length(),
+                            path = url,
+                            timestamp = System.currentTimeMillis()
+                        ))
+                        tempFile.delete()
+                    }
+                    else -> {
+                        val scrapedText = scraper(url, useAi = isKaggle, maxSizeMb = 300)
+                        useCase.ingestScrapedText(scrapedText, url, fileName)
+                        dao.insertFile(UploadedFileEntity(
+                            id = UUID.randomUUID().toString(),
+                            name = fileName,
+                            format = "WEB_URL",
+                            size = scrapedText.length.toLong(),
+                            path = url,
+                            timestamp = System.currentTimeMillis()
+                        ))
+                    }
+                }
             } else {
                 val uri = Uri.parse(uriString)
                 val type = DocType.valueOf(typeString)

@@ -47,10 +47,18 @@ class ScrapeUrlUseCase @Inject constructor() {
             }
 
             val doc = response.parse()
+            doc.setBaseUri(url)
 
-            // 1. Remove obvious noise first
-            doc.select("script, style, nav, footer, header, noscript, iframe, link, .ads, .sidebar, .menu, .nav, #footer, #header").remove()
+            // 1. Remove obvious noise and ads more aggressively
+            val adSelectors = listOf(
+                "script", "style", "nav", "footer", "header", "noscript", "iframe", "link", 
+                ".ads", ".sidebar", ".menu", ".nav", "#footer", "#header", ".ad-container", 
+                ".promoted", ".sponsored", ".social-share", ".newsletter-signup", "[id*=ad-]", 
+                "[class*=ad-]", "aside", ".banner", ".popup"
+            )
+            doc.select(adSelectors.joinToString(", ")).remove()
             doc.select("[style*=display:none]").remove()
+            doc.select("[aria-hidden=true]").remove()
 
             // 2. Identify the main content container
             val candidates = listOf(
@@ -77,20 +85,24 @@ class ScrapeUrlUseCase @Inject constructor() {
             }
 
             // Iterate through meaningful tags
-            contentToProcess.select("h1, h2, h3, h4, p, li, table, pre, code").forEach { element ->
+            contentToProcess.select("h1, h2, h3, h4, p, li, table, pre, code, img").forEach { element ->
                 val tagName = element.tagName()
                 val text = element.text().trim()
                 
-                if (text.length > 5) {
-                    when (tagName) {
-                        "h1" -> builder.append("# $text\n\n")
-                        "h2" -> builder.append("## $text\n\n")
-                        "h3", "h4" -> builder.append("### $text\n\n")
-                        "li" -> builder.append("- $text\n")
-                        "table" -> builder.append("[Table Content: ${element.text().take(200)}...]\n\n")
-                        "pre", "code" -> builder.append("```\n$text\n```\n\n")
-                        else -> builder.append(text).append("\n\n")
+                when (tagName) {
+                    "h1" -> if (text.length > 2) builder.append("# $text\n\n")
+                    "h2" -> if (text.length > 2) builder.append("## $text\n\n")
+                    "h3", "h4" -> if (text.length > 2) builder.append("### $text\n\n")
+                    "li" -> if (text.length > 2) builder.append("- $text\n")
+                    "table" -> builder.append("[Table Data: ${element.text().take(500)}]\n\n")
+                    "pre", "code" -> if (text.length > 2) builder.append("```\n$text\n```\n\n")
+                    "img" -> {
+                        val alt = element.attr("alt").trim()
+                        val title = element.attr("title").trim()
+                        if (alt.isNotBlank()) builder.append("[IMAGE DESCRIPTION: $alt]\n\n")
+                        else if (title.isNotBlank()) builder.append("[IMAGE TITLE: $title]\n\n")
                     }
+                    else -> if (text.length > 10) builder.append(text).append("\n\n")
                 }
             }
 

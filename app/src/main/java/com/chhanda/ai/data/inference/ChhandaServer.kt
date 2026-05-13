@@ -489,6 +489,36 @@ class ChhandaServer @Inject constructor(
                     call.respondRedirect("/?key=$apiKey")
                 }
 
+                post("/ingest") {
+                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
+                    val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-Key"]
+                    
+                    if (apiKey != null && providedKey != apiKey) {
+                        call.respondText("Unauthorized", status = io.ktor.http.HttpStatusCode.Unauthorized)
+                        return@post
+                    }
+
+                    try {
+                        val data = call.receive<Map<String, String>>()
+                        val url = data["url"] ?: return@post call.respond(io.ktor.http.HttpStatusCode.BadRequest, mapOf("error" to "Missing URL"))
+                        val label = data["label"] ?: "Web Resource"
+                        
+                        val workRequest = OneTimeWorkRequestBuilder<com.chhanda.ai.service.IngestionWorker>()
+                            .setInputData(workDataOf(
+                                com.chhanda.ai.service.IngestionWorker.KEY_URL to url,
+                                com.chhanda.ai.service.IngestionWorker.KEY_NAME to label
+                            ))
+                            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                            .build()
+                            
+                        WorkManager.getInstance(this@ChhandaServer.context).enqueue(workRequest)
+                        
+                        call.respond(mapOf("status" to "In Progress", "message" to "Ingestion task queued for $label"))
+                    } catch (e: Exception) {
+                        call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Unknown error")))
+                    }
+                }
+
                 post("/chat") {
                     val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
                     val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-Key"]
