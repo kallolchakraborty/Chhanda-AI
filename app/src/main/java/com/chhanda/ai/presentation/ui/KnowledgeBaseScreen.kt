@@ -111,7 +111,16 @@ fun KnowledgeBaseScreen(
                     Spacer(Modifier.height(12.dp))
                     UploadRagCard(
                         appLanguage = appLanguage, 
-                        onUpload = { filePickerLauncher.launch(arrayOf("application/pdf", "image/*", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "audio/*")) },
+                        onUpload = { filePickerLauncher.launch(arrayOf(
+                            "application/pdf", 
+                            "image/*", 
+                            "text/plain", 
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+                            "application/msword", // doc
+                            "application/vnd.ms-excel", // xls
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
+                            "audio/*"
+                        )) },
                         onConnectUrl = { showUrlDialog = true }
                     )
                 }
@@ -515,11 +524,12 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.LibraryBooks, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.LibraryBooks, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // PDF
+                Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Word
+                Icon(Icons.Default.TableChart, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Excel
+                Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Images
+                Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Audio
                 Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -624,16 +634,20 @@ fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, i
 fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelete: () -> Unit, onClick: () -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
     val icon = when (file.format) {
-        "PDF" -> androidx.compose.material.icons.Icons.Default.PictureAsPdf
-        "IMAGE" -> androidx.compose.material.icons.Icons.Default.Image
-        "AUDIO" -> androidx.compose.material.icons.Icons.Default.Mic
-        else -> androidx.compose.material.icons.Icons.Default.Description
+        "PDF" -> Icons.Default.PictureAsPdf
+        "IMAGE" -> Icons.Default.Image
+        "AUDIO" -> Icons.Default.Mic
+        "WORD" -> Icons.Default.Article
+        "EXCEL" -> Icons.Default.TableChart
+        else -> Icons.Default.Description
     }
     val color = when (file.format) {
-        "PDF" -> androidx.compose.ui.graphics.Color.Red
-        "IMAGE" -> androidx.compose.ui.graphics.Color.Cyan
-        "AUDIO" -> androidx.compose.ui.graphics.Color.Blue
-        else -> androidx.compose.ui.graphics.Color.Gray
+        "PDF" -> Color(0xFFB91C1C) // Red
+        "IMAGE" -> Color(0xFF0891B2) // Cyan
+        "AUDIO" -> Color(0xFF2563EB) // Blue
+        "WORD" -> Color(0xFF4F46E5) // Indigo
+        "EXCEL" -> Color(0xFF16A34A) // Green
+        else -> Color.Gray
     }
     Surface(
         modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth().clickable { onClick() },
