@@ -56,11 +56,15 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
                 val urlLower = url.lowercase()
                 
                 when {
-                    urlLower.endsWith(".pdf") || urlLower.endsWith(".docx") || urlLower.endsWith(".txt") -> {
+                    urlLower.endsWith(".pdf") || urlLower.endsWith(".docx") || urlLower.endsWith(".doc") || 
+                    urlLower.endsWith(".txt") || urlLower.endsWith(".xlsx") || urlLower.endsWith(".xls") -> {
                         // Direct file download and ingestion
                         val ext = when {
                             urlLower.endsWith(".pdf") -> "pdf"
                             urlLower.endsWith(".docx") -> "docx"
+                            urlLower.endsWith(".doc") -> "doc"
+                            urlLower.endsWith(".xlsx") -> "xlsx"
+                            urlLower.endsWith(".xls") -> "xls"
                             else -> "txt"
                         }
                         val tempFile = java.io.File(applicationContext.cacheDir, "downloaded_${System.currentTimeMillis()}.$ext")
@@ -72,7 +76,8 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
                         val uri = Uri.fromFile(tempFile)
                         val docType = when (ext) {
                             "pdf" -> DocType.PDF
-                            "docx" -> DocType.WORD
+                            "docx", "doc" -> DocType.WORD
+                            "xlsx", "xls" -> DocType.EXCEL
                             else -> DocType.TXT
                         }
                         useCase(uri, docType)

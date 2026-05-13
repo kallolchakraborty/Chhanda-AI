@@ -106,6 +106,8 @@ dependencies {
 
     // HTML Scraping for RAG
     implementation 'org.jsoup:jsoup:1.17.2'
+    implementation "org.apache.poi:poi:5.2.5" 
+    implementation "org.apache.poi:poi-ooxml:5.2.5"
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'io.mockk:mockk:1.13.5'

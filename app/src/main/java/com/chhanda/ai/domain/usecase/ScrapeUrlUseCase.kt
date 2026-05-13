@@ -188,7 +188,8 @@ class ScrapeUrlUseCase @Inject constructor() {
                 "figcaption" -> if (text.isNotBlank()) builder.append("*Caption: $text*\n\n")
                 "a" -> {
                     val href = el.attr("abs:href").lowercase()
-                    if (href.endsWith(".pdf") || href.endsWith(".docx") || href.endsWith(".zip")) {
+                    if (href.endsWith(".pdf") || href.endsWith(".docx") || href.endsWith(".doc") || 
+                        href.endsWith(".xlsx") || href.endsWith(".xls") || href.endsWith(".zip")) {
                         builder.append("[EXTERNAL FILE LINK: $text ($href)]\n\n")
                     }
                 }

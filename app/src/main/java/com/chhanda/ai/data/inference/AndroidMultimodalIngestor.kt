@@ -115,35 +115,52 @@ class AndroidMultimodalIngestor @Inject constructor(
         val stringBuilder = StringBuilder()
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                val zipInputStream = java.util.zip.ZipInputStream(inputStream)
-                var entry = zipInputStream.nextEntry
-                while (entry != null) {
-                    if (entry.name == "word/document.xml") {
-                        val factory = javax.xml.parsers.DocumentBuilderFactory.newInstance()
-                        factory.isNamespaceAware = true // IMPORTANT for Word XML
-                        val builder = factory.newDocumentBuilder()
-                        val doc = builder.parse(zipInputStream)
-                        
-                        // Use getElementsByTagNameNS if namespace aware, or handle both
-                        val nodeList = doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "t")
-                        val altNodeList = if (nodeList.length == 0) doc.getElementsByTagName("w:t") else nodeList
-                        
-                        for (i in 0 until altNodeList.length) {
-                            val node = altNodeList.item(i)
-                            val text = node.textContent
-                            if (!text.isNullOrBlank()) {
-                                stringBuilder.append(text)
-                                stringBuilder.append(" ")
-                            }
-                        }
-                        android.util.Log.d("Ingestor", "Extracted ${stringBuilder.length} characters from Word document.")
-                        break
+                val bytes = inputStream.readBytes()
+                try {
+                    // Try .docx (OOXML)
+                    java.io.ByteArrayInputStream(bytes).use { bis ->
+                        val docx = org.apache.poi.xwpf.usermodel.XWPFDocument(bis)
+                        val extractor = org.apache.poi.xwpf.extractor.XWPFWordExtractor(docx)
+                        stringBuilder.append(extractor.text)
+                        extractor.close()
                     }
-                    entry = zipInputStream.nextEntry
+                } catch (e: Exception) {
+                    // Fallback to .doc (Legacy)
+                    java.io.ByteArrayInputStream(bytes).use { bis ->
+                        val doc = org.apache.poi.hwpf.HWPFDocument(bis)
+                        val extractor = org.apache.poi.hwpf.extractor.WordExtractor(doc)
+                        stringBuilder.append(extractor.text)
+                        extractor.close()
+                    }
                 }
             }
         } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "Word extraction failed: ${e.message}")
             throw Exception("Failed to extract text from Word file: ${e.message}")
+        }
+        stringBuilder.toString().trim()
+    }
+
+    override suspend fun ingestExcel(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val stringBuilder = StringBuilder()
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(inputStream)
+                for (i in 0 until workbook.numberOfSheets) {
+                    val sheet = workbook.getSheetAt(i)
+                    stringBuilder.append("\n[Sheet: ${sheet.sheetName}]\n")
+                    for (row in sheet) {
+                        for (cell in row) {
+                            stringBuilder.append(cell.toString()).append(" | ")
+                        }
+                        stringBuilder.append("\n")
+                    }
+                }
+                workbook.close()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "Excel extraction failed: ${e.message}")
+            throw Exception("Failed to extract text from Excel file: ${e.message}")
         }
         stringBuilder.toString().trim()
     }
