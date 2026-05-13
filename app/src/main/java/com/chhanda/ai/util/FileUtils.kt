@@ -96,4 +96,20 @@ object FileUtils {
         }
         return result
     }
+
+    fun createImageUri(context: Context): Uri? {
+        try {
+            val imageDir = File(context.externalCacheDir, "camera_images")
+            if (!imageDir.exists()) imageDir.mkdirs()
+            val file = File(imageDir, "IMG_${System.currentTimeMillis()}.jpg")
+            return androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "com.chhanda.ai.fileprovider",
+                file
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
 }

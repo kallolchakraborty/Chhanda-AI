@@ -44,6 +44,7 @@ class AndroidMultimodalIngestor @Inject constructor(
                         if (text.isNotBlank()) {
                             chunks.add(text)
                         }
+                        bitmap.recycle() // Senior Fix: Prevent OOM on large PDFs
                     }
                 }
                 pdfRenderer.close()

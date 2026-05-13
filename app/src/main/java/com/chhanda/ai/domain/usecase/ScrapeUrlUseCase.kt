@@ -11,59 +11,103 @@ import javax.inject.Inject
 class ScrapeUrlUseCase @Inject constructor() {
 
     suspend operator fun invoke(url: String, useAi: Boolean = false, maxSizeMb: Int = 300): String = withContext(Dispatchers.IO) {
-        val tempFile = java.io.File.createTempFile("scrape_", ".tmp")
         try {
+            android.util.Log.d("ScrapeUrl", "Starting scrape for: $url")
+            
+            // Senior strategy: Use a very common browser User-Agent
+            val userAgents = listOf(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+
             val connection = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
-                .timeout(30000)
+                .userAgent(userAgents.random())
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .timeout(20000)
                 .followRedirects(true)
                 .ignoreContentType(true)
+                .ignoreHttpErrors(true) // We want to handle the error ourselves
 
-            val response = try {
-                connection.execute()
-            } catch (e: Exception) {
-                // Fallback for some blocked user agents
-                Jsoup.connect(url)
-                    .userAgent("Googlebot/2.1 (+http://www.google.com/bot.html)")
-                    .timeout(30000)
-                    .execute()
+            val response = connection.execute()
+            
+            if (response.statusCode() != 200) {
+                throw Exception("HTTP ${response.statusCode()}: ${response.statusMessage()}")
+            }
+
+            // Check content type
+            val contentType = response.contentType() ?: ""
+            if (!contentType.contains("text/html") && !contentType.contains("application/xhtml")) {
+                // If it's plain text, just return it
+                if (contentType.contains("text/plain")) {
+                    return@withContext response.body().take(maxSizeMb * 1024 * 1024)
+                }
+                throw Exception("Unsupported content type: $contentType")
             }
 
             val doc = response.parse()
 
-            // Remove noise
-            doc.select("script, style, nav, footer, header, noscript, iframe, link, .ads, .sidebar").remove()
+            // 1. Remove obvious noise first
+            doc.select("script, style, nav, footer, header, noscript, iframe, link, .ads, .sidebar, .menu, .nav, #footer, #header").remove()
+            doc.select("[style*=display:none]").remove()
 
-            // If useAi is true (e.g. for Kaggle/Research sites), focus on data-rich areas
-            val contentElement = if (useAi) {
-                doc.select("article, main, .main-content, #main-content, .dataset-description, .notebook-content").firstOrNull() ?: doc.body()
-            } else {
-                doc.body()
+            // 2. Identify the main content container
+            val candidates = listOf(
+                "article", "main", "[role=main]", ".post-content", ".article-content", 
+                ".content", "#content", ".entry-content", ".main-content", "#main",
+                ".wiki-content", ".mw-parser-output" // Wikipedia
+            )
+            
+            var mainElement: org.jsoup.nodes.Element? = null
+            for (selector in candidates) {
+                mainElement = doc.select(selector).firstOrNull()
+                if (mainElement != null && mainElement.text().length > 200) break
+            }
+            
+            val contentToProcess = mainElement ?: doc.body()
+
+            // 3. Extract text with hierarchy preservation
+            val builder = StringBuilder()
+            
+            // Add page title as H1 equivalent
+            val pageTitle = doc.title().trim()
+            if (pageTitle.isNotBlank()) {
+                builder.append("# $pageTitle\n\n")
             }
 
-            // Extract structured text to preserve context
-            val builder = StringBuilder()
-            contentElement.select("h1, h2, h3, p, li, table").forEach { element ->
+            // Iterate through meaningful tags
+            contentToProcess.select("h1, h2, h3, h4, p, li, table, pre, code").forEach { element ->
+                val tagName = element.tagName()
                 val text = element.text().trim()
-                if (text.length > 20) {
-                    builder.append(text).append("\n\n")
+                
+                if (text.length > 5) {
+                    when (tagName) {
+                        "h1" -> builder.append("# $text\n\n")
+                        "h2" -> builder.append("## $text\n\n")
+                        "h3", "h4" -> builder.append("### $text\n\n")
+                        "li" -> builder.append("- $text\n")
+                        "table" -> builder.append("[Table Content: ${element.text().take(200)}...]\n\n")
+                        "pre", "code" -> builder.append("```\n$text\n```\n\n")
+                        else -> builder.append(text).append("\n\n")
+                    }
                 }
             }
 
-            val mainContent = builder.toString().trim()
+            val result = builder.toString().trim()
             
-            if (mainContent.isBlank()) {
-                // Fallback to raw body text if structured extraction failed
-                val rawText = doc.body().text().trim()
-                if (rawText.isBlank()) throw Exception("No readable text content found.")
-                rawText
+            if (result.length < 100) {
+                // Fallback: If structured extraction was too aggressive, take raw body text
+                android.util.Log.w("ScrapeUrl", "Structured extraction too short (${result.length}), falling back to body text.")
+                val rawBodyText = doc.body().text().trim()
+                if (rawBodyText.length < 50) throw Exception("No meaningful text found on the page.")
+                rawBodyText
             } else {
-                mainContent
+                result
             }
         } catch (e: Exception) {
-            throw Exception("Scrape error: ${e.message}")
-        } finally {
-            if (tempFile.exists()) tempFile.delete()
+            android.util.Log.e("ScrapeUrl", "Scraping failed: ${e.message}")
+            throw Exception("Scraping failed for $url: ${e.message}")
         }
     }
 

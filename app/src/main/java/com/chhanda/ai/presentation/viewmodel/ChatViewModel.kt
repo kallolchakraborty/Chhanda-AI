@@ -29,6 +29,7 @@ class ChatViewModel @Inject constructor(
     private val _isGenerating = MutableStateFlow(false)
     private val _currentPartialResponse = MutableStateFlow("")
     private val _currentTps = MutableStateFlow(0.0)
+    private val _currentRt = MutableStateFlow(0L)
     private val _error = MutableStateFlow<String?>(null)
     private var messageJob: kotlinx.coroutines.Job? = null
 
@@ -75,14 +76,15 @@ class ChatViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val uiState: StateFlow<ChatUiState> = combine(
-        messages, _isGenerating, _currentPartialResponse, _currentTps, _error
-    ) { msgList, generating, partial, tps, error ->
+        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error
+    ) { args: Array<Any?> ->
         ChatUiState(
-            messages = msgList,
-            isGenerating = generating,
-            currentPartialResponse = partial,
-            currentTps = tps,
-            error = error,
+            messages = args[0] as List<com.chhanda.ai.data.repository.MessageEntity>,
+            isGenerating = args[1] as Boolean,
+            currentPartialResponse = args[2] as String,
+            currentTps = args[3] as Double,
+            currentRt = args[4] as Long,
+            error = args[5] as String?,
             isModelLoaded = llmEngine.isModelLoaded(),
             isModelLoading = llmEngine.isModelLoading()
         )
@@ -137,6 +139,7 @@ class ChatViewModel @Inject constructor(
                         }
                         is TokenUpdate.Final -> {
                             // Clear streaming bubble — message is now in the DB list
+                            _currentRt.value = update.responseTimeMs
                             _currentPartialResponse.value = ""
                             _currentTps.value = 0.0
                             // isGenerating will be set false by onCompletion

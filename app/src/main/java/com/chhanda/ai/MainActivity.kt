@@ -31,16 +31,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                val file = java.io.File(filesDir, "crash_log.txt")
-                file.writeText("Crash in thread ${thread.name}:\n${android.util.Log.getStackTraceString(throwable)}")
-            } catch (e: Exception) {
-                // Ignore
-            }
-            defaultHandler?.uncaughtException(thread, throwable)
-        }
 
         setContent {
             val vm: SystemViewModel = hiltViewModel()

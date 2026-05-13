@@ -12,5 +12,6 @@ data class ChatUiState(
     val error: String? = null,
     val isModelLoaded: Boolean = false,
     val isModelLoading: Boolean = false,
-    val currentTps: Double = 0.0
+    val currentTps: Double = 0.0,
+    val currentRt: Long = 0
 )

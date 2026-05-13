@@ -32,13 +32,27 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
     }
 
     private suspend fun processRawText(rawText: String, source: String, type: String, modelId: String, onProgress: (Float) -> Unit) {
+        if (rawText.isBlank()) {
+            android.util.Log.w("IngestUseCase", "Attempted to ingest empty text from $source")
+            throw Exception("No text extracted from source.")
+        }
+
+        android.util.Log.d("IngestUseCase", "Starting ingestion for $source (${rawText.length} chars)")
         val textChunks = TextChunker.chunk(rawText, chunkSize = 800, overlap = 200)
         val totalChunks = textChunks.size
+        android.util.Log.d("IngestUseCase", "Split into $totalChunks chunks")
+        
         val chunkEntities = mutableListOf<VectorChunkEntity>()
 
         try {
             textChunks.forEachIndexed { index, text ->
-                val embedding = embeddingEngine.embed(text)
+                val embedding = try {
+                    embeddingEngine.embed(text)
+                } catch (e: Exception) {
+                    android.util.Log.e("IngestUseCase", "Embedding failed for chunk $index: ${e.message}")
+                    throw Exception("Embedding engine failure: ${e.message}")
+                }
+
                 chunkEntities.add(
                     VectorChunkEntity(
                         id = java.util.UUID.randomUUID().toString(),
@@ -50,16 +64,25 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
                     )
                 )
                 
+                // Batch insert for performance
                 if (chunkEntities.size >= 10 || index == totalChunks - 1) {
-                    vectorStore.addAll(chunkEntities)
+                    try {
+                        vectorStore.addAll(chunkEntities)
+                        android.util.Log.v("IngestUseCase", "Inserted batch up to chunk $index")
+                    } catch (e: Exception) {
+                        android.util.Log.e("IngestUseCase", "Database insertion failed: ${e.message}")
+                        throw Exception("Vector store insertion failure: ${e.message}")
+                    }
                     chunkEntities.clear()
                     onProgress((index + 1).toFloat() / totalChunks)
                 }
             }
+            android.util.Log.i("IngestUseCase", "Successfully ingested $source")
         } catch (e: Exception) {
+            android.util.Log.e("IngestUseCase", "Ingestion failed for $source: ${e.message}")
             // Failure rollback: remove partial chunks for this source
             vectorStore.clearSource(source)
-            throw e // Re-throw to be handled by caller (ViewModel or Worker)
+            throw e 
         }
     }
 }

@@ -924,7 +924,8 @@ fun DashboardScreen(
         },
         viewModel = viewModel,
         displayPort = displayPort,
-        tunnelUrl = tunnelUrl
+        tunnelUrl = tunnelUrl,
+        activeModelName = activeModelName
     )
 
 
@@ -1922,7 +1923,8 @@ fun GatewayDialog(
     onDismiss: () -> Unit,
     viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel,
     displayPort: Int,
-    tunnelUrl: String
+    tunnelUrl: String,
+    activeModelName: String
 ) {
     if (!show) return
     
@@ -2040,14 +2042,20 @@ fun GatewayDialog(
                     
                     val apiUrl = "$baseServerUrl/v1"
                     
+                    val modelId = when {
+                        activeModelName.contains("E2B", ignoreCase = true) -> "gemma-4-e2b"
+                        activeModelName.contains("E4B", ignoreCase = true) -> "gemma-4-e4b"
+                        else -> "gemma-4"
+                    }
+
                     val continueConfig = """
                     models:
-                      - name: Gemma 4 Local
-                        provider: openai
-                        model: gemma-4
-                        apiBase: $apiUrl
-                        apiKey: $apiKey
-                        roles: [chat, edit, autocomplete]
+                      - name: "Chhanda: $activeModelName"
+                        provider: "openai"
+                        model: "$modelId"
+                        apiBase: "$baseServerUrl"
+                        apiKey: "$apiKey"
+                        template: "chatml"
                     """.trimIndent()
 
                     Column(
@@ -2119,6 +2127,35 @@ fun GatewayDialog(
                                     modifier = Modifier.clickable { isApiKeyMasked = !isApiKeyMasked }
                                 )
                             }
+                        }
+                        
+                        Spacer(Modifier.height(16.dp))
+                        
+                        // Context Tokens
+                        val contextLength by viewModel.contextLength.collectAsState()
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text("Context Window (Tokens)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                listOf("1024", "2048", "4096", "8192").forEach { len ->
+                                    val isSelected = contextLength == len
+                                    Surface(
+                                        onClick = { viewModel.updateContextLength(len) },
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(32.dp).weight(1f).padding(horizontal = 2.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(len, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                        }
+                                    }
+                                }
+                            }
+                            Text("Note: Larger windows allow scanning more files but use more RAM.", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         
                         Spacer(Modifier.height(16.dp))

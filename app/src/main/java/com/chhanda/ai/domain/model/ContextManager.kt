@@ -28,13 +28,13 @@ class ContextManager @javax.inject.Inject constructor(
         // Long-Term Memory: Vector search for semantic relevance across all history
         val longTermMemory = try {
             val queryEmbedding = embeddingEngine.embed(query)
-            val results = vectorStore.search(queryEmbedding, topK = 6, modelId = "shared_rag_db")
+            val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 3 else 6, modelId = "shared_rag_db")
             
+            val threshold = if (modelName.contains("4B")) 0.15f else 0.02f
             val filtered = results
-                .filter { it.score >= 0.02f } 
+                .filter { it.score >= threshold } 
 
-            android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Scores: ${results.joinToString { String.format("%.3f", it.score) }}")
-            android.util.Log.d("ContextManager", "Filtered to ${filtered.size} snippets above 0.02 threshold")
+            android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
 
             if (filtered.isEmpty()) ""
             else {

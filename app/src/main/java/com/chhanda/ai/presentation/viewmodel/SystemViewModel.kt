@@ -33,6 +33,8 @@ import java.io.File
 import android.os.BatteryManager
 import android.app.ActivityManager
 
+data class VirtualVoice(val name: String, val isMale: Boolean)
+
 @HiltViewModel
 class SystemViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
@@ -193,20 +195,6 @@ class SystemViewModel @Inject constructor(
                 // Ignore
             }
 
-            // Query available TTS voices
-            try {
-                var tts: android.speech.tts.TextToSpeech? = null
-                tts = android.speech.tts.TextToSpeech(context) { status ->
-                    if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                        val voices = tts?.voices
-                        val voiceNames = voices?.map { it.name } ?: emptyList()
-                        _availableVoices.value = voiceNames
-                        tts?.shutdown()
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("SystemViewModel", "Failed to query voices", e)
-            }
 
             while(true) {
                 try {
@@ -383,8 +371,6 @@ class SystemViewModel @Inject constructor(
     val autoDeleteEnabled = settingsRepository.autoDeleteEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
     val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Default")
-    private val _availableVoices = MutableStateFlow<List<String>>(emptyList())
-    val availableVoices: kotlinx.coroutines.flow.StateFlow<List<String>> = _availableVoices.asStateFlow()
     private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
     val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
@@ -602,7 +588,71 @@ class SystemViewModel @Inject constructor(
 
     val deviceModelName = android.os.Build.MODEL.replace(" ", "_")
 
-    private fun getIpAddress(): String {
+    private val _availableVoices = MutableStateFlow<List<String>>(
+        listOf(
+            "Kallol (Indian Male)", "Adrit (Indian Male)", "James (Global Male)",
+            "Chhanda (Indian Female)", "Ivanshika (Indian Female)", "Sarah (Global Female)"
+        )
+    )
+    val availableVoices: StateFlow<List<String>> = _availableVoices.asStateFlow()
+
+    private var sampleTts: android.speech.tts.TextToSpeech? = null
+
+    fun playSample(virtualVoiceName: String, languageName: String) {
+        val locale = when (languageName) {
+            "Bengali" -> Locale("bn", "BD")
+            "Hindi" -> Locale("hi", "IN")
+            "French" -> Locale.FRENCH
+            "German" -> Locale.GERMAN
+            else -> Locale.ENGLISH
+        }
+        
+        if (sampleTts == null) {
+            sampleTts = android.speech.tts.TextToSpeech(context) { status ->
+                if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                    speakSampleInternal(virtualVoiceName, locale)
+                }
+            }
+        } else {
+            speakSampleInternal(virtualVoiceName, locale)
+        }
+    }
+
+    private fun speakSampleInternal(virtualVoiceName: String, locale: Locale) {
+        sampleTts?.language = locale
+        val isMale = virtualVoiceName.contains("Male")
+        
+        val systemVoices = sampleTts?.voices?.filter { it.locale.language == locale.language } ?: emptyList()
+        val targetVoice = systemVoices.find { v ->
+            val name = v.name.lowercase()
+            if (isMale) {
+                name.contains("male") || name.contains("-m-") || name.contains("male_")
+            } else {
+                name.contains("female") || name.contains("-f-") || name.contains("female_")
+            }
+        } ?: systemVoices.firstOrNull()
+
+        if (targetVoice != null) {
+            sampleTts?.voice = targetVoice
+        }
+
+        val sampleText = when (locale.language) {
+            "bn" -> "হ্যালো, আমি আপনার নতুন সহকারী।"
+            "hi" -> "नमस्ते, मैं आपका नया सहायक हूँ।"
+            "fr" -> "Bonjour, je suis votre nouvel assistant."
+            "de" -> "Hallo, ich bin Ihr neuer Assistent."
+            else -> "Hello, I am your new assistant."
+        }
+        sampleTts?.speak(sampleText, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "sample")
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        sampleTts?.stop()
+        sampleTts?.shutdown()
+    }
+
+    fun getIpAddress(): String {
         try {
             val ifaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return "127.0.0.1"
             val candidates = mutableListOf<Pair<String, String>>()
@@ -808,17 +858,25 @@ class SystemViewModel @Inject constructor(
                         dir.listFiles()?.forEach { file ->
                             if (file.isFile && (file.name.endsWith(".litertlm") || file.name.endsWith(".bin") || file.name.endsWith(".tflite"))) {
                                 // Try to match by filename or by name contained in filename
-                                val matchedModel = potentialModels.find { (filename, name) ->
-                                    file.name.equals(filename, ignoreCase = true) || 
-                                    file.name.contains(name.replace("-", ""), ignoreCase = true) ||
-                                    file.name.contains("Gemma", ignoreCase = true) && name.contains("Gemma")
+                                val matchedModel = potentialModels.find { (filename, _) ->
+                                    file.name.equals(filename, ignoreCase = true)
+                                } ?: potentialModels.find { (_, name) ->
+                                    file.name.contains(name.replace("-", ""), ignoreCase = true)
+                                } ?: potentialModels.find { (_, name) ->
+                                    val version = if (name.contains("E4B")) "E4B" else if (name.contains("E2B")) "E2B" else ""
+                                    version.isNotEmpty() && file.name.contains(version, ignoreCase = true) && file.name.contains("Gemma", ignoreCase = true)
                                 }
                                 
                                 if (matchedModel != null) {
                                     addFoundModel(matchedModel.second, file, true)
                                 } else if (file.length() > 500_000_000) {
                                     // Generic match for large model files not in our list
-                                    addFoundModel("Imported: ${file.name}", file, true)
+                                    val fallbackName = if (file.name.contains("Gemma", ignoreCase = true)) {
+                                        if (file.name.contains("4B", ignoreCase = true) || file.name.contains("E4B", ignoreCase = true)) "Gemma-4-E4B-IT"
+                                        else if (file.name.contains("2B", ignoreCase = true) || file.name.contains("E2B", ignoreCase = true)) "Gemma-4-E2B-IT"
+                                        else "Imported: ${file.name}"
+                                    } else "Imported: ${file.name}"
+                                    addFoundModel(fallbackName, file, true)
                                 }
                             }
                         }
@@ -1053,6 +1111,12 @@ class SystemViewModel @Inject constructor(
         }
     }
 
+    fun updateContextLength(length: String) {
+        viewModelScope.launch {
+            settingsRepository.setContextLength(length)
+        }
+    }
+
     fun setMaxDevices(max: Int) {
         viewModelScope.launch {
             settingsRepository.setMaxDevices(max)
@@ -1085,9 +1149,20 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             val path = _modelPaths.value[modelName]
             if (path == null) {
-                addLog("SYSTEM", "Model path not found for: $modelName", "ERROR")
+                addLog("SYSTEM", "Model path not found for: $modelName. Available paths: ${_modelPaths.value.keys}", "ERROR")
+                // Trigger an emergency scan in case the map is stale
+                scanForModels()
                 return@launch
             }
+            
+            val file = java.io.File(path)
+            if (!file.exists()) {
+                addLog("SYSTEM", "Model file vanished: $path", "ERROR")
+                scanForModels()
+                return@launch
+            }
+            
+            addLog("SYSTEM", "Path verified: ${file.name} (${file.length() / 1024 / 1024}MB)", "INFO")
 
             // Mark loading state immediately for UI feedback
             _ownedModels.value = _ownedModels.value.map { it.copy(isActive = it.name == modelName) }

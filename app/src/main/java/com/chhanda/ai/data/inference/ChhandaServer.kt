@@ -81,6 +81,10 @@ class ChhandaServer @Inject constructor(
     private val _serverErrorFlow = MutableStateFlow<String?>(null)
     val serverErrorFlow: StateFlow<String?> = _serverErrorFlow.asStateFlow()
 
+    private fun logAudit(tag: String, message: String, level: String) {
+        android.util.Log.i("ChhandaAudit", "[$tag] ($level) $message")
+    }
+
     private var tunnelSession: com.jcraft.jsch.Session? = null
     private val IP_TTL_MS = 10_000L
 
@@ -345,6 +349,38 @@ class ChhandaServer @Inject constructor(
             routing {
 
                 // /status — < 1ms, high-priority diagnostic
+                post("/register") {
+                    try {
+                        val remoteIp = call.request.local.remoteHost
+                        val data = call.receive<Map<String, String>>()
+                        val name = data["name"] ?: "Unknown Browser"
+                        
+                        // Store in DB for audit trail
+                        try {
+                            val existing = deviceDao.getDeviceByIp(remoteIp)
+                            if (existing != null) {
+                                deviceDao.updateDevice(existing.copy(deviceName = name, connectionTime = System.currentTimeMillis()))
+                            } else {
+                                deviceDao.insertDevice(com.chhanda.ai.data.repository.DeviceEntity(
+                                    deviceName = name,
+                                    ipAddress = remoteIp,
+                                    connectionTime = System.currentTimeMillis(),
+                                    isCurrentlyConnected = true,
+                                    connectionType = "BROWSER",
+                                    userAgent = call.request.headers["User-Agent"] ?: "Browser"
+                                ))
+                            }
+                            android.util.Log.i("ChhandaAudit", "Registered user: $name ($remoteIp)")
+                        } catch (e: Exception) {
+                            android.util.Log.e("ChhandaAudit", "Failed to register user: ${e.message}")
+                        }
+                        
+                        call.respond(mapOf("status" to "success"))
+                    } catch (e: Exception) {
+                        call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Unknown error")))
+                    }
+                }
+
                 get("/status") {
                     val loaded    = llmEngine.isModelLoaded()
                     val uptime    = (System.currentTimeMillis() - startTime) / 1000
@@ -366,21 +402,6 @@ class ChhandaServer @Inject constructor(
                     call.respondText("pong")
                 }
 
-                post("/register") {
-                    val request = call.receive<RegisterRequest>()
-                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
-                    val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-Key"]
-                    
-                    if (apiKey != null && providedKey != apiKey) {
-                        call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("success" to false, "error" to "Invalid API Key"))
-                        return@post
-                    }
-
-                    val remoteIp = call.request.local.remoteHost
-                    val userAgent = call.request.headers["User-Agent"] ?: "Unknown"
-                    trackDevice(remoteIp, userAgent, request.name)
-                    call.respond(mapOf("success" to true))
-                }
 
                 get("/chat/history/{sessionId}") {
                     val sessionId = call.parameters["sessionId"] ?: return@get call.respond(io.ktor.http.HttpStatusCode.BadRequest)
@@ -506,11 +527,28 @@ class ChhandaServer @Inject constructor(
                                 else -> "English"
                             }
                             val sessionIdToUse = msg.sessionId ?: "api_session"
+                            
+                            var clearedInitialThinking = false
+
                             sendMessageUseCase(msg.text, remoteIp, llmEngine.getCurrentModelName(), sessionIdToUse, uris, languageName).collect { upd ->
                                 when (upd) {
-                                    is TokenUpdate.Partial -> { write("data: ${upd.text.replace("\n","\\n")}\n\n"); flush() }
-                                    is TokenUpdate.Final   -> { write("data: [DONE]\n\n"); flush() }
-                                    is TokenUpdate.Error   -> { write("data: ERR:${upd.message}\n\n"); flush() }
+                                    is TokenUpdate.Partial -> {
+                                        if (!clearedInitialThinking) {
+                                            write("data: CLR:1\n\n")
+                                            clearedInitialThinking = true
+                                        }
+                                        write("data: ${upd.text.replace("\n", "\\n")}\n\n")
+                                        flush()
+                                    }
+                                    is TokenUpdate.Final -> {
+                                        write("data: RT:${upd.responseTimeMs}\n\n")
+                                        write("data: [DONE]\n\n")
+                                        flush()
+                                    }
+                                    is TokenUpdate.Error -> { 
+                                        write("data: ERR:${upd.message}\n\n")
+                                        flush() 
+                                    }
                                 }
                             }
                         } catch (e: Exception) {
@@ -1164,7 +1202,6 @@ class ChhandaServer @Inject constructor(
                 fileInp.value = '';
                 if(res.status===503){ai.className='msg s';ai.textContent='Model loading — try again.';return;}
                 if(!res.ok){ai.className='msg s';ai.textContent='Error '+res.status;return;}
-                ai.textContent=''; // Clear thinking state
                 const reader=res.body.getReader(),dec=new TextDecoder();
                 let buf='';
                 for(;;){
@@ -1176,6 +1213,23 @@ class ChhandaServer @Inject constructor(
                         const tok=p.slice(6);
                         if(tok.trim()==='[DONE]')break;
                         if(tok.startsWith('ERR:')){ai.className='msg s';ai.textContent=tok.slice(4);break;}
+                        
+                        if (tok === 'CLR:1') {
+                            ai.textContent = '';
+                            continue;
+                        }
+                        
+                        if (tok.startsWith('MSG:')) {
+                             const html = tok.slice(4);
+                             ai.innerHTML += html;
+                             continue;
+                        }
+                        
+                        if (tok.startsWith('RT:')) {
+                             const responseTime = tok.slice(3);
+                             ai.setAttribute('data-rt', responseTime);
+                             continue;
+                        }
                         
                         tokenCount++;
                         if (!startTime) startTime = Date.now();
@@ -1205,20 +1259,35 @@ class ChhandaServer @Inject constructor(
         }
 
         function formatText(t) {
-            const thinkStart = t.indexOf('<think>');
-            const thinkEnd = t.indexOf('</think>');
+            let processed = t.trimStart();
+            
+            // Suppress literal prefixes at the start
+            const prefixes = ["Thinking...", "Thinking:", "Thought:", "Thought..."];
+            let changed = true;
+            while(changed) {
+                changed = false;
+                for(const p of prefixes) {
+                    if(processed.toLowerCase().startsWith(p.toLowerCase())) {
+                        processed = processed.substring(p.length).trimStart();
+                        changed = true;
+                    }
+                }
+            }
+
+            const thinkStart = processed.indexOf('<think>');
+            const thinkEnd = processed.indexOf('</think>');
             
             if (thinkStart !== -1) {
-                const beforeThink = t.substring(0, thinkStart);
+                const beforeThink = processed.substring(0, thinkStart);
                 if (thinkEnd !== -1) {
-                    const afterThink = t.substring(thinkEnd + 8);
+                    const afterThink = processed.substring(thinkEnd + 8);
                     return escapeHtml(beforeThink) + escapeHtml(afterThink);
                 } else {
                     return escapeHtml(beforeThink) + 
                            `<div class="think-loader">⚡ Thinking...</div>`;
                 }
             }
-            return escapeHtml(t);
+            return escapeHtml(processed);
         }
         
         function escapeHtml(text) {
@@ -1263,9 +1332,12 @@ class ChhandaServer @Inject constructor(
             actions.className = 'actions';
             
             if (speed) {
+                const rt = msgDiv.getAttribute('data-rt');
                 const speedLabel = document.createElement('span');
                 speedLabel.className = 'speed-label';
-                speedLabel.textContent = speed + ' tok/s';
+                let labelText = speed + ' tok/s';
+                if (rt) labelText += ' | ' + (rt/1000).toFixed(2) + 's';
+                speedLabel.textContent = labelText;
                 actions.appendChild(speedLabel);
             }
             

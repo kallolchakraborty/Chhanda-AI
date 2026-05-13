@@ -30,6 +30,7 @@ import android.speech.tts.TextToSpeech
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Mic
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,8 +82,18 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                 if (status == TextToSpeech.SUCCESS) {
                     ttsInstance?.language = ttsLocale
                     if (selectedVoice != "Default") {
+                        val isMale = selectedVoice.contains("Male")
                         val voices = ttsInstance?.voices
-                        val targetVoice = voices?.find { it.name == selectedVoice }
+                        val targetVoice = voices?.filter { it.locale.language == ttsLocale.language }
+                            ?.find { v ->
+                                val name = v.name.lowercase()
+                                if (isMale) {
+                                    name.contains("male") || name.contains("-m-") || name.contains("male_")
+                                } else {
+                                    name.contains("female") || name.contains("-f-") || name.contains("female_")
+                                }
+                            } ?: voices?.filter { it.locale.language == ttsLocale.language }?.firstOrNull()
+                            
                         if (targetVoice != null) {
                             ttsInstance?.voice = targetVoice
                         }
@@ -205,7 +216,7 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
 
                 if (uiState.currentPartialResponse.isNotEmpty()) {
                     item(key = "streaming_node") {
-                        StreamingBubble(uiState.currentPartialResponse, uiState.currentTps, appLanguage)
+                        StreamingBubble(uiState.currentPartialResponse, uiState.currentTps, uiState.currentRt, appLanguage)
                     }
                 }
 
@@ -596,7 +607,7 @@ fun buildInlineAnnotated(
 }
 
 @Composable
-fun StreamingBubble(text: String, tps: Double = 0.0, appLanguage: String = "English") {
+fun StreamingBubble(text: String, tps: Double = 0.0, rt: Long = 0L, appLanguage: String = "English") {
     val (thinkingText, responseText) = parseMessageContent(text)
     val textColor = MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -655,9 +666,14 @@ fun StreamingBubble(text: String, tps: Double = 0.0, appLanguage: String = "Engl
                 }
             }
         }
-        if (tps > 0) {
+        if (tps > 0 || rt > 0) {
+            val label = if (rt > 0) {
+                String.format("%.1f t/s | %.2fs", tps, rt / 1000f)
+            } else {
+                String.format("%.1f t/s", tps)
+            }
             Text(
-                text = String.format("%.1f t/s", tps),
+                text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 modifier = Modifier.padding(top = 4.dp, start = 8.dp)
@@ -680,6 +696,17 @@ fun ChatInput(
     val fileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { onAttach(it) } }
+
+    var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            cameraUri?.let { onAttach(it) }
+        }
+    }
 
     val locale = when (appLanguage) {
         "Bengali" -> java.util.Locale("bn", "BD")
@@ -726,6 +753,13 @@ fun ChatInput(
             ) {
                 IconButton(onClick = { fileLauncher.launch("*/*") }) {
                     Icon(Icons.Default.Add, null, tint = Color.Gray)
+                }
+                IconButton(onClick = { 
+                    val uri = com.chhanda.ai.util.FileUtils.createImageUri(context)
+                    cameraUri = uri
+                    uri?.let { cameraLauncher.launch(it) }
+                }) {
+                    Icon(Icons.Default.PhotoCamera, null, tint = Color.Gray)
                 }
                 TextField(
                     value = text,

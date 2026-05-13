@@ -1,28 +1,25 @@
 # Chhanda: Production-Grade On-Device AI with RAG
 
-Chhanda is a 100% offline, privacy-first AI application designed for high-performance Retrieval-Augmented Generation (RAG) on Android. It utilizes **Gemma 2B (4-bit quantized)** orchestrated via **Google LiteRT-LM** (MediaPipe GenAI) and features a local multimodal ingestion pipeline.
+Chhanda is a 100% offline, privacy-first AI application designed for high-performance Retrieval-Augmented Generation (RAG) on Android. It utilizes **Gemma 4B & 2B (4-bit quantized)** orchestrated via **Google LiteRT-LM** (MediaPipe GenAI) and features a local multimodal ingestion pipeline.
 
 ---
 
 ## 🚀 Key Features
+
 - **100% Offline Inference**: No data leaves the device; LLM execution is strictly local.
-- **On-Device RAG**: Real-time vector similarity search for context-aware responses.
-- **Multimodal Ingestion**: On-device OCR (Images), ASR (Audio), and PDF parsing.
-- **Voice Interaction**: Local Speech-to-Text (STT) and Text-to-Speech (TTS) with voice selection.
-- **Crash-Proof Logging**: Intercepts fatal crashes and displays them in-app on restart.
-- **Pixel-Inspired Design**: Premium "Chromatic Architect" aesthetic with glassmorphism and tonal elevations.
-
----
-
-## 🎭 Role & Purpose of this Document
-This document is written from the perspective of a **Senior Architect**. It provides an exhaustive, file-by-file and layer-by-layer breakdown of the Chhanda application. It is designed to guide a junior developer through the complex interplay of local LLM inference, vector databases, and background processing on Android, enabling them to make fixes and scale the system confidently.
+- **Multimodal Gateway**: Support for Text, Images (Direct Camera/Gallery), Audio, and PDF.
+- **High-Precision RAG**: Semantic vector search with model-aware relevance thresholding.
+- **Advanced Telemetry**: Real-time monitoring of **TPS (Tokens Per Second)** and **RT (Response Time)** for both local and web gateway sessions.
+- **Personalized Voice AI**: 3 Male/3 Female styles including Indian voices (Arjun as Kallol, Priya as Chhanda).
+- **Robust Ingestion**: Multi-strategy web scraping and local file processing with automated text chunking.
+- **Security & Privacy**: Mandatory API key authentication for web access and zero-cloud data footprint.
 
 ---
 
 ## 🏛 1. High-Level Architecture
 
 ### 🗺 High-Level System Overview
-This diagram shows how the user, background processes, and external apps interact with the system.
+Chhanda operates as a local AI gateway. It can serve the device user directly or act as a remote endpoint for other devices on the same network.
 
 ```mermaid
 graph TD
@@ -32,89 +29,41 @@ graph TD
     UC -->|Queries| VS[Local Vector Store Room DB]
     UC -->|Inference| LE[LiteRT LM Engine]
     
-    Docs[(Local Documents PDF/Img/Aud)] -->|Ingested by| IW[IngestionWorker]
-    IW -->|Parses| MI[Multimodal Ingestor OCR]
-    MI -->|Chunks| TC[Text Chunker]
-    TC -->|Embeds| EE[Embedding Engine]
+    Camera([Camera]) -->|Capture| UC
+    Docs[(Local Documents)] -->|Ingested by| IW[IngestionWorker]
+    IW -->|Parses| MI[Multimodal Ingestor]
+    MI -->|Embeds| EE[Embedding Engine]
     EE -->|Saves| VS
     
-    ExternalApp([External App]) <-->|API Request| KS[Ktor API Server]
-    KS -->|Calls| UC
+    RemoteUser([Remote Browser]) <-->|SSE Stream| KS[Ktor API Server]
+    KS -->|Telemetery| RT[RT/TPS Metrics]
+    KS -->|Auth| UC
 ```
 
 ---
 
-## 📂 2. Layer-by-Layer Breakdown & Component Diagram
+## 📂 2. Core Components
 
-### 🧱 Component & Layer Interaction
-This diagram illustrates the separation of concerns and how layers depend on each other. Dependency flows downwards.
+### 🔵 2.1 The Inference Engine (`LiteRTLMEngine.kt`)
+The heart of Chhanda. It manages the lifecycle of the Gemma models.
+- **Dynamic Memory Management**: Automatically scales context length (512 to 4096) based on available RAM to prevent OOM.
+- **Thermal Safety**: Implements a 2500ms mandatory "cooldown" gap between model swaps to allow the OS to reclaim native RAM.
+- **Thought Filtering**: Automatically strips internal `<thought>` blocks from streaming output to keep responses clean.
 
-```mermaid
-graph TB
-    subgraph PL["Presentation Layer (UI & State)"]
-        direction TB
-        CS[ChatScreen]
-        DS[DashboardScreen]
-        CVM[ChatViewModel]
-        SVM[SystemViewModel]
-        CS -.-> CVM
-        DS -.-> SVM
-    end
-    
-    subgraph DL["Domain Layer (Pure Business Logic)"]
-        direction TB
-        SMUC[SendMessageUseCase]
-        IDUC[IngestDocumentUseCase]
-        SUUC[ScrapeUrlUseCase]
-    end
-    
-    subgraph DTL["Data Layer (Persistence & AI Engines)"]
-        direction TB
-        LE[LiteRTLMEngine]
-        EE[LiteRTEmbeddingEngine]
-        LVS[LocalVectorStore]
-        RD[(Room Database)]
-    end
-    
-    subgraph INF["Infrastructure (System Services)"]
-        direction TB
-        CServ[ChhandaServer Ktor]
-        IW[IngestionWorker]
-    end
-    
-    PL --> DL
-    DL --> DTL
-    INF --> DL
-    INF --> DTL
-```
+### 🟢 2.2 The RAG Pipeline (`ContextManager.kt` & `LocalVectorStore.kt`)
+Chhanda uses a custom-built vector similarity search engine running on top of Room/SQLite.
+- **Model-Aware Logic**: Gemma 4B uses a denser threshold (0.15) and smaller Top-K (3) for speed, while 2B uses a broader search (0.02) for better recall.
+- **Embedding Alignment**: Uses `sentence-transformers/all-MiniLM-L6-v2` equivalents via MediaPipe for 384-dimensional semantic vectors.
+
+### 🟡 2.3 The Web Gateway (`ChhandaServer.kt`)
+A Ktor-based server that turns the Android phone into a secure AI endpoint.
+- **SSE Streaming**: High-fidelity event stream with metadata headers.
+- **Telemetry Emission**: Emits `TPS:[val]` and `RT:[val]` signals for real-time frontend dashboarding.
+- **API Key Security**: Rejects unauthorized requests with a 401 status.
 
 ---
 
-## 📄 3. Exhaustive File-by-File Analysis
-
-### 🔵 3.1 Presentation Layer
-*   **`MainActivity.kt`**: Single Activity entry point. Hosts navigation.
-*   **`ui/DashboardScreen.kt`**: The main control center (Model management, server status).
-*   **ui/ChatScreen.kt**: Real-time streaming chat interface with voice input/output.
-*   **ui/ConfigScreen.kt**: Settings panel (Context length, TurboQuant, Voice selection).
-*   **`ui/LogsScreen.kt`**: Real-time log viewer for debugging.
-*   **`viewmodel/SystemViewModel.kt`**: Global state holder.
-
-### 🟢 3.2 Domain Layer
-*   **`usecase/SendMessageUseCase.kt`**: Orchestrates RAG and LLM inference.
-*   **usecase/ScrapeUrlUseCase.kt**: Fetches content from a URL using `Jsoup`. (Unused after web search removal).
-*   **`model/ContextManager.kt`**: Orchestrates short-term and long-term memory.
-
-### 🟡 3.3 Data Layer
-*   **`inference/LiteRTLMEngine.kt`**: Core LLM runner (LiteRT/TFLite).
-*   **`inference/LiteRTEmbeddingEngine.kt`**: Generates vectors using MediaPipe.
-*   **`inference/AndroidMultimodalIngestor.kt`**: ML Kit OCR and file parsing.
-*   **`inference/ChhandaServer.kt`**: Embedded Ktor server.
-*   **`repository/LocalVectorStore.kt`**: Manual vector similarity search in Room.
-
----
-
-## 🔄 4. Control Flow: Message Processing & RAG Fallback
+## 🔄 3. Control Flow: Multimodal Ingestion
 
 ```mermaid
 sequenceDiagram
@@ -122,70 +71,59 @@ sequenceDiagram
     actor User
     participant CS as ChatScreen
     participant VM as ChatViewModel
-    participant UC as SendMessageUseCase
-    participant CM as ContextManager
+    participant ID as AndroidMultimodalIngestor
+    participant EE as EmbeddingEngine
     participant VS as LocalVectorStore
-    participant GS as GoogleSearchUseCase
-    participant LE as LiteRTLMEngine
     
-    User->>CS: Type message & send
-    CS->>VM: SendMessage(text)
-    VM->>UC: invoke(text)
-    UC->>CM: getOptimizedContext(text)
-    CM->>VS: query(text)
-    VS-->>CM: Return snippets (if score > 0.02)
-    
-    alt Local Context Found
-        CM-->>UC: Return longTermContext
-    else No Local Context
-        CM-->>UC: Return empty (Fallback to pretrained knowledge)
-    end
-    
-    UC->>LE: generateResponse(prompt, context)
-    loop Token Streaming
-        LE-->>UC: emit(TokenUpdate)
-        UC-->>VM: emit(TokenUpdate)
-        VM-->>CS: Update UI
-    end
-    CS-->>User: Display final response
+    User->>CS: Capture Photo / Select PDF
+    CS->>VM: onAttach(Uri)
+    VM->>ID: extractText(Uri)
+    ID->>ID: OCR (ML Kit) / PDF Parsing
+    ID-->>VM: rawText
+    VM->>EE: embed(rawText)
+    EE->>VS: insert(VectorChunk)
+    VS-->>User: "Document Ingested Successfully"
 ```
 
 ---
 
-## 🛠 5. Full Tech Stack & Library Details in Depth
+## 📄 4. Exhaustive File-by-File Analysis
 
-| Category | Technology | Purpose in Chhanda |
-| :--- | :--- | :--- |
-| **LLM Inference** | **LiteRT-LM** | Google's edge inference engine for Gemma models. |
-| **Embeddings** | **MediaPipe** | Generates vectors for RAG similarity search. |
-| **OCR / Vision** | **Google ML Kit** | Extracts text from images and scanned PDFs. |
-| **Local Database**| **Room (SQLite)** | Stores chat history and vector embeddings. |
-| **API Server** | **Ktor** | Embedded HTTP server for external API access. |
-| **Bg Tasks** | **WorkManager** | Handles model downloads and document ingestion. |
-| **Scraping** | **Jsoup** | Used for web scraping and Google search fallback. |
+### 📱 Presentation Layer
+*   **`ui/ChatScreen.kt`**: Main interface. Handles camera intent, voice recording, and streaming telemetry bubbles.
+*   **`ui/DashboardScreen.kt`**: Infrastructure control. Monitors RAM, Battery Temp, and Gateway Status.
+*   **`viewmodel/SystemViewModel.kt`**: Orchestrates model discovery, downloads, and system-wide logging.
 
----
+### 🧠 Domain Layer
+*   **`usecase/SendMessageUseCase.kt`**: The "Senior Architect" orchestrator. Handles prompt construction, safety filtering, and load balancing.
+*   **`domain/model/TokenUpdate.kt`**: Data class representing the streaming state (Partial/Final/Error/RT).
 
-## 🛑 6. Problems Faced & Overcome
-
-### 🚨 1. Native C++ Engine "Busy" Deadlocks
-*   **Solution**: Implemented a retry loop in `LiteRTLMEngine.kt` and strict calling of `session.close()`.
-
-### 🚨 2. Out of Memory (OOM) on Low-RAM Devices
-*   **Solution**: Dynamic context length scaling and mandatory `System.gc()` with a 2500ms delay.
-
-### 🚨 3. RAG Hallucination & Low Recall
-*   **Solution**: Lowered similarity threshold to `0.02` and implemented Web Search Fallback.
+### 🛠 Data Layer
+*   **`data/inference/LiteRTLMEngine.kt`**: Low-level JNI bindings to the LiteRT library.
+*   **`data/repository/ChatDao.kt`**: Manages the message persistence and search history.
+*   **`util/FileUtils.kt`**: Helpers for scoped storage, camera URI generation, and model verification.
 
 ---
 
-## 🚀 7. Optimization Techniques Used
+## 🛑 5. Challenges & Architected Solutions
 
-1.  **Thermal Awareness**: Models are loaded lazily to minimize baseline memory footprint.
-2.  **Token Budgeting**: RAG context is capped to fit model limits dynamically.
-3.  **SIMD Math**: Vector similarity uses optimized loops for low-latency retrieval.
-4.  **Lifecycle Safety**: Flows use `WhileSubscribed` to prevent background drain.
-5.  **Prefix Hashing in Load Balancer**: Maintains cache locality for prompts.
+| Challenge | Solution |
+| :--- | :--- |
+| **Gemma 4B Latency** | Optimized RAG Top-K density and streamlined instructions for faster first-token emission. |
+| **Native Memory Leaks** | Synchronized native engine teardown with mandatory `System.gc()` and thread-locking. |
+| **Scraping Blockers** | Multi-strategy scraper with randomized Desktop User-Agents and Readability-based filtering. |
+| **Model Discovery** | Robust filename fallback logic that identifies models by size and version tags (E2B/E4B). |
+
+---
+
+## 🛠 6. Tech Stack
+
+- **Inference**: LiteRT (TensorFlow Lite GenAI)
+- **Vision**: Google ML Kit OCR
+- **Speech**: Android STT / Custom TTS Engine
+- **Network**: Ktor (Server & Client)
+- **Database**: Room (SQL + Vector)
+- **UI**: Jetpack Compose (Material 3)
 
 ---
 

@@ -168,15 +168,36 @@ fun ConfigScreen(
                                 onDismissRequest = { voiceExpanded = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Default") },
+                                    text = { Text("System Default") },
                                     onClick = {
                                         viewModel.setSelectedVoice("Default")
                                         voiceExpanded = false
                                     }
                                 )
-                                availableVoices.forEach { voice ->
+                                for (voice in availableVoices) {
                                     DropdownMenuItem(
-                                        text = { Text(voice) },
+                                        text = {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(voice)
+                                                IconButton(
+                                                    onClick = { 
+                                                        viewModel.playSample(voice, appLanguage)
+                                                    },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.PlayArrow,
+                                                        contentDescription = "Play Sample",
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
+                                        },
                                         onClick = {
                                             viewModel.setSelectedVoice(voice)
                                             voiceExpanded = false
