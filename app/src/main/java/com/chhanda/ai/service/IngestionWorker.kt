@@ -119,6 +119,26 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
             showCompletionNotification(fileName, true)
             Result.success()
         } catch (e: Exception) {
+            if (e.message?.contains("PDF_LINK_DETECTED") == true) {
+                android.util.Log.i("IngestionWorker", "Redirecting detected PDF link to binary ingestor: $url")
+                // Re-run with PDF extension hint to force the PDF branch in next pass or just handle here
+                val tempFile = java.io.File(applicationContext.cacheDir, "detected_${System.currentTimeMillis()}.pdf")
+                try {
+                    java.net.URL(url).openStream().use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    val uri = Uri.fromFile(tempFile)
+                    useCase(uri, DocType.PDF)
+                    tempFile.delete()
+                    showCompletionNotification(fileName, true)
+                    return Result.success()
+                } catch (pe: Exception) {
+                    android.util.Log.e("IngestionWorker", "PDF redirection failed: ${pe.message}")
+                }
+            }
+            android.util.Log.e("IngestionWorker", "Ingestion failed: ${e.message}")
             showCompletionNotification(fileName, false)
             Result.failure()
         }

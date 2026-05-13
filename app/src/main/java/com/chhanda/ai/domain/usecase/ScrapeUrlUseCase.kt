@@ -1,127 +1,186 @@
 package com.chhanda.ai.domain.usecase
 
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * Use case for scraping content from a URL for RAG ingestion.
+ * Senior-Grade Web Scraping Engine.
+ * Implements exponential backoff, rotating user-agents, and a custom Readability scoring algorithm
+ * to extract meaningful content while aggressively filtering noise and advertisements.
  */
 class ScrapeUrlUseCase @Inject constructor() {
 
+    private val userAgents = listOf(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1"
+    )
+
     suspend operator fun invoke(url: String, useAi: Boolean = false, maxSizeMb: Int = 300): String = withContext(Dispatchers.IO) {
-        try {
-            android.util.Log.d("ScrapeUrl", "Starting scrape for: $url")
-            
-            // Senior strategy: Use a very common browser User-Agent
-            val userAgents = listOf(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
-
-            val connection = Jsoup.connect(url)
-                .userAgent(userAgents.random())
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .timeout(20000)
-                .followRedirects(true)
-                .ignoreContentType(true)
-                .ignoreHttpErrors(true) // We want to handle the error ourselves
-
-            val response = connection.execute()
-            
-            if (response.statusCode() != 200) {
-                throw Exception("HTTP ${response.statusCode()}: ${response.statusMessage()}")
+        var lastError: Exception? = null
+        
+        // 🚀 Senior Strategy: 3-Stage Retry with Backoff and UA Rotation
+        for (attempt in 1..3) {
+            try {
+                android.util.Log.d("ScrapeUrl", "Scraping Attempt $attempt for: $url")
+                return@withContext executeScrape(url, attempt)
+            } catch (e: Exception) {
+                lastError = e
+                android.util.Log.w("ScrapeUrl", "Attempt $attempt failed: ${e.message}")
+                if (attempt < 3) delay(1000L * attempt) // Exponential backoff
             }
-
-            // Check content type
-            val contentType = response.contentType() ?: ""
-            if (!contentType.contains("text/html") && !contentType.contains("application/xhtml")) {
-                // If it's plain text, just return it
-                if (contentType.contains("text/plain")) {
-                    return@withContext response.body().take(maxSizeMb * 1024 * 1024)
-                }
-                throw Exception("Unsupported content type: $contentType")
-            }
-
-            val doc = response.parse()
-            doc.setBaseUri(url)
-
-            // 1. Remove obvious noise and ads more aggressively
-            val adSelectors = listOf(
-                "script", "style", "nav", "footer", "header", "noscript", "iframe", "link", 
-                ".ads", ".sidebar", ".menu", ".nav", "#footer", "#header", ".ad-container", 
-                ".promoted", ".sponsored", ".social-share", ".newsletter-signup", "[id*=ad-]", 
-                "[class*=ad-]", "aside", ".banner", ".popup"
-            )
-            doc.select(adSelectors.joinToString(", ")).remove()
-            doc.select("[style*=display:none]").remove()
-            doc.select("[aria-hidden=true]").remove()
-
-            // 2. Identify the main content container
-            val candidates = listOf(
-                "article", "main", "[role=main]", ".post-content", ".article-content", 
-                ".content", "#content", ".entry-content", ".main-content", "#main",
-                ".wiki-content", ".mw-parser-output" // Wikipedia
-            )
-            
-            var mainElement: org.jsoup.nodes.Element? = null
-            for (selector in candidates) {
-                mainElement = doc.select(selector).firstOrNull()
-                if (mainElement != null && mainElement.text().length > 200) break
-            }
-            
-            val contentToProcess = mainElement ?: doc.body()
-
-            // 3. Extract text with hierarchy preservation
-            val builder = StringBuilder()
-            
-            // Add page title as H1 equivalent
-            val pageTitle = doc.title().trim()
-            if (pageTitle.isNotBlank()) {
-                builder.append("# $pageTitle\n\n")
-            }
-
-            // Iterate through meaningful tags
-            contentToProcess.select("h1, h2, h3, h4, p, li, table, pre, code, img").forEach { element ->
-                val tagName = element.tagName()
-                val text = element.text().trim()
-                
-                when (tagName) {
-                    "h1" -> if (text.length > 2) builder.append("# $text\n\n")
-                    "h2" -> if (text.length > 2) builder.append("## $text\n\n")
-                    "h3", "h4" -> if (text.length > 2) builder.append("### $text\n\n")
-                    "li" -> if (text.length > 2) builder.append("- $text\n")
-                    "table" -> builder.append("[Table Data: ${element.text().take(500)}]\n\n")
-                    "pre", "code" -> if (text.length > 2) builder.append("```\n$text\n```\n\n")
-                    "img" -> {
-                        val alt = element.attr("alt").trim()
-                        val title = element.attr("title").trim()
-                        if (alt.isNotBlank()) builder.append("[IMAGE DESCRIPTION: $alt]\n\n")
-                        else if (title.isNotBlank()) builder.append("[IMAGE TITLE: $title]\n\n")
-                    }
-                    else -> if (text.length > 10) builder.append(text).append("\n\n")
-                }
-            }
-
-            val result = builder.toString().trim()
-            
-            if (result.length < 100) {
-                // Fallback: If structured extraction was too aggressive, take raw body text
-                android.util.Log.w("ScrapeUrl", "Structured extraction too short (${result.length}), falling back to body text.")
-                val rawBodyText = doc.body().text().trim()
-                if (rawBodyText.length < 50) throw Exception("No meaningful text found on the page.")
-                rawBodyText
-            } else {
-                result
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ScrapeUrl", "Scraping failed: ${e.message}")
-            throw Exception("Scraping failed for $url: ${e.message}")
         }
+        
+        throw Exception("Scraping failed after 3 attempts. Last error: ${lastError?.message}")
     }
 
-    private fun Double.format(digits: Int) = "%.${digits}f".format(this)
+    private fun executeScrape(url: String, attempt: Int): String {
+        val connection = Jsoup.connect(url)
+            .userAgent(userAgents[attempt % userAgents.size])
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+            .header("Accept-Language", "en-US,en;q=0.5")
+            .header("Cache-Control", "no-cache")
+            .header("Pragma", "no-cache")
+            .header("Upgrade-Insecure-Requests", "1")
+            .timeout(15000)
+            .followRedirects(true)
+            .ignoreContentType(true)
+
+        val response = connection.execute()
+        
+        if (response.statusCode() != 200) {
+            throw Exception("HTTP ${response.statusCode()}: ${response.statusMessage()}")
+        }
+
+        val contentType = response.contentType() ?: ""
+        if (contentType.contains("application/pdf")) {
+            throw Exception("PDF_LINK_DETECTED") // Signal to worker to use PDF ingestor
+        }
+        
+        if (!contentType.contains("text/html") && !contentType.contains("application/xhtml")) {
+            if (contentType.contains("text/plain")) return response.body()
+            throw Exception("Unsupported content type: $contentType")
+        }
+
+        val doc = response.parse()
+        doc.setBaseUri(url)
+        
+        // 🧹 Aggressive Noise Removal
+        cleanDocument(doc)
+
+        // 🧠 Identify Main Content using Readability Scoring
+        val mainContent = findMainContent(doc)
+        
+        // 📝 Formatted Extraction
+        val builder = StringBuilder()
+        
+        // Metadata headers
+        val title = doc.title().trim()
+        if (title.isNotBlank()) builder.append("# $title\n\n")
+        
+        val metaDesc = doc.select("meta[name=description]").attr("content").trim()
+        if (metaDesc.isNotBlank()) builder.append("> $metaDesc\n\n")
+
+        // Content Iteration
+        extractMeaningfulText(mainContent, builder)
+
+        // Final Validation
+        val result = builder.toString().trim()
+        if (result.length < 200) {
+            // Fallback to body text if scoring was too picky
+            val bodyText = doc.body().text().trim()
+            if (bodyText.length < 100) throw Exception("Extracted content too thin (${bodyText.length} chars)")
+            return bodyText
+        }
+        
+        return result
+    }
+
+    private fun cleanDocument(doc: Document) {
+        val noiseSelectors = listOf(
+            "script", "style", "nav", "footer", "header", "noscript", "iframe", "link",
+            ".ads", ".sidebar", ".menu", ".nav", "#footer", "#header", ".ad-container",
+            ".promoted", ".sponsored", ".social-share", ".newsletter-signup", "aside",
+            ".banner", ".popup", "[style*=display:none]", "[aria-hidden=true]",
+            ".cookie-banner", ".consent-msg", "#comments", ".comments-area"
+        )
+        doc.select(noiseSelectors.joinToString(", ")).remove()
+        
+        // Remove empty paragraphs/divs
+        doc.select("p:empty, div:empty").remove()
+    }
+
+    private fun findMainContent(doc: Document): Element {
+        // High-confidence candidates
+        val primaryCandidates = listOf("article", "main", "[role=main]", ".post-content", ".article-content", ".content-area")
+        for (selector in primaryCandidates) {
+            doc.select(selector).firstOrNull()?.let { if (it.text().length > 500) return it }
+        }
+
+        // Scoring algorithm: Score elements based on text density vs link density
+        var bestElement: Element = doc.body()
+        var maxScore = 0
+
+        doc.select("div, section, article").forEach { element ->
+            val text = element.ownText().trim()
+            if (text.length < 25) return@forEach
+            
+            val linkDensity = calculateLinkDensity(element)
+            if (linkDensity > 0.3) return@forEach // Too many links, likely a menu or sidebar
+            
+            val score = text.length + (element.select("p").size * 20)
+            if (score > maxScore) {
+                maxScore = score
+                bestElement = element
+            }
+        }
+
+        return bestElement
+    }
+
+    private fun calculateLinkDensity(element: Element): Double {
+        val textLength = element.text().length
+        if (textLength == 0) return 0.0
+        val linkTextLength = element.select("a").sumOf { it.text().length }
+        return linkTextLength.toDouble() / textLength.toDouble()
+    }
+
+    private fun extractMeaningfulText(root: Element, builder: StringBuilder) {
+        root.select("h1, h2, h3, h4, p, li, table, pre, code, img, figcaption, a").forEach { el ->
+            val tag = el.tagName()
+            val text = el.text().trim()
+            
+            when (tag) {
+                "h1" -> if (text.length > 2) builder.append("# $text\n\n")
+                "h2" -> if (text.length > 2) builder.append("## $text\n\n")
+                "h3", "h4" -> if (text.length > 2) builder.append("### $text\n\n")
+                "p" -> if (text.length > 10) builder.append("$text\n\n")
+                "li" -> if (text.length > 2) builder.append("- $text\n")
+                "pre", "code" -> if (text.length > 2) builder.append("```\n$text\n```\n\n")
+                "table" -> {
+                    val tableText = el.text().take(1000)
+                    builder.append("[TABLE DATA: $tableText]\n\n")
+                }
+                "img" -> {
+                    val alt = el.attr("alt").trim()
+                    val title = el.attr("title").trim()
+                    if (alt.isNotBlank()) builder.append("[IMAGE DESCRIPTION: $alt]\n\n")
+                    else if (title.isNotBlank()) builder.append("[IMAGE TITLE: $title]\n\n")
+                }
+                "figcaption" -> if (text.isNotBlank()) builder.append("*Caption: $text*\n\n")
+                "a" -> {
+                    val href = el.attr("abs:href").lowercase()
+                    if (href.endsWith(".pdf") || href.endsWith(".docx") || href.endsWith(".zip")) {
+                        builder.append("[EXTERNAL FILE LINK: $text ($href)]\n\n")
+                    }
+                }
+            }
+        }
+    }
 }
