@@ -18,14 +18,14 @@ class ScrapeUrlUseCase @Inject constructor() {
     private val userAgents = listOf(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Mobile/15E148 Safari/604.1"
     )
 
     suspend operator fun invoke(url: String, useAi: Boolean = false, maxSizeMb: Int = 300): String = withContext(Dispatchers.IO) {
         var lastError: Exception? = null
         
-        // 🚀 Senior Strategy: 3-Stage Retry with Backoff and UA Rotation
+        // 🚀 Senior Strategy: 3-Stage Retry with Identity Stealth
         for (attempt in 1..3) {
             try {
                 android.util.Log.d("ScrapeUrl", "Scraping Attempt $attempt for: $url")
@@ -33,27 +33,37 @@ class ScrapeUrlUseCase @Inject constructor() {
             } catch (e: Exception) {
                 lastError = e
                 android.util.Log.w("ScrapeUrl", "Attempt $attempt failed: ${e.message}")
-                if (attempt < 3) delay(1000L * attempt) // Exponential backoff
+                if (attempt < 3) delay(2000L * attempt) // Increased delay
             }
         }
         
-        throw Exception("Scraping failed after 3 attempts. Last error: ${lastError?.message}")
+        throw Exception("Failed to bypass site security. Status: ${lastError?.message}")
     }
 
     private fun executeScrape(url: String, attempt: Int): String {
+        val currentUA = userAgents[attempt % userAgents.size]
         val connection = Jsoup.connect(url)
-            .userAgent(userAgents[attempt % userAgents.size])
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-            .header("Accept-Language", "en-US,en;q=0.5")
-            .header("Cache-Control", "no-cache")
-            .header("Pragma", "no-cache")
-            .header("Upgrade-Insecure-Requests", "1")
-            .timeout(15000)
+            .userAgent(currentUA)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Accept-Encoding", "gzip, deflate, br")
+            .header("Referer", "https://www.google.com/")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Mode", "navigate")
+            .header("Sec-Fetch-Site", "cross-site")
+            .header("Sec-Fetch-User", "?1")
+            .header("Connection", "keep-alive")
+            .timeout(20000)
             .followRedirects(true)
             .ignoreContentType(true)
+            .ignoreHttpErrors(true) // We check status ourselves
 
         val response = connection.execute()
         
+        if (response.statusCode() == 403 || response.statusCode() == 429) {
+            throw Exception("Access Denied (${response.statusCode()}). The site is blocking automated access.")
+        }
+
         if (response.statusCode() != 200) {
             throw Exception("HTTP ${response.statusCode()}: ${response.statusMessage()}")
         }
@@ -152,7 +162,7 @@ class ScrapeUrlUseCase @Inject constructor() {
     }
 
     private fun extractMeaningfulText(root: Element, builder: StringBuilder) {
-        root.select("h1, h2, h3, h4, p, li, table, pre, code, img, figcaption, a").forEach { el ->
+        root.select("h1, h2, h3, h4, p, li, table, pre, code, img, figcaption, a, dt, dd").forEach { el ->
             val tag = el.tagName()
             val text = el.text().trim()
             
@@ -162,6 +172,8 @@ class ScrapeUrlUseCase @Inject constructor() {
                 "h3", "h4" -> if (text.length > 2) builder.append("### $text\n\n")
                 "p" -> if (text.length > 10) builder.append("$text\n\n")
                 "li" -> if (text.length > 2) builder.append("- $text\n")
+                "dt" -> builder.append("**$text**: ")
+                "dd" -> builder.append("$text\n\n")
                 "pre", "code" -> if (text.length > 2) builder.append("```\n$text\n```\n\n")
                 "table" -> {
                     val tableText = el.text().take(1000)
