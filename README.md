@@ -61,6 +61,12 @@ A Ktor-based server that turns the Android phone into a secure AI endpoint.
 - **Telemetry Emission**: Emits `TPS:[val]` and `RT:[val]` signals for real-time frontend dashboarding.
 - **API Key Security**: Rejects unauthorized requests with a 401 status.
 
+### 🟠 2.4 The Cache-Aware Load Balancer (`SendMessageUseCase.kt`)
+To handle high-concurrency scenarios—especially when multiple devices access the gateway simultaneously—Chhanda implements an intelligent load balancing layer.
+- **Prefix Hashing**: Utilizes the first 50 characters of a prompt to ensure semantic locality, maximizing the reuse of cached KV (Key-Value) tensors in the model's memory.
+- **Load Bounding**: Enforces strict concurrency limits (max 2 per replica) to prevent "compute thrashing" where too many simultaneous streams would cause all responses to slow down significantly.
+- **Spillover Logic**: If the preferred replica is busy, requests are automatically routed to the least-loaded replica to maintain low latency.
+
 ---
 
 ## 🔄 3. Control Flow: Multimodal Ingestion
