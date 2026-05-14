@@ -547,15 +547,38 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.PictureAsPdf, "PDF", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Description, "Word", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.TableChart, "Excel", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Image, "Image", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Mic, "Audio", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                Icon(Icons.Default.Public, "Web", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly, 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SupportedTypeItem(Icons.Default.PictureAsPdf, "PDF", Color(0xFFF43F5E))
+                SupportedTypeItem(Icons.Default.Description, "Word", Color(0xFF2563EB))
+                SupportedTypeItem(Icons.Default.TableChart, "Excel", Color(0xFF10B981))
+                SupportedTypeItem(Icons.Default.TextFields, "Text", Color(0xFF6B7280))
+                SupportedTypeItem(Icons.Default.Image, "Image", Color(0xFF8B5CF6))
+                SupportedTypeItem(Icons.Default.Mic, "Audio", Color(0xFFF59E0B))
+                SupportedTypeItem(Icons.Default.Public, "Web", Color(0xFF06B6D4))
             }
         }
+    }
+}
+
+@Composable
+fun SupportedTypeItem(icon: ImageVector, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            modifier = Modifier.size(32.dp),
+            color = color.copy(alpha = 0.1f),
+            shape = CircleShape,
+            border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.2f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, label, modifier = Modifier.size(16.dp), tint = color)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, fontSize = 9.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
     }
 }
 
