@@ -49,12 +49,12 @@ class ContextManager @Inject constructor(
                                  query.lowercase().contains("web") || query.lowercase().contains("search") || 
                                  query.lowercase().contains("http")
             
-            val threshold = if (isExplicitSearch) 0.38f else 0.48f 
+            val threshold = if (isExplicitSearch) 0.65f else 0.82f 
             var filtered = results.filter { it.score >= threshold } 
 
             if (filtered.isEmpty() && augmentedQuery != query) {
                 val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db")
-                filtered = rawResults.filter { it.score >= 0.42f }
+                filtered = rawResults.filter { it.score >= 0.55f }
             }
 
             if (filtered.isEmpty()) ""
