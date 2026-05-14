@@ -417,7 +417,7 @@ class ChhandaServer @Inject constructor(
 
                 get("/download/{fileName}") {
                     val fileName = call.parameters["fileName"] ?: return@get call.respond(io.ktor.http.HttpStatusCode.BadRequest)
-                    val file = java.io.File(context.filesDir, "generated/${fileName}")
+                    val file = java.io.File(this@ChhandaServer.context.filesDir, "generated/${fileName}")
                     if (file.exists()) {
                         call.response.header(
                             io.ktor.http.HttpHeaders.ContentDisposition,
