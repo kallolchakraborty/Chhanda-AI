@@ -19,54 +19,58 @@ If an unauthorized device on your network tries to access common paths (like `/g
 
 ---
 
-## 🚀 Performance & Hardware
+## 🚀 Performance & Orchestration
 
-### 4. Why is the AI responding slowly on my device?
-Inference speed is measured in **TPS (Tokens Per Second)**. On Android, this is hardware-accelerated via GPU/NPU.
-*   **Code Reference**: `SystemViewModel.kt` (Lines 1067-1075) identifies your processor (Snapdragon, Tensor, etc.) and optimizes the LiteRT execution delegate accordingly.
+### 4. How does Chhanda handle multiple users at once?
+Chhanda implements an internal **Load Balancer** that routes incoming requests (from the host device, the web gateway, or the API) to available inference replicas.
+*   **Code Reference**: `SendMessageUseCase.kt` (Lines 41-43) utilizes a `LoadBalancer` class to manage multi-client concurrency.
 
 ### 5. Why do I see "App RAM" in GBs?
-Chhanda monitors **PSS (Proportional Set Size)**, which includes both the Java heap and the **Native Memory** used by the LLM model. Since LiteRT models are loaded in native memory, standard RAM monitors often show incorrect (lower) usage.
-*   **Code Reference**: `RAGMetricsManager.kt` (Line 82) uses `android.os.Debug.getMemoryInfo()` to capture the full native footprint.
+Chhanda monitors **PSS (Proportional Set Size)**, which includes both the Java heap and the **Native Memory** used by the LLM model. Standard RAM monitors often miss the massive native footprint of the active model.
+*   **Code Reference**: `RAGMetricsManager.kt` (Line 82) uses `android.os.Debug.getMemoryInfo()` to capture the full native memory usage.
+
+### 6. Can I use Chhanda as a system-wide API?
+**Yes.** Chhanda exposes a standard REST/SSE API protected by an API Key. You can point your local automation scripts or IDE plugins (like Continue) to Chhanda's IP and port.
+*   **Code Reference**: `ChhandaServer.kt` defines the `POST /v1/chat/completions` endpoint (compatible with OpenAI-style headers) to facilitate easy integration.
 
 ---
 
 ## 🧠 Knowledge Base & RAG
 
-### 6. How does Chhanda decide which documents are relevant?
-Chhanda uses an **Adaptive Similarity Engine** with two precision tiers:
-*   **Tier 1 (High Precision - 0.82)**: Used for general queries to prevent irrelevant knowledge injection.
-*   **Tier 2 (Deep Discovery - 0.65)**: Used when the user explicitly asks about "files", "attachments", or "web search".
-*   **Code Reference**: `ContextManager.kt` (Line 52) implements this dual-threshold logic using cosine similarity scores.
+### 7. How does Chhanda decide which documents are relevant?
+Chhanda uses an **Adaptive Similarity Engine** with two precision tiers based on cosine similarity scores:
+*   **Tier 1 (High Precision - 0.82)**: Default for general queries to minimize hallucinations.
+*   **Tier 2 (Deep Discovery - 0.65)**: Activated when explicit search keywords (e.g., "in the attachment", "find in file") are detected.
+*   **Code Reference**: `ContextManager.kt` (Line 52) implements this dual-threshold logic.
 
-### 7. How are complex Word and Excel files read offline?
-We use **Apache POI**, a production-grade library for Microsoft Office formats, optimized for Android to avoid excessive memory usage.
-*   **Code Reference**: `MultimodalIngestor.kt` implements the `.docx` and `.xlsx` extraction logic using `XWPFDocument` and `XSSFWorkbook`.
+### 8. How is document structure preserved during indexing?
+Chhanda uses a **Paragraph-First Chunking Strategy**. It first identifies logical semantic blocks (paragraphs) before splitting by sentence or character length to ensure context isn't lost mid-thought.
+*   **Code Reference**: `TextChunker.kt` (Lines 11-12) uses regex splitting on line breaks to preserve paragraph boundaries.
+
+### 9. How are long-running tasks handled without slowing down the app?
+Heavy tasks like PDF vectorization or web scraping are offloaded to **WorkManager** in a foreground service. This allows them to continue even if you minimize the app.
+*   **Code Reference**: `IngestionWorker.kt` implements `CoroutineWorker` and uses `setForeground()` to ensure the OS doesn't kill the process during deep indexing.
 
 ---
 
 ## 💬 Chat & Personas
 
-### 8. Why does the AI sound like a "Senior Software Engineer" when I use the API?
-Chhanda identifies the request source. Requests from programmatic sources (IDEs, Scripts) trigger the **Expert Persona** to provide high-fidelity technical and architectural guidance.
-*   **Code Reference**: `SendMessageUseCase.kt` (Line 157-159) injects the `SENIOR SOFTWARE ENGINEER` system role when the source is `api`.
+### 10. Why does the AI sound like a "Senior Software Engineer" in my IDE?
+Chhanda performs **Source-Aware Personality Adaptation**. When it detects a request coming via the API (likely from a developer), it injects a technical system role to provide expert-level code reviews and architectural advice.
+*   **Code Reference**: `SendMessageUseCase.kt` (Line 157) injects the `SENIOR SOFTWARE ENGINEER` persona when the source is `api`.
 
-### 9. Can I seek through the AI's voice responses?
-**Yes.** The new media engine includes a global playback bar that supports seeking, background playback, and forward/backward controls.
-*   **Code Reference**: `TtsPlayer.kt` handles the `ExoPlayer` instance for low-latency audio streaming with background service support.
-
----
-
-## 🌐 Connectivity & Gateway
-
-### 10. Can I connect my laptop to Chhanda via a QR code?
-**Yes.** As long as both are on the same Wi-Fi. 
-*   **Code Reference**: `ChhandaServer.kt` uses Ktor's `Netty` engine to serve a full-featured web app from the Android device.
-
-### 11. What is the "Internet Connectivity Guard"?
-When you attempt to scrape a website, Chhanda first checks the system's network capability. If no internet is detected, it prevents the operation and notifies you, rather than hanging.
-*   **Code Reference**: `ScrapeUrlUseCase.kt` uses `ConnectivityManager` to verify internet availability before initiating a `Jsoup` fetch.
+### 11. Can I seek through the AI's voice responses?
+**Yes.** The media engine includes a global playback bar with 10s forward/backward seeking and background playback support.
+*   **Code Reference**: `TtsPlayer.kt` manages the `ExoPlayer` state and provides the seeking interface used in the Chat UI.
 
 ---
 
-**Technical Troubleshooting**: Check the **System Logs** in the Dashboard for real-time `ChhandaAudit` tags.
+## 🌍 Globalization & Settings
+
+### 12. Why does the server restart when I change the app language?
+**Localization Safety Protocol.** To ensure the Web Gateway, API responses, and TTS all reflect your new language choice, Chhanda resets active server instances and clears the inference cache.
+*   **Code Reference**: `SystemViewModel.kt` (Line 1512) triggers a server restart and model re-initialization when the `appLanguage` setting is updated.
+
+---
+
+**Technical Troubleshooting**: For real-time diagnostics, check the **System Logs** in the Dashboard and search for `ChhandaAudit` tags in Logcat.
