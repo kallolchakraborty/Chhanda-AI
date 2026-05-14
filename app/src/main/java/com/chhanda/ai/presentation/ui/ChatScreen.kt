@@ -1165,7 +1165,7 @@ fun AttachmentDownload(name: String, type: String) {
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Download")
             }
