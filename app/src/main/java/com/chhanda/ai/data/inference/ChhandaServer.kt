@@ -1026,6 +1026,46 @@ class ChhandaServer @Inject constructor(
             margin-right: auto;
         }
         
+        .tts-player {
+            display: none;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            width: 100%;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid var(--border);
+            animation: slideUp 0.2s ease;
+        }
+        .tts-progress-container {
+            flex: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+        .tts-progress-bar {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.2s linear;
+        }
+        .tts-btn {
+            background: transparent;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+        .tts-btn:hover { background: rgba(255,255,255,0.1); transform: scale(1.1); }
+        
         #ftr {
             padding: 12px 16px;
             background: var(--surface);
@@ -1426,7 +1466,83 @@ class ChhandaServer @Inject constructor(
             }
         }
 
-        pulse(); setInterval(pulse,2000);
+        pulse(); 
+        
+        // TTS Player Logic
+        let currentUtterance = null;
+        let ttsPlayerActive = null;
+
+        function stopTTS() {
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            if (ttsPlayerActive) {
+                ttsPlayerActive.style.display = 'none';
+                const progressBar = ttsPlayerActive.querySelector('.tts-progress-bar');
+                if (progressBar) progressBar.style.width = '0%';
+                ttsPlayerActive = null;
+            }
+            currentUtterance = null;
+        }
+
+        function speakText(text, playerDiv) {
+            // If already playing this player, just return
+            if (ttsPlayerActive === playerDiv && window.speechSynthesis.speaking) return;
+
+            stopTTS();
+            
+            // Filtering: Omit code blocks and handle markers
+            let cleanText = text.replace(/```[\s\S]*?```/g, " [CODE_BLOCK_PLACEHOLDER] ");
+            cleanText = cleanText.replace(/\[CODE_BLOCK_PLACEHOLDER\]/g, " Please check the code block for details. ");
+            
+            // Clean markdown bold/italic/headers
+            cleanText = cleanText.replace(/\*\*/g, "").replace(/\*/g, "").replace(/#/g, "");
+            
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            currentUtterance = utterance;
+            ttsPlayerActive = playerDiv;
+            ttsPlayerActive.style.display = 'flex';
+            
+            const progressBar = ttsPlayerActive.querySelector('.tts-progress-bar');
+            const playPauseIcon = ttsPlayerActive.querySelector('.play-pause-icon');
+            
+            utterance.onboundary = (event) => {
+                if (event.name === 'word') {
+                    const progress = (event.charIndex / cleanText.length) * 100;
+                    progressBar.style.width = progress + '%';
+                }
+            };
+            
+            utterance.onend = () => {
+                progressBar.style.width = '100%';
+                setTimeout(() => { if (ttsPlayerActive === playerDiv) stopTTS(); }, 1000);
+            };
+
+            utterance.onerror = (e) => {
+                console.error("TTS Error:", e);
+                stopTTS();
+            };
+
+            window.speechSynthesis.speak(utterance);
+            playPauseIcon.innerHTML = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'; // Pause icon
+        }
+
+        function togglePlayPause() {
+            if (!currentUtterance || !ttsPlayerActive) return;
+            const playPauseIcon = ttsPlayerActive.querySelector('.play-pause-icon');
+            
+            if (window.speechSynthesis.speaking) {
+                if (window.speechSynthesis.paused) {
+                    window.speechSynthesis.resume();
+                    playPauseIcon.innerHTML = '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>';
+                } else {
+                    window.speechSynthesis.pause();
+                    playPauseIcon.innerHTML = '<path d="M5 3l14 9-14 9V3z"/>';
+                }
+            }
+        }
+
+        setInterval(pulse,2000);
 
         inp.addEventListener('input', () => {
             polishBtn.style.display = inp.value.trim() ? 'block' : 'none';
@@ -1631,6 +1747,26 @@ class ChhandaServer @Inject constructor(
             }
             
             container.appendChild(d);
+
+            // Add TTS Player UI to the container (initially hidden)
+            if (c === 'a') {
+                const player = document.createElement('div');
+                player.className = 'tts-player';
+                player.innerHTML = `
+                    <button class="tts-btn" onclick="togglePlayPause()">
+                        <svg class="play-pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>
+                    </button>
+                    <div class="tts-progress-container">
+                        <div class="tts-progress-bar"></div>
+                    </div>
+                    <button class="tts-btn" onclick="stopTTS()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                    </button>
+                `;
+                container.appendChild(player);
+                d.ttsPlayer = player;
+            }
+
             msgs.appendChild(container);
             msgs.scrollTop=msgs.scrollHeight;
             
@@ -1680,8 +1816,18 @@ class ChhandaServer @Inject constructor(
                 }
             };
             
+            const speakBtn = document.createElement('button');
+            speakBtn.className = 'action-btn';
+            speakBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+            speakBtn.onclick = () => {
+                if (msgDiv.ttsPlayer) {
+                    speakText(text, msgDiv.ttsPlayer);
+                }
+            };
+
             actions.appendChild(copyBtn);
             actions.appendChild(shareBtn);
+            actions.appendChild(speakBtn);
             container.appendChild(actions);
         }
 
