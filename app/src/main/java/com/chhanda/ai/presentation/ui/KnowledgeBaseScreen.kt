@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -635,22 +636,25 @@ fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, i
 @Composable
 fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelete: () -> Unit, onClick: () -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
-    val icon = when (file.format) {
-        "PDF" -> Icons.Default.PictureAsPdf
-        "IMAGE" -> Icons.Default.Image
-        "AUDIO" -> Icons.Default.Mic
-        "WORD" -> Icons.Default.Description
-        "EXCEL" -> Icons.Default.TableChart
-        "WEB_URL" -> Icons.Default.Public
+    val formatUpper = file.format.uppercase()
+    val icon = when {
+        formatUpper.contains("PDF") -> Icons.Default.PictureAsPdf
+        formatUpper.contains("IMAGE") || formatUpper.contains("PNG") || formatUpper.contains("JPG") -> Icons.Default.Image
+        formatUpper.contains("AUDIO") || formatUpper.contains("MP3") || formatUpper.contains("WAV") -> Icons.Default.Mic
+        formatUpper.contains("WORD") || formatUpper.contains("DOC") -> Icons.Default.Description
+        formatUpper.contains("EXCEL") || formatUpper.contains("XLS") -> Icons.Default.TableChart
+        formatUpper.contains("WEB") || formatUpper.contains("URL") -> Icons.Default.Public
+        formatUpper.contains("TXT") -> Icons.AutoMirrored.Filled.Article
         else -> Icons.Default.Description
     }
-    val color = when (file.format) {
-        "PDF" -> Color(0xFFB91C1C) // Red
-        "IMAGE" -> Color(0xFF0891B2) // Cyan
-        "AUDIO" -> Color(0xFF2563EB) // Blue
-        "WORD" -> Color(0xFF4F46E5) // Indigo
-        "EXCEL" -> Color(0xFF16A34A) // Green
-        "WEB_URL" -> Color(0xFFEA580C) // Orange
+    val color = when {
+        formatUpper.contains("PDF") -> Color(0xFFB91C1C) // Red
+        formatUpper.contains("IMAGE") -> Color(0xFF0891B2) // Cyan
+        formatUpper.contains("AUDIO") -> Color(0xFF2563EB) // Blue
+        formatUpper.contains("WORD") -> Color(0xFF4F46E5) // Indigo
+        formatUpper.contains("EXCEL") -> Color(0xFF16A34A) // Green
+        formatUpper.contains("WEB") -> Color(0xFFEA580C) // Orange
+        formatUpper.contains("TXT") -> Color(0xFF6B7280) // Gray
         else -> Color.Gray
     }
     Surface(
