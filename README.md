@@ -1,136 +1,261 @@
-# Chhanda: Production-Grade On-Device AI with RAG
+# Chhanda (ছন্দ) - The AI Gateway
 
-Chhanda is a 100% offline, privacy-first AI application designed for high-performance Retrieval-Augmented Generation (RAG) on Android. It utilizes **Gemma 4B & 2B (4-bit quantized)** orchestrated via **Google LiteRT-LM** (MediaPipe GenAI) and features a local multimodal ingestion pipeline.
-
----
-
-## 🚀 Key Features
-
-- **100% Offline Inference**: No data leaves the device; LLM execution is strictly local.
-- **Multimodal Gateway**: Support for Text, Images (Direct Camera/Gallery), Audio, and PDF.
-- **High-Precision RAG**: Semantic vector search with model-aware relevance thresholding.
-- **Advanced Telemetry**: Real-time monitoring of **TPS (Tokens Per Second)** and **RT (Response Time)** for both local and web gateway sessions.
-- **Personalized Voice AI**: 3 Male/3 Female styles including Indian voices (Arjun as Kallol, Priya as Chhanda).
-- **Robust Ingestion**: Multi-strategy web scraping and local file processing with automated text chunking.
-- **Security & Privacy**: Mandatory API key authentication for web access and zero-cloud data footprint.
+<div align="center">
+  <h3>100% Offline, Privacy-First AI & RAG Ecosystem for Android</h3>
+  <p><i>Developed by <b>Kallol Chakraborty</b> | Dedicated to my mother, Chhanda.</i></p>
+</div>
 
 ---
 
-## 🏛 1. High-Level Architecture
+## 📖 The Philosophy & Dedication
 
-### 🗺 High-Level System Overview
-Chhanda operates as a local AI gateway. It can serve the device user directly or act as a remote endpoint for other devices on the same network.
+**Chhanda** (ছন্দ) refers to the poetic meter or rhythm in Bengali literature. It structures poetry through the precise arrangement of syllables (*mātrā*), derived from words, creating a musical, rhythmic flow. 
+
+In Bengali poetry, words are broken down into syllables—the basic sound units treated as tokens—for chhanda analysis. Each word’s pronunciation determines *guru* (long) or *laghu* (short) syllables, and stress patterns form the rules of the meter.
+
+**The Connection to AI:**
+Just as *Chhanda* structures raw syllables into beautiful, flowing poetry, Large Language Models (LLMs) break down human language into structural **tokens**. By predicting and arranging these tokens based on complex mathematical weights (the meter of the neural network), the AI generates coherent, intelligent, and flowing communication. 
+
+This application is named after and dedicated to my mother, Chhanda, representing the harmony between the foundational structure of language and the beautiful flow of intelligence.
+
+---
+
+## 🛠 Development & Tooling
+
+This project is a testament to modern AI-assisted software engineering:
+*   **Developer**: Kallol Chakraborty
+*   **IDE**: Antigravity
+*   **AI Development Partner**: Gemini 3 Flash
+*   **UI/UX Mockups**: Google Stitch
+*   **Branding & Logos**: Nanobana
+
+---
+
+## 🚀 Extreme Detail: App Features
+
+Chhanda is not just a chat app; it is a full-fledged local AI server and gateway.
+
+1.  **Zero-Cloud Local Inference**: Utilizes Gemma 2B and 4B (4-bit quantized GGUF) models running entirely on-device via Google LiteRT-LM. No data is ever sent to the cloud.
+2.  **Multimodal RAG (Retrieval-Augmented Generation)**:
+    *   **Documents**: Parses `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, and `.txt` locally using Apache POI and custom extractors.
+    *   **Vision**: Extracts text from images using Google ML Kit OCR.
+    *   **Web**: Scrapes web content using Jsoup.
+3.  **Document Generation**: The AI can generate `.xlsx`, `.docx`, and `.pdf` files locally on demand, which users can download via the host app or the Web UI.
+4.  **Chhanda AI Gateway (Web UI via QR)**: 
+    *   Turns the Android device into a local network server via Ktor.
+    *   Other devices on the same Wi-Fi/Hotspot can scan a QR code to access a beautiful, responsive Web Chat UI.
+    *   Features strict Device Limits, Captive Portals for unauthorized access, and API Key authentication.
+5.  **Multi-Source Session Management**:
+    *   Maintains unified chat history tagged by source: **Local** (Host device), **QR** (Web UI clients), and **API** (Programmatic access).
+    *   Includes sophisticated searching and sorting across all device histories.
+6.  **Telemetry & Hardware Monitoring**: Real-time tracking of TPS (Tokens Per Second), RT (Response Time), RAM usage, and Battery Temperature.
+
+---
+
+## 🏗 High-Level Architecture (Clean Architecture)
+
+Chhanda strictly follows Android Clean Architecture principles, ensuring separation of concerns, testability, and scalability.
 
 ```mermaid
 graph TD
-    User([User]) <-->|Interacts| UI[Jetpack Compose UI]
-    UI <-->|Flows/Events| VM[ViewModels State Management]
-    VM -->|Executes| UC[Use Cases Business Logic]
-    UC -->|Queries| VS[Local Vector Store Room DB]
-    UC -->|Inference| LE[LiteRT LM Engine]
-    
-    Camera([Camera]) -->|Capture| UC
-    Docs[(Local Documents)] -->|Ingested by| IW[IngestionWorker]
-    IW -->|Parses| MI[Multimodal Ingestor]
-    MI -->|Embeds| EE[Embedding Engine]
-    EE -->|Saves| VS
-    
-    RemoteUser([Remote Browser]) <-->|SSE Stream| KS[Ktor API Server]
-    KS -->|Telemetery| RT[RT/TPS Metrics]
-    KS -->|Auth| UC
+    subgraph Presentation Layer [Presentation Layer - Jetpack Compose]
+        UI[UI Screens: Dashboard, Chat, etc.]
+        VM[ViewModels: State & Intent Management]
+    end
+
+    subgraph Domain Layer [Domain Layer - Pure Kotlin]
+        UC[Use Cases: SendMessage, IngestDoc, etc.]
+        MOD[Domain Models: TokenUpdate, Session]
+        CM[ContextManager: Memory & History]
+    end
+
+    subgraph Data Layer [Data Layer - Android/Framework Specific]
+        REP[Repositories: ChatRepo, DeviceRepo]
+        DB[(Room DB: VectorStore, Messages)]
+        LRT[LiteRT LM Engine: JNI Bindings]
+        KTOR[Ktor Server: Network Gateway]
+        WRK[WorkManager: Background Ingestion]
+    end
+
+    UI -->|State/Events| VM
+    VM -->|Executes| UC
+    UC -->|Business Logic| MOD
+    UC -->|Interacts| REP
+    CM -->|Formats RAG| REP
+    UC -->|Inference| LRT
+    KTOR -->|Triggers| UC
+    WRK -->|Extracts/Embeds| DB
 ```
 
 ---
 
-## 📂 2. Core Components
+## 🧱 Technology Stack & Libraries
 
-### 🔵 2.1 The Inference Engine (`LiteRTLMEngine.kt`)
-The heart of Chhanda. It manages the lifecycle of the Gemma models.
-- **Dynamic Memory Management**: Automatically scales context length (512 to 4096) based on available RAM to prevent OOM.
-- **Thermal Safety**: Implements a 2500ms mandatory "cooldown" gap between model swaps to allow the OS to reclaim native RAM.
-- **Thought Filtering**: Automatically strips internal `<thought>` blocks from streaming output to keep responses clean.
+### Core Frameworks
+*   **Language**: Kotlin (Coroutines & StateFlow for reactive asynchronous programming).
+*   **UI Framework**: Jetpack Compose (Material 3).
 
-### 🟢 2.2 The RAG Pipeline (`ContextManager.kt` & `LocalVectorStore.kt`)
-Chhanda uses a custom-built vector similarity search engine running on top of Room/SQLite.
-- **Model-Aware Logic**: Gemma 4B uses a denser threshold (0.15) and smaller Top-K (3) for speed, while 2B uses a broader search (0.02) for better recall.
-- **Embedding Alignment**: Uses `sentence-transformers/all-MiniLM-L6-v2` equivalents via MediaPipe for 384-dimensional semantic vectors.
+### AI & Machine Learning
+*   **LLM Inference**: `com.google.ai.edge.litert` (LiteRT / MediaPipe GenAI) for hardware-accelerated local GGUF execution.
+*   **Vision**: `com.google.mlkit:text-recognition` for on-device OCR.
+*   **Embeddings**: Local sentence-transformer execution via MediaPipe tasks.
 
-### 🟡 2.3 The Web Gateway (`ChhandaServer.kt`)
-A Ktor-based server that turns the Android phone into a secure AI endpoint.
-- **SSE Streaming**: High-fidelity event stream with metadata headers.
-- **Telemetry Emission**: Emits `TPS:[val]` and `RT:[val]` signals for real-time frontend dashboarding.
-- **API Key Security**: Rejects unauthorized requests with a 401 status.
+### Data & Persistence
+*   **Database**: Room (`androidx.room`) with SQLite. Implements custom vector similarity search for RAG.
+*   **DataStore**: Preferences DataStore for local settings (API keys, limits).
 
-### 🟠 2.4 The Cache-Aware Load Balancer (`SendMessageUseCase.kt`)
-To handle high-concurrency scenarios—especially when multiple devices access the gateway simultaneously—Chhanda implements an intelligent load balancing layer.
-- **Prefix Hashing**: Utilizes the first 50 characters of a prompt to ensure semantic locality, maximizing the reuse of cached KV (Key-Value) tensors in the model's memory.
-- **Load Bounding**: Enforces strict concurrency limits (max 2 per replica) to prevent "compute thrashing" where too many simultaneous streams would cause all responses to slow down significantly.
-- **Spillover Logic**: If the preferred replica is busy, requests are automatically routed to the least-loaded replica to maintain low latency.
+### Networking & Web Server
+*   **Server**: Ktor Server (`ktor-server-netty`, `ktor-server-cors`) for the embedded Web UI and API.
+*   **Web Scraping**: Jsoup for robust HTML parsing and Readability scoring.
+
+### Document Processing
+*   **Apache POI**: `poi-ooxml` for reading and generating Microsoft Word and Excel documents completely offline.
+*   **PDF**: Android's native `PdfRenderer` and custom PDF generators.
+
+### Dependency Injection & Background Work
+*   **DI**: Hilt (`dagger.hilt.android`).
+*   **Background Tasks**: WorkManager (`androidx.work`) for heavy document ingestion and scraping tasks to prevent ANRs.
 
 ---
 
-## 🔄 3. Control Flow: Multimodal Ingestion
+## 📱 Screen-Wise Functionality & Flows
+
+### 1. Dashboard Screen (The Command Center)
+**Functionality**: 
+*   Displays hardware telemetry (RAM, Temp, IP Address).
+*   Manages local GGUF models (scan, activate, delete).
+*   Controls the Ktor Server (Start/Stop, QR Code generation).
+*   Access point for the History/Storage Manager.
+
+### 2. Chat Screen (The Interface)
+**Functionality**:
+*   Primary interface for interacting with the loaded LLM.
+*   Supports attaching images and documents.
+*   Real-time streaming UI with Markdown rendering, syntax highlighting, and TPS/RT metric overlays.
+*   Handles inline rendering of AI-generated downloadable files.
+
+### 3. History Manager (StorageManagerSheet)
+**Functionality**:
+*   Unified view of all chats across all connected devices (Local, Web, API).
+*   Features deep-search across message contents and multi-criteria sorting.
+*   Manages ingested RAG files (view, delete, purge).
+
+### Screen Flow Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Splash
+    Splash --> Dashboard : Initialization Complete
+    
+    state Dashboard {
+        ModelManager : Scan & Load Models
+        ServerControls : Start Ktor Server
+        Telemetry : Monitor Temp/RAM
+    }
+    
+    Dashboard --> ChatScreen : Click "Try It" (Local Chat)
+    Dashboard --> GatewayDialog : Click QR Icon
+    Dashboard --> StorageManager : Swipe Up / Click "Manage"
+    
+    state ChatScreen {
+        Input --> StreamingOutput
+        AttachmentPicker --> IngestionWorker
+    }
+    
+    state StorageManager {
+        DeviceList --> ChatViewer
+        RagFiles --> FileViewer
+    }
+    
+    GatewayDialog --> RemoteWebClient : Scan QR
+```
+
+---
+
+## ⚙️ Low-Level Design (LLD) Diagrams
+
+### RAG & Document Ingestion Pipeline LLD
+When a user uploads a document (Word, Excel, PDF) or an Image, the system processes it asynchronously.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User
-    participant CS as ChatScreen
+    participant UI as ChatScreen / WebUI
     participant VM as ChatViewModel
-    participant ID as AndroidMultimodalIngestor
+    participant WM as WorkManager (IngestionWorker)
+    participant EXT as Extractors (POI/MLKit/Jsoup)
     participant EE as EmbeddingEngine
-    participant VS as LocalVectorStore
+    participant DB as Room DB (VectorChunkDao)
     
-    User->>CS: Capture Photo / Select PDF
-    CS->>VM: onAttach(Uri)
-    VM->>ID: extractText(Uri)
-    ID->>ID: OCR (ML Kit) / PDF Parsing
-    ID-->>VM: rawText
-    VM->>EE: embed(rawText)
-    EE->>VS: insert(VectorChunk)
-    VS-->>User: "Document Ingested Successfully"
+    UI->>VM: Upload File / URI
+    VM->>WM: Enqueue IngestionWorker
+    WM->>EXT: Route by DocType
+    EXT-->>WM: Extracted Raw Text
+    WM->>WM: Chunking (Overlap Strategy)
+    loop For each chunk
+        WM->>EE: Generate Vector (FloatArray)
+        EE-->>WM: 384-d Embedding
+        WM->>DB: Insert (Text + Vector + Metadata)
+    end
+    WM-->>UI: Broadcast "Ingestion Complete"
+```
+
+### Chat Orchestration LLD (`SendMessageUseCase`)
+This is the core brain that combines Chat History, RAG Context, and LLM Inference.
+
+```mermaid
+classDiagram
+    class SendMessageUseCase {
+        +invoke(prompt, deviceId, model, source) Flow~TokenUpdate~
+    }
+    class ContextManager {
+        +getOptimizedContext(query, deviceId) Pair~History, RAGContext~
+        +maintainMemoryHygiene()
+    }
+    class VectorStore {
+        +searchSimilar(embedding, threshold) List~Chunks~
+    }
+    class LiteRTLMEngine {
+        +generateResponse(finalPrompt) Flow~String~
+    }
+    
+    SendMessageUseCase --> ContextManager : 1. Fetch Context
+    ContextManager --> VectorStore : 2. Semantic Search
+    SendMessageUseCase --> LiteRTLMEngine : 3. Stream Inference
+    SendMessageUseCase --> ChatDao : 4. Persist Messages (tagged by source)
+```
+
+### Web Gateway & Server LLD (`ChhandaServer`)
+Handles multiple remote clients via the Android host.
+
+```mermaid
+sequenceDiagram
+    participant RC as Remote Client (Browser/API)
+    participant KTOR as ChhandaServer (Ktor)
+    participant SM as Session Manager
+    participant UC as SendMessageUseCase
+    
+    RC->>KTOR: GET / (Check API Key)
+    KTOR->>RC: Return HTML/JS (buildChatHtml)
+    RC->>KTOR: POST /register (Handshake & Name)
+    KTOR->>SM: Track Device IP & Name
+    RC->>KTOR: POST /chat (SSE Request)
+    KTOR->>UC: invoke(source="qr" or "api")
+    UC-->>KTOR: Flow<TokenUpdate>
+    loop Streaming
+        KTOR-->>RC: data: {token}
+    end
+    KTOR-->>RC: data: [DONE]
 ```
 
 ---
 
-## 📄 4. Exhaustive File-by-File Analysis
-
-### 📱 Presentation Layer
-*   **`ui/ChatScreen.kt`**: Main interface. Handles camera intent, voice recording, and streaming telemetry bubbles.
-*   **`ui/DashboardScreen.kt`**: Infrastructure control. Monitors RAM, Battery Temp, and Gateway Status.
-*   **`viewmodel/SystemViewModel.kt`**: Orchestrates model discovery, downloads, and system-wide logging.
-
-### 🧠 Domain Layer
-*   **`usecase/SendMessageUseCase.kt`**: The "Senior Architect" orchestrator. Handles prompt construction, safety filtering, and load balancing.
-*   **`domain/model/TokenUpdate.kt`**: Data class representing the streaming state (Partial/Final/Error/RT).
-
-### 🛠 Data Layer
-*   **`data/inference/LiteRTLMEngine.kt`**: Low-level JNI bindings to the LiteRT library.
-*   **`data/repository/ChatDao.kt`**: Manages the message persistence and search history.
-*   **`util/FileUtils.kt`**: Helpers for scoped storage, camera URI generation, and model verification.
+## 🔒 Security & Privacy Posture
+*   **Data Sovereignty**: 100% of embeddings, models, and chat histories reside within the Android App Sandbox. 
+*   **Network Protection**: The Ktor server enforces API key validation for all endpoints. Unauthorized IP addresses attempting discovery are met with a Captive Portal intercept.
+*   **Safe Execution**: The inference engine implements strict threading controls and mutex locks to prevent C++ level memory corruption during rapid multi-client access.
 
 ---
 
-## 🛑 5. Challenges & Architected Solutions
-
-| Challenge | Solution |
-| :--- | :--- |
-| **Gemma 4B Latency** | Optimized RAG Top-K density and streamlined instructions for faster first-token emission. |
-| **Native Memory Leaks** | Synchronized native engine teardown with mandatory `System.gc()` and thread-locking. |
-| **Scraping Blockers** | Multi-strategy scraper with randomized Desktop User-Agents and Readability-based filtering. |
-| **Model Discovery** | Robust filename fallback logic that identifies models by size and version tags (E2B/E4B). |
-
----
-
-## 🛠 6. Tech Stack
-
-- **Inference**: LiteRT (TensorFlow Lite GenAI)
-- **Vision**: Google ML Kit OCR
-- **Speech**: Android STT / Custom TTS Engine
-- **Network**: Ktor (Server & Client)
-- **Database**: Room (SQL + Vector)
-- **UI**: Jetpack Compose (Material 3)
-
----
-
-Developed with ❤️ by **Antigravity** for **Chhanda AI**.
+## 📜 Conclusion
+Chhanda represents a harmony of complex AI systems, working together in a specific, optimized rhythm—much like its namesake. It bridges the gap between high-end cloud AI capabilities and the absolute privacy of edge computing.
