@@ -26,34 +26,39 @@ class ContextManager @javax.inject.Inject constructor(
         val history = recentMessages.map { it.role to it.text }
 
         // Long-Term Memory: Vector search for semantic relevance across all history
-        val longTermMemory = if (query.trim().length < 4 || query.trim().split(" ").size < 2) {
-            ""
-        } else {
-            try {
-                val queryEmbedding = embeddingEngine.embed(query)
-                val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 6 else 10, modelId = "shared_rag_db")
-                
-                // Adaptive threshold: lower if query mentions specific technical terms or "attachment"
-                val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || query.lowercase().contains("image")
-                val threshold = if (isExplicitSearch) 0.65f else 0.78f 
-                
-                val filtered = results.filter { it.score >= threshold } 
-
-                android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
-
-                if (filtered.isEmpty()) ""
-                else {
-                    "RELEVANT DOCUMENTATION SNIPPETS:\n" +
-                    filtered.groupBy { it.metadata["source"] ?: "General Knowledge" }
-                        .entries.joinToString("\n\n") { (source, chunks) ->
-                            val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
-                            "[SOURCE: $sourceName]\n" + chunks.joinToString("\n---\n") { it.text }
-                        }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("ContextManager", "Long-term memory retrieval failed: ${e.message}")
-                ""
+        val longTermMemory = try {
+            // ADVANCED SELECTIVITY: Skip RAG for small talk/greetings to prevent irrelevant memory injection
+            val smallTalkKeywords = listOf("hi", "hello", "hey", "how are you", "good morning", "good evening", "thanks", "thank you", "bye", "ok", "okay")
+            val isSmallTalk = smallTalkKeywords.any { query.lowercase().trim() == it } || (query.trim().length < 5 && !query.any { it.isDigit() })
+            
+            if (isSmallTalk) {
+                android.util.Log.d("ContextManager", "Small talk detected for '$query'. Skipping RAG.")
+                return history to ""
             }
+
+            val queryEmbedding = embeddingEngine.embed(query)
+            val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 6 else 10, modelId = "shared_rag_db")
+            
+            // Adaptive threshold: lower for attachments/specific files, higher for general KB to prevent hallucinations
+            val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || query.lowercase().contains("image")
+            val threshold = if (isExplicitSearch) 0.65f else 0.82f 
+            
+            val filtered = results.filter { it.score >= threshold } 
+
+            android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
+
+            if (filtered.isEmpty()) ""
+            else {
+                "RELEVANT DOCUMENTATION SNIPPETS:\n" +
+                filtered.groupBy { it.metadata["source"] ?: "General Knowledge" }
+                    .entries.joinToString("\n\n") { (source, chunks) ->
+                        val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
+                        "[SOURCE: $sourceName]\n" + chunks.joinToString("\n---\n") { it.text }
+                    }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ContextManager", "Long-term memory retrieval failed: ${e.message}")
+            ""
         }
 
         return history to longTermMemory

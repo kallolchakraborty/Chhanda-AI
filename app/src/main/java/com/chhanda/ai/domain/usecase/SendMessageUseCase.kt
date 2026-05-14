@@ -145,10 +145,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 append(sanitizedUserText)
                 
                 append("\n\n### CRITICAL INSTRUCTIONS\n")
-                append("1. ATTACHMENT PRIORITY: If TIER 1 exists, prioritize it above everything else.\n")
-                append("2. DB RELEVANCE: Only use TIER 2 if it is relevant. If the user asks about an 'attachment' or 'image' and TIER 1 is empty, check TIER 2 for recently added documents.\n")
-                append("3. SMALL TALK: If the query is small talk, ignore all context and use your internal knowledge.\n")
-                append("4. LANGUAGE: Respond in $preferredLanguage.\n")
+                append("1. STRICT RELEVANCE: Only use TIER 1 or TIER 2 context if it DIRECTLY and SPECIFICALLY answers the query. If the context is about a different topic, ignore it completely and use your pre-trained knowledge.\n")
+                append("2. ATTACHMENT PRIORITY: If TIER 1 contains the answer, use it and STOP searching. Do not combine with irrelevant snippets from TIER 2.\n")
+                append("3. NO FORCED ANSWERS: If the user asks about an attachment but it's not in TIER 1 or TIER 2, state that the document doesn't seem to contain that information.\n")
+                append("4. SMALL TALK: If the query is greetings or small talk, IGNORE all context and respond naturally.\n")
+                append("5. LANGUAGE: Respond in $preferredLanguage.\n")
             }
 
             val formatInstruction = """
