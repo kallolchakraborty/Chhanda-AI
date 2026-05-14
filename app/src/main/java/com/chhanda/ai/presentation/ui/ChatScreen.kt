@@ -1129,9 +1129,9 @@ fun AttachmentDownload(name: String, type: String) {
             Icon(
                 when(type.lowercase()) {
                     "excel" -> Icons.Default.CheckCircle
-                    "word" -> Icons.Default.Edit
-                    "pdf" -> Icons.Default.Info
-                    else -> Icons.Default.Add
+                    "word" -> Icons.Default.CheckCircle
+                    "pdf" -> Icons.Default.CheckCircle
+                    else -> Icons.Default.CheckCircle
                 },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
