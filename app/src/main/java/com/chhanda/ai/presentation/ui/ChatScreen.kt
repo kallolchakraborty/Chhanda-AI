@@ -484,20 +484,21 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 message.attachmentPaths.split(",").forEach { path ->
+                    val pathLower = path.lowercase()
                     val icon = when {
-                        path.contains(".pdf", true) -> Icons.Default.PictureAsPdf
-                        path.contains(".doc", true) || path.contains(".docx", true) -> Icons.Default.Description
-                        path.contains(".xls", true) || path.contains(".xlsx", true) -> Icons.Default.TableChart
-                        path.contains(".png", true) || path.contains(".jpg", true) || path.contains(".jpeg", true) -> Icons.Default.Image
-                        path.contains(".mp3", true) || path.contains(".wav", true) -> Icons.Default.Mic
+                        pathLower.contains("pdf") || pathLower.contains(".pdf") -> Icons.Default.PictureAsPdf
+                        pathLower.contains("word") || pathLower.contains(".doc") || pathLower.contains(".docx") -> Icons.Default.Description
+                        pathLower.contains("excel") || pathLower.contains(".xls") || pathLower.contains(".xlsx") -> Icons.Default.TableChart
+                        pathLower.contains("image") || pathLower.contains(".png") || pathLower.contains(".jpg") || pathLower.contains(".jpeg") -> Icons.Default.Image
+                        pathLower.contains("audio") || pathLower.contains(".mp3") || pathLower.contains(".wav") -> Icons.Default.Mic
                         else -> Icons.Default.AttachFile
                     }
                     val label = when {
-                        path.contains(".pdf", true) -> "PDF"
-                        path.contains(".doc", true) || path.contains(".docx", true) -> "DOC"
-                        path.contains(".xls", true) || path.contains(".xlsx", true) -> "XLS"
-                        path.contains(".png", true) || path.contains(".jpg", true) || path.contains(".jpeg", true) -> "IMG"
-                        path.contains(".mp3", true) || path.contains(".wav", true) -> "AUD"
+                        pathLower.contains("pdf") || pathLower.contains(".pdf") -> "PDF"
+                        pathLower.contains("word") || pathLower.contains(".doc") || pathLower.contains(".docx") -> "DOC"
+                        pathLower.contains("excel") || pathLower.contains(".xls") || pathLower.contains(".xlsx") -> "XLS"
+                        pathLower.contains("image") || pathLower.contains(".png") || pathLower.contains(".jpg") || pathLower.contains(".jpeg") -> "IMG"
+                        pathLower.contains("audio") || pathLower.contains(".mp3") || pathLower.contains(".wav") -> "AUD"
                         else -> "FILE"
                     }
                     

@@ -101,9 +101,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
             val prompt = buildString {
                 if (attachmentContext.isNotBlank()) {
-                    append("### ATTACHED_DOCUMENTS_CONTENT\n")
+                    append("### IMPORTANT: ATTACHED_DOCUMENTS_CONTENT BELOW\n")
+                    append("The user has provided the following documents/files for this specific query. Analyze them thoroughly.\n")
                     append(attachmentContext)
-                    append("\n\n")
+                    append("\n--- END OF ATTACHED DOCUMENTS ---\n\n")
                 }
                 
                 if (isContextFound) {
@@ -113,14 +114,17 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
                 
                 append("### USER_QUERY\n")
+                if (attachmentContext.isNotBlank()) {
+                    append("[SYSTEM NOTE: There are documents attached above. Please refer to them first.]\n")
+                }
                 append(sanitizedUserText)
                 
                 append("\n\n### INSTRUCTIONS\n")
-                append("1. Primary Source: Use 'ATTACHED_DOCUMENTS_CONTENT' only if it precisely contains the answer.\n")
-                append("2. Secondary Source: Use 'DATABASE_KNOWLEDGE_CONTEXT' ONLY if it is an EXACT match for the query facts. If it is just 'similar' but not helpful, IGNORE IT.\n")
-                append("3. Strict Accuracy: If you are even 1% unsure about the provided context, prioritize your own internal training knowledge to ensure the user gets correct information.\n")
+                append("1. Primary Source: Use 'ATTACHED_DOCUMENTS_CONTENT' above. If it contains the answer, use it and ignore other sources.\n")
+                append("2. Secondary Source: Use 'DATABASE_KNOWLEDGE_CONTEXT' ONLY if the attached documents do not have the answer.\n")
+                append("3. Strict Accuracy: If you are even 1% unsure, prioritize your internal training knowledge.\n")
                 append("4. Language: Always respond in $preferredLanguage.\n")
-                append("5. Professionalism: Do not mention that you are ignoring the context; simply provide the most accurate answer possible.\n")
+                append("5. Professionalism: Be concise and accurate.\n")
             }
 
             val formatInstruction = """
