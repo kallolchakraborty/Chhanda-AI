@@ -362,12 +362,18 @@ class ChhandaServer @Inject constructor(
                         try {
                             val existing = deviceDao.getDeviceByIp(remoteIp)
                             if (existing != null) {
-                                deviceDao.updateDevice(existing.copy(deviceName = name, connectionTime = System.currentTimeMillis()))
+                                deviceDao.updateDevice(existing.copy(
+                                    deviceName = name, 
+                                    connectionTime = System.currentTimeMillis(),
+                                    lastActive = System.currentTimeMillis(),
+                                    isCurrentlyConnected = true
+                                ))
                             } else {
                                 deviceDao.insertDevice(com.chhanda.ai.data.repository.DeviceEntity(
                                     deviceName = name,
                                     ipAddress = remoteIp,
                                     connectionTime = System.currentTimeMillis(),
+                                    lastActive = System.currentTimeMillis(),
                                     isCurrentlyConnected = true,
                                     connectionType = "BROWSER",
                                     userAgent = call.request.headers["User-Agent"] ?: "Browser"
@@ -401,6 +407,8 @@ class ChhandaServer @Inject constructor(
 
                 // /ping — Bare minimum for connectivity verification
                 get("/ping") {
+                    val remoteIp = call.request.local.remoteHost
+                    heartbeatDevice(remoteIp)
                     call.response.headers.append("Access-Control-Allow-Origin", "*")
                     call.respondText("pong")
                 }
@@ -643,6 +651,7 @@ class ChhandaServer @Inject constructor(
                                 if (existing != null) {
                                     deviceDao.updateDevice(existing.copy(
                                         connectionTime = System.currentTimeMillis(), 
+                                        lastActive = System.currentTimeMillis(),
                                         isCurrentlyConnected = true,
                                         connectionType = if (sourceToUse == "api") "API" else existing.connectionType
                                     ))
@@ -798,6 +807,18 @@ class ChhandaServer @Inject constructor(
             .build()
             
         notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+    }
+
+    private fun heartbeatDevice(ip: String) {
+        if (ip == "127.0.0.1" || ip == "0:0:0:0:0:0:0:1") return
+        serverScope.launch {
+            try {
+                val existing = deviceDao.getDeviceByIp(ip)
+                if (existing != null) {
+                    deviceDao.updateDeviceStatus(existing.deviceName, true, System.currentTimeMillis())
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     // ── IP Util ────────────────────────────────────────────────────────────────
