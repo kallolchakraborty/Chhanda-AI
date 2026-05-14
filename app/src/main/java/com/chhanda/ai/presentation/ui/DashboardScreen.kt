@@ -980,6 +980,7 @@ fun DashboardScreen(
 
 }
 
+@androidx.compose.material3.ExperimentalMaterial3Api
 @Composable
 fun StorageManagerSheet(
     summary: com.chhanda.ai.presentation.viewmodel.StorageSummary,
