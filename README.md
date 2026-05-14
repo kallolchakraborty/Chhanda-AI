@@ -99,6 +99,27 @@ graph TD
 
 ---
 
+## 📱 System Requirements
+
+Running a Large Language Model and a Vector Database on-device is a resource-intensive task. To ensure a smooth experience with Chhanda, your device should meet the following specifications:
+
+| Requirement | Minimum | Recommended |
+| :--- | :--- | :--- |
+| **Operating System** | Android 9.0 (API 28) | Android 13.0+ (API 33+) |
+| **RAM (Total)** | 6 GB | 8 GB - 12 GB+ |
+| **RAM (Available)** | 3.5 GB (for 2B models) | 6 GB+ (for 4B/8B models) |
+| **Processor** | ARM64-v8a (Octa-core) | Snapdragon 8 Gen 1+ or equivalent |
+| **Storage (Base)** | 500 MB | 1 GB+ (excluding models) |
+| **Storage (Models)** | 2 GB per GGUF model | 10 GB+ (for multiple models) |
+| **Vector DB** | 512 MB | 2.5 GB+ (for large knowledge bases) |
+
+### 🛠 Critical Hardware Considerations:
+*   **Memory Management**: Chhanda includes a **Memory Saving Mode** (toggleable in Settings). If your device has 6GB of RAM or less, it is highly recommended to disable the **Vector Database (RAG)** to prevent the Android OS from killing the app during inference.
+*   **Thermal Performance**: Sustained inference (long chats) will generate heat. High-end cooling systems in modern flagship phones will result in higher **TPS (Tokens Per Second)**.
+*   **Battery**: Background server operation and LLM processing are power-intensive. Using the **Web Gateway** while the device is charging is recommended for long sessions.
+
+---
+
 ## 🧱 Technology Stack & Libraries
 
 ### Core Frameworks
