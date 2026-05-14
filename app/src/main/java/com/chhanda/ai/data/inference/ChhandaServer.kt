@@ -1705,7 +1705,7 @@ class ChhandaServer @Inject constructor(
                     localStorage.setItem('userName', val);
                     nameModal.style.display = 'none';
                     registerName(val);
-                    addMsg(`Welcome, ${val}! 👋 How can I help you today?`, 's');
+                    addMsg(`Welcome, ${'$'}{val}! 👋 How can I help you today?`, 's');
                 }
             };
             nameInp.addEventListener('keypress', e => { if (e.key === 'Enter') nameBtn.click(); });
@@ -1714,7 +1714,7 @@ class ChhandaServer @Inject constructor(
                 localStorage.setItem('userName', userName);
                 registerName(userName);
                 if (initialSessions.length === 0) {
-                    addMsg(`Welcome back, ${userName}! 👋 How can I help you today?`, 's');
+                    addMsg(`Welcome back, ${'$'}{userName}! 👋 How can I help you today?`, 's');
                 }
             } else {
                 registerName("Device"); // fallback
