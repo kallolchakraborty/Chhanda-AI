@@ -99,7 +99,7 @@ object FileUtils {
 
     fun createImageUri(context: Context): Uri? {
         try {
-            val imageDir = File(context.externalCacheDir, "camera_images")
+            val imageDir = File(context.cacheDir, "camera_images")
             if (!imageDir.exists()) imageDir.mkdirs()
             val file = File(imageDir, "IMG_${System.currentTimeMillis()}.jpg")
             return androidx.core.content.FileProvider.getUriForFile(

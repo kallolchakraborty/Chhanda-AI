@@ -32,6 +32,7 @@ import java.util.Locale
 import java.io.File
 import android.os.BatteryManager
 import android.app.ActivityManager
+import com.chhanda.ai.util.Localization
 
 data class VirtualVoice(val name: String, val isMale: Boolean)
 
@@ -376,6 +377,13 @@ class SystemViewModel @Inject constructor(
     private val _showRestartDialog = MutableStateFlow(false)
     val showRestartDialog: StateFlow<Boolean> = _showRestartDialog
 
+    private val _showServerRunningWarning = MutableStateFlow(false)
+    val showServerRunningWarning: StateFlow<Boolean> = _showServerRunningWarning.asStateFlow()
+
+    fun dismissServerRunningWarning() {
+        _showServerRunningWarning.value = false
+    }
+
     private val _deviceTemperature = MutableStateFlow(0.0)
     val deviceTemperature: StateFlow<Double> = _deviceTemperature
 
@@ -627,27 +635,46 @@ class SystemViewModel @Inject constructor(
         sampleTts?.language = locale
         val isMale = virtualVoiceName.contains("Male")
         
+        // Clean name for intro (e.g., "Kallol")
+        val cleanName = virtualVoiceName.substringBefore(" (")
+        
         val systemVoices = sampleTts?.voices?.filter { it.locale.language == locale.language } ?: emptyList()
-        val targetVoice = systemVoices.find { v ->
+        
+        // Variety Strategy: Use name hash to pick different system voices if multiple are available
+        val genderFiltered = systemVoices.filter { v ->
             val name = v.name.lowercase()
             if (isMale) {
-                name.contains("male") || name.contains("-m-") || name.contains("male_")
+                name.contains("male") || name.contains("-m-") || name.contains("_m_") || name.contains("en-in-x-ahp-local") || name.contains("hi-in-x-hie-local")
             } else {
-                name.contains("female") || name.contains("-f-") || name.contains("female_")
+                name.contains("female") || name.contains("-f-") || name.contains("_f_") || name.contains("en-in-x-ahi-local") || name.contains("hi-in-x-hif-local")
             }
-        } ?: systemVoices.firstOrNull()
+        }
+        
+        // If no gender-specific match, use all for that locale
+        val pool = if (genderFiltered.isNotEmpty()) genderFiltered else systemVoices
+        
+        val voiceToUse = if (pool.isNotEmpty()) {
+            val index = Math.abs(virtualVoiceName.hashCode()) % pool.size
+            pool[index]
+        } else null
 
-        if (targetVoice != null) {
-            sampleTts?.voice = targetVoice
+        if (voiceToUse != null) {
+            sampleTts?.voice = voiceToUse
+            // Log for debugging
+            Log.d("SystemViewModel", "Selected system voice ${voiceToUse.name} for $virtualVoiceName")
         }
 
-        val sampleText = when (locale.language) {
-            "bn" -> "হ্যালো, আমি আপনার নতুন সহকারী।"
-            "hi" -> "नमस्ते, मैं आपका नया सहायक हूँ।"
-            "fr" -> "Bonjour, je suis votre nouvel assistant."
-            "de" -> "Hallo, ich bin Ihr neuer Assistent."
-            else -> "Hello, I am your new assistant."
+        val languageName = when (locale.language) {
+            "bn" -> "Bengali"
+            "hi" -> "Hindi"
+            "fr" -> "French"
+            "de" -> "German"
+            else -> "English"
         }
+        
+        val template = Localization.getString("tts_intro_template", languageName)
+        val sampleText = template.replace("{name}", cleanName)
+        
         sampleTts?.speak(sampleText, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "sample")
     }
 
@@ -1077,6 +1104,10 @@ class SystemViewModel @Inject constructor(
     }
 
     fun setAppLanguage(language: String) {
+        if (_isServerRunning.value) {
+            _showServerRunningWarning.value = true
+            return
+        }
         viewModelScope.launch {
             settingsRepository.setAppLanguage(language)
             _showRestartDialog.value = true

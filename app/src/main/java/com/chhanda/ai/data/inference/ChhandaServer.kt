@@ -1566,27 +1566,25 @@ class ChhandaServer @Inject constructor(
         }
         
         function escapeHtml(text) {
-            // If it already has our custom tags, we need to be careful with escaping
-            const hasCustomTags = text.includes('<div class="code-block"') || text.includes('href="/download/');
+            const hasCustomTags = text.includes('<div style="background:var(--surface-container)') || text.includes('<div class="code-block"');
             
-            if (hasCustomTags) {
-                // Surgical Markdown parsing to avoid breaking our injected HTML
-                return text
-                    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                    .replace(/`(.*?)`/g, '<code>$1</code>')
-                    .replace(/^### (.*$)/gm, '<h3 style="margin:12px 0 6px 0; color:var(--fg);">$1</h3>')
-                    .replace(/^## (.*$)/gm, '<h2 style="margin:16px 0 8px 0; color:var(--fg);">$1</h2>')
-                    .replace(/^# (.*$)/gm, '<h1 style="margin:20px 0 10px 0; color:var(--fg);">$1</h1>')
-                    .replace(/^- (.*$)/gm, '<li style="margin-left:16px; color:var(--muted);">$1</li>')
-                    .replace(/\n/g, '<br>');
+            let processed = text;
+            if (!hasCustomTags) {
+                processed = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
             }
 
-            return text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
+            return processed
+                .replace(/^> (.*$)/gm, '<blockquote style="border-left: 4px solid var(--primary); padding-left: 12px; margin: 12px 0; color: var(--muted); font-style: italic;">$1</blockquote>')
+                .replace(/^(\*\*\*|---|___)$/gm, '<hr style="border: 0; border-top: 1px solid var(--border); margin: 16px 0;">')
                 .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.1); padding:2px 4px; border-radius:4px; font-family:monospace;">$1</code>')
+                .replace(/^### (.*$)/gm, '<h3 style="margin:16px 0 8px 0; color:var(--fg); font-weight:600;">$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2 style="margin:20px 0 10px 0; color:var(--fg); font-weight:700;">$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1 style="margin:24px 0 12px 0; color:var(--fg); font-weight:800;">$1</h1>')
+                .replace(/^- (.*$)/gm, '<li style="margin-left:16px; color:var(--muted); list-style-type: disc;">$1</li>')
                 .replace(/\n/g, '<br>');
         }
 

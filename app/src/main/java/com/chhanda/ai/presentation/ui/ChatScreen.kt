@@ -664,6 +664,35 @@ fun MarkdownText(
 
             val trimmedStart = line.trimStart()
             when {
+                trimmedStart.startsWith("> ") -> {
+                    Row(
+                        modifier = Modifier
+                            .padding(vertical = 4.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(4.dp)
+                                .height(IntrinsicSize.Min)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(color.copy(alpha = 0.2f))
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = buildInlineAnnotated(trimmedStart.removePrefix("> "), color),
+                            color = color.copy(alpha = 0.8f),
+                            style = style.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                }
+                trimmedStart == "***" || trimmedStart == "---" || trimmedStart == "___" -> {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        thickness = 1.dp,
+                        color = color.copy(alpha = 0.1f)
+                    )
+                }
                 trimmedStart.startsWith("### ") -> {
                     Text(
                         text = trimmedStart.removePrefix("### "),

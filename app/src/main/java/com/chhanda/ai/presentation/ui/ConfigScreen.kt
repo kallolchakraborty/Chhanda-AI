@@ -427,6 +427,20 @@ fun ConfigScreen(
                 }
             )
         }
+
+        val showServerWarning by viewModel.showServerRunningWarning.collectAsState()
+        if (showServerWarning) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissServerRunningWarning() },
+                title = { Text("Server Running") },
+                text = { Text("Please stop the server before changing the language to ensure all components restart correctly.") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissServerRunningWarning() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
     }
 
 @Composable

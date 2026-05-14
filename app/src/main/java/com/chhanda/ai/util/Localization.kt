@@ -115,7 +115,8 @@ object Localization {
             "hotspot_pass" to "Password",
             "hotspot_starting" to "Starting hotspot...",
             "hotspot_active_desc" to "Private network active. Join this network first, then scan the QR code.",
-            "start_hotspot" to "Create Network"
+            "start_hotspot" to "Create Network",
+            "tts_intro_template" to "Hello, I am {name}. You have selected me as your voice for Chhanda AI."
         ),
         "Bengali" to mapOf(
             "dashboard" to "মূল পাতা",
@@ -229,7 +230,8 @@ object Localization {
             "hotspot_pass" to "পাসওয়ার্ড",
             "hotspot_starting" to "হটস্পট চালু হচ্ছে...",
             "hotspot_active_desc" to "প্রাইভেট নেটওয়ার্ক সক্রিয়। প্রথমে এই নেটওয়ার্কে যুক্ত হন, তারপর QR কোড স্ক্যান করুন।",
-            "start_hotspot" to "নেটওয়ার্ক তৈরি করুন"
+            "start_hotspot" to "নেটওয়ার্ক তৈরি করুন",
+            "tts_intro_template" to "হ্যালো, আমি {name}। আপনি আমাকে ছন্দ এআই-এর জন্য আপনার কণ্ঠ হিসেবে নির্বাচন করেছেন।"
         ),
         "Hindi" to mapOf(
             "dashboard" to "मुख्य",
@@ -343,7 +345,8 @@ object Localization {
             "hotspot_pass" to "पासवर्ड",
             "hotspot_starting" to "हॉटस्पॉट शुरू हो रहा है...",
             "hotspot_active_desc" to "निजी नेटवर्क सक्रिय है। पहले इस नेटवर्क से जुड़ें, फिर QR कोड स्कैन करें।",
-            "start_hotspot" to "नेटवर्क बनाएं"
+            "start_hotspot" to "नेटवर्क बनाएं",
+            "tts_intro_template" to "नमस्ते, मैं {name} हूँ। आपने मुझे छंदा एआई के लिए अपनी आवाज़ के रूप में चुना है।"
         ),
 
     )
