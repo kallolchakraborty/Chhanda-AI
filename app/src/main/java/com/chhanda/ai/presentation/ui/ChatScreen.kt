@@ -30,6 +30,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.speech.tts.TextToSpeech
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -958,12 +961,32 @@ fun ChatInput(
 
     var cameraUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    
+
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
             cameraUri?.let { onAttach(it) }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                val uri = com.chhanda.ai.util.FileUtils.createImageUri(context)
+                if (uri != null) {
+                    cameraUri = uri
+                    cameraLauncher.launch(uri)
+                } else {
+                    android.widget.Toast.makeText(context, "Could not create image file", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "Failed to launch camera", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            android.widget.Toast.makeText(context, "Camera permission is required", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1014,9 +1037,21 @@ fun ChatInput(
                     Icon(Icons.Default.Add, null, tint = Color.Gray)
                 }
                 IconButton(onClick = { 
-                    val uri = com.chhanda.ai.util.FileUtils.createImageUri(context)
-                    cameraUri = uri
-                    uri?.let { cameraLauncher.launch(it) }
+                    try {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                            val uri = com.chhanda.ai.util.FileUtils.createImageUri(context)
+                            if (uri != null) {
+                                cameraUri = uri
+                                cameraLauncher.launch(uri)
+                            } else {
+                                android.widget.Toast.makeText(context, "Could not create image file", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "Camera error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }) {
                     Icon(Icons.Default.PhotoCamera, null, tint = Color.Gray)
                 }

@@ -1104,6 +1104,8 @@ class SystemViewModel @Inject constructor(
     }
 
     fun setAppLanguage(language: String) {
+        if (appLanguage.value == language) return
+        
         if (_isServerRunning.value) {
             _showServerRunningWarning.value = true
             return
