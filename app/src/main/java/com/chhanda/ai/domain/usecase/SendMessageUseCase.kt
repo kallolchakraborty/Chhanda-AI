@@ -100,35 +100,32 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
             val prompt = buildString {
+                append("### SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR\n")
+                append("You are an advanced, low-latency AI gateway. Your goal is to provide the most accurate, context-aware response using a tiered knowledge system.\n\n")
+
                 if (attachmentContext.isNotBlank()) {
-                    append("### IMPORTANT: ATTACHED_DOCUMENTS_CONTENT BELOW\n")
-                    append("The user has provided the following documents/files for this specific query. Analyze them thoroughly.\n")
+                    append("### TIER 1: ATTACHED_DOCUMENTS_CONTENT\n")
                     append(attachmentContext)
-                    append("\n--- END OF ATTACHED DOCUMENTS ---\n\n")
+                    append("\n--- END OF ATTACHMENTS ---\n\n")
                 }
                 
                 if (isContextFound) {
-                    append("### DATABASE_KNOWLEDGE_CONTEXT\n")
+                    append("### TIER 2: DATABASE_KNOWLEDGE_CONTEXT\n")
                     append(longTermContext)
                     append("\n\n")
                 }
                 
                 append("### USER_QUERY\n")
-                if (attachmentContext.isNotBlank()) {
-                    append("[SYSTEM NOTE: There are documents attached above. Please refer to them first.]\n")
-                }
                 append(sanitizedUserText)
                 
-                append("\n\n### MANDATORY KNOWLEDGE HIERARCHY\n")
-                append("You MUST follow this exact order of operations to find the answer:\n")
-                append("1. TIER 1 (ATTACHMENTS): Search 'ATTACHED_DOCUMENTS_CONTENT'. If the answer is there, STOP searching and respond. Do NOT look at other tiers.\n")
-                append("2. TIER 2 (DATABASE): Only if TIER 1 fails, search 'DATABASE_KNOWLEDGE_CONTEXT'. Use it only if it is a high-confidence match.\n")
-                append("3. TIER 3 (INTERNAL): Only if TIER 1 & 2 fail, use your pre-trained knowledge to answer accurately.\n")
-                
-                append("\n### ACCURACY GUARDRAIL\n")
-                append("- Never hallucinate. If the user request is specific to a document and that document is missing or the info is not there, state that clearly instead of providing a generic/wrong answer.\n")
-                append("- Prioritize accuracy over completeness. If you are unsure, admit it.\n")
-                append("- Language: Always respond in $preferredLanguage.\n")
+                append("\n\n### COGNITIVE INSTRUCTIONS (SENIOR DEV MODE)\n")
+                append("1. INTENT ANALYSIS: First, determine if the USER_QUERY is a general/casual request or a technical/factual one.\n")
+                append("2. ROUTING LOGIC:\n")
+                append("   - If CASUAL (e.g., greetings, small talk): Respond naturally using your internal weights. IGNORE all Tier 1/2 context.\n")
+                append("   - If TECHNICAL/DOCUMENT-SPECIFIC: Follow the hierarchy: TIER 1 (Attachments) > TIER 2 (Database) > TIER 3 (Internal).\n")
+                append("3. DATA FIDELITY: Use 'DATABASE_KNOWLEDGE_CONTEXT' ONLY if it provides an exact or highly specific answer. If it is only 'vaguely related', treat it as noise and rely on your TIER 3 (Internal) knowledge instead.\n")
+                append("4. NO HALLUCINATION: If the answer is not in TIER 1/2 and TIER 3 is insufficient, clearly state your limitations.\n")
+                append("5. LANGUAGE: Respond in $preferredLanguage.\n")
             }
 
             val formatInstruction = """
