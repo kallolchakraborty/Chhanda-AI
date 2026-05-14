@@ -593,10 +593,22 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                 }
 
                 if (message.isRagUsed) {
+                    val sourceLabel = when (message.contextSource) {
+                        "Attachment" -> "DOCS ACTIVE"
+                        "Knowledge Base" -> "KB ACTIVE"
+                        "Multi-Source" -> "MULTI-RAG"
+                        else -> "RAG ACTIVE"
+                    }
+                    val sourceColor = when (message.contextSource) {
+                        "Attachment" -> Color(0xFF3B82F6) // Blue
+                        "Knowledge Base" -> Color(0xFF10B981) // Green
+                        else -> Color(0xFF8B5CF6) // Purple
+                    }
+                    
                     Surface(
-                        color = Color(0xFF10B981).copy(alpha = 0.15f),
+                        color = sourceColor.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.3f))
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, sourceColor.copy(alpha = 0.3f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -604,19 +616,19 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.AutoMode,
+                                imageVector = if (message.contextSource == "Attachment") Icons.Default.AttachFile else Icons.Default.AutoMode,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = Color(0xFF059669)
+                                tint = sourceColor
                             )
                             Text(
-                                text = "RAG ACTIVE",
+                                text = sourceLabel,
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontSize = 8.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 0.5.sp
                                 ),
-                                color = Color(0xFF059669)
+                                color = sourceColor
                             )
                         }
                     }
