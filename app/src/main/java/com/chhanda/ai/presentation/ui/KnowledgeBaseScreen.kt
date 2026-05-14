@@ -524,12 +524,12 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.LibraryBooks, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // PDF
-                Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Word
-                Icon(Icons.Default.TableChart, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Excel
-                Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Images
-                Icon(Icons.Default.Mic, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) // Audio
-                Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.PictureAsPdf, "PDF", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Description, "Word", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.TableChart, "Excel", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Image, "Image", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Mic, "Audio", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Public, "Web", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -639,8 +639,9 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
         "PDF" -> Icons.Default.PictureAsPdf
         "IMAGE" -> Icons.Default.Image
         "AUDIO" -> Icons.Default.Mic
-        "WORD" -> Icons.Default.Article
+        "WORD" -> Icons.Default.Description
         "EXCEL" -> Icons.Default.TableChart
+        "WEB_URL" -> Icons.Default.Public
         else -> Icons.Default.Description
     }
     val color = when (file.format) {
@@ -649,6 +650,7 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
         "AUDIO" -> Color(0xFF2563EB) // Blue
         "WORD" -> Color(0xFF4F46E5) // Indigo
         "EXCEL" -> Color(0xFF16A34A) // Green
+        "WEB_URL" -> Color(0xFFEA580C) // Orange
         else -> Color.Gray
     }
     Surface(

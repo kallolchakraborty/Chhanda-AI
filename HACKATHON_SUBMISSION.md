@@ -33,6 +33,7 @@ I leveraged **Google's Gemma 4 (2B & 4B 4-bit Quantized)** models to create a ro
 ### Key Innovations:
 *   **Chhanda Gateway**: A built-in Ktor-based server that turns the Android phone into a local AI hotspot. Other devices can connect via a QR code to access a high-fidelity Web UI, making one powerful phone an AI hub for an entire classroom or office.
 *   **Privacy-Native RAG**: A completely offline Retrieval-Augmented Generation pipeline using Apache POI and ML Kit. It indexes local documents (PDF, Word, Excel) and images without a single byte leaving the device.
+*   **Intelligent Multi-Stage Web Scraper**: An advanced ingestion engine that uses a 3-stage strategy (Jsoup -> Jina Reader -> Semantic DOM) to bypass bot protections and extract clean, structured knowledge from any URL for local indexing.
 *   **Offline Document Generation**: Empowering users to generate professional **.pdf**, **.docx**, and **.xlsx** files directly from AI responses, all while remaining 100% offline.
 *   **Localized TTS & UI**: Deep integration with Bengali and Hindi, featuring localized personalities and accents to make AI interaction feel familiar and inclusive.
 
@@ -98,6 +99,20 @@ graph LR
         KTOR[Ktor Server]
         SM[Session Manager]
     end
+
+#### 3. The Intelligent Scraper Flow
+How Chhanda extracts clean knowledge from complex web environments.
+
+```mermaid
+graph TD
+    URL[URL Input] --> JSOUP[Stage 1: Jsoup + JSON-LD]
+    JSOUP -->|Confidence < 80%| JINA[Stage 2: Jina Reader Fallback]
+    JINA -->|Failure| LR[Stage 3: Last Resort Body Extract]
+    JSOUP -->|Success| CLEAN[Semantic Cleaner]
+    JINA -->|Success| CLEAN
+    LR --> CLEAN
+    CLEAN --> VECTOR[Vector Ingestion Pipeline]
+```
     
     subgraph RemoteClients [Remote Clients]
         Browser[Web Browser]

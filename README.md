@@ -39,7 +39,8 @@ Chhanda is not just a chat app; it is a full-fledged local AI server and gateway
 2.  **Multimodal RAG (Retrieval-Augmented Generation)**:
     *   **Documents**: Parses `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, and `.txt` locally using Apache POI and custom extractors.
     *   **Vision**: Extracts text from images using Google ML Kit OCR.
-    *   **Web**: Scrapes web content using Jsoup.
+    *   **Web**: Advanced multi-stage scraping engine (Jsoup/Jina) that extracts semantic content and structured JSON-LD metadata from any website.
+    *   **Audio**: Speech-to-text integration for indexing spoken content.
 3.  **Document Generation**: The AI can generate `.xlsx`, `.docx`, and `.pdf` files locally on demand, which users can download via the host app or the Web UI.
 4.  **Chhanda AI Gateway (Web UI via QR)**: 
     *   Turns the Android device into a local network server via Ktor.
