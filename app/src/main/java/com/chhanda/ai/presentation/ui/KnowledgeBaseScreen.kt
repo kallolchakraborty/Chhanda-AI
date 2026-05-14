@@ -637,26 +637,17 @@ fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, i
 fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelete: () -> Unit, onClick: () -> Unit) {
     var showMenu by remember { mutableStateOf(false) }
     val formatUpper = file.format.uppercase()
-    val icon = when {
-        formatUpper.contains("PDF") -> Icons.Default.PictureAsPdf
-        formatUpper.contains("IMAGE") || formatUpper.contains("PNG") || formatUpper.contains("JPG") -> Icons.Default.Image
-        formatUpper.contains("AUDIO") || formatUpper.contains("MP3") || formatUpper.contains("WAV") -> Icons.Default.Mic
-        formatUpper.contains("WORD") || formatUpper.contains("DOC") -> Icons.Default.Description
-        formatUpper.contains("EXCEL") || formatUpper.contains("XLS") -> Icons.Default.TableChart
-        formatUpper.contains("WEB") || formatUpper.contains("URL") -> Icons.Default.Public
-        formatUpper.contains("TXT") -> Icons.AutoMirrored.Filled.Article
-        else -> Icons.Default.Description
+    val (icon, color, typeLabel) = when {
+        formatUpper.contains("PDF") -> Triple(Icons.Default.PictureAsPdf, Color(0xFFB91C1C), "PDF Document")
+        formatUpper.contains("IMAGE") || formatUpper.contains("PNG") || formatUpper.contains("JPG") -> Triple(Icons.Default.Image, Color(0xFF0891B2), "Image")
+        formatUpper.contains("AUDIO") || formatUpper.contains("MP3") || formatUpper.contains("WAV") -> Triple(Icons.Default.Mic, Color(0xFF2563EB), "Audio")
+        formatUpper.contains("WORD") || formatUpper.contains("DOC") -> Triple(Icons.Default.Description, Color(0xFF4F46E5), "Word Document")
+        formatUpper.contains("EXCEL") || formatUpper.contains("XLS") -> Triple(Icons.Default.TableChart, Color(0xFF16A34A), "Excel Sheet")
+        formatUpper.contains("WEB") || formatUpper.contains("URL") -> Triple(Icons.Default.Public, Color(0xFFEA580C), "Website")
+        formatUpper.contains("TXT") -> Triple(Icons.AutoMirrored.Filled.Article, Color(0xFF6B7280), "Text File")
+        else -> Triple(Icons.Default.Description, Color.Gray, file.format)
     }
-    val color = when {
-        formatUpper.contains("PDF") -> Color(0xFFB91C1C) // Red
-        formatUpper.contains("IMAGE") -> Color(0xFF0891B2) // Cyan
-        formatUpper.contains("AUDIO") -> Color(0xFF2563EB) // Blue
-        formatUpper.contains("WORD") -> Color(0xFF4F46E5) // Indigo
-        formatUpper.contains("EXCEL") -> Color(0xFF16A34A) // Green
-        formatUpper.contains("WEB") -> Color(0xFFEA580C) // Orange
-        formatUpper.contains("TXT") -> Color(0xFF6B7280) // Gray
-        else -> Color.Gray
-    }
+
     Surface(
         modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth().clickable { onClick() },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -668,20 +659,31 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
         ) {
             Surface(
                 modifier = Modifier.size(48.dp),
-                color = color.copy(alpha = 0.15f),
+                color = color.copy(alpha = 0.2f),
                 shape = androidx.compose.foundation.shape.CircleShape
             ) {
-                Icon(icon, null, tint = color, modifier = Modifier.padding(12.dp))
+                Icon(
+                    imageVector = icon, 
+                    contentDescription = typeLabel, 
+                    tint = color, 
+                    modifier = Modifier.padding(12.dp)
+                )
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(file.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    text = file.name, 
+                    fontWeight = FontWeight.Bold, 
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
                 val sizeStr = if (file.size < 1024 * 1024) {
                     "%.2f KB".format(file.size.toDouble() / 1024.0)
                 } else {
                     "%.2f MB".format(file.size.toDouble() / (1024.0 * 1024.0))
                 }
-                Text("$sizeStr • ${file.format}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text("$sizeStr • $typeLabel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
             IconButton(onClick = { showMenu = true }) { 
                 Icon(androidx.compose.material.icons.Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
