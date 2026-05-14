@@ -108,9 +108,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 
                 append("\n\n### INSTRUCTIONS\n")
                 append("1. Primary Source: Use the 'ATTACHED_DOCUMENTS_CONTENT' above to answer the query if it contains the relevant information.\n")
-                append("2. Secondary Source: If the answer is not in the attached documents, check 'DATABASE_KNOWLEDGE_CONTEXT'.\n")
-                append("3. Final Fallback: If neither source has the answer, use your own internal knowledge to provide an accurate response in $preferredLanguage.\n")
-                append("4. Be professional and concise.\n")
+                append("2. Secondary Source: Use 'DATABASE_KNOWLEDGE_CONTEXT' ONLY if it is directly relevant and provides accurate facts for the query.\n")
+                append("3. Relevance Guardrail: If 'DATABASE_KNOWLEDGE_CONTEXT' is irrelevant, noisy, or contradicts logical facts, IGNORE it completely.\n")
+                append("4. Final Fallback: Rely on your high-fidelity internal training knowledge to provide an accurate, helpful response in $preferredLanguage.\n")
+                append("5. Be professional, concise, and prioritize accuracy over hallucinating from provided context.\n")
             }
 
             val formatInstruction = """

@@ -30,7 +30,9 @@ class ContextManager @javax.inject.Inject constructor(
             val queryEmbedding = embeddingEngine.embed(query)
             val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 3 else 6, modelId = "shared_rag_db")
             
-            val threshold = if (modelName.contains("4B")) 0.15f else 0.02f
+            // High-fidelity threshold: Ensure snippets are actually relevant to the query.
+            // 0.55f for 4B models (stricter), 0.5f for others.
+            val threshold = if (modelName.contains("4B")) 0.55f else 0.50f
             val filtered = results
                 .filter { it.score >= threshold } 
 
