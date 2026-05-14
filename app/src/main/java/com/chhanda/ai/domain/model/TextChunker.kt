@@ -11,33 +11,55 @@ object TextChunker {
         // Split into sentences using common punctuation
         val sentences = text.split(Regex("(?<=[.!?])\\s+"))
         val chunks = mutableListOf<String>()
-        var currentChunk = StringBuilder()
+        val currentSentences = mutableListOf<String>()
+        var currentLength = 0
         
         for (sentence in sentences) {
-            if (currentChunk.length + sentence.length <= chunkSize) {
-                currentChunk.append(sentence).append(" ")
+            // Handle massive sentences
+            if (sentence.length > chunkSize) {
+                // Flush current chunk first
+                if (currentSentences.isNotEmpty()) {
+                    chunks.add(currentSentences.joinToString(" "))
+                    currentSentences.clear()
+                    currentLength = 0
+                }
+                
+                var subStart = 0
+                while (subStart < sentence.length) {
+                    val subEnd = minOf(subStart + chunkSize, sentence.length)
+                    chunks.add(sentence.substring(subStart, subEnd))
+                    subStart += chunkSize - overlap
+                }
+                continue
+            }
+
+            if (currentLength + sentence.length <= chunkSize) {
+                currentSentences.add(sentence)
+                currentLength += sentence.length + 1 // +1 for space
             } else {
-                if (currentChunk.isNotEmpty()) {
-                    chunks.add(currentChunk.toString().trim())
+                // Save current chunk
+                chunks.add(currentSentences.joinToString(" "))
+                
+                // Backtrack to create overlap
+                val overlapSentences = mutableListOf<String>()
+                var overlapLength = 0
+                for (i in currentSentences.indices.reversed()) {
+                    val s = currentSentences[i]
+                    if (overlapLength + s.length <= overlap) {
+                        overlapSentences.add(0, s)
+                        overlapLength += s.length + 1
+                    } else break
                 }
-                // Handle cases where a single sentence is longer than chunkSize
-                if (sentence.length > chunkSize) {
-                    var subStart = 0
-                    while (subStart < sentence.length) {
-                        val subEnd = minOf(subStart + chunkSize, sentence.length)
-                        chunks.add(sentence.substring(subStart, subEnd))
-                        subStart += chunkSize - overlap
-                    }
-                    currentChunk = StringBuilder()
-                } else {
-                    // Start new chunk with the sentence
-                    currentChunk = StringBuilder(sentence).append(" ")
-                }
+                
+                currentSentences.clear()
+                currentSentences.addAll(overlapSentences)
+                currentSentences.add(sentence)
+                currentLength = currentSentences.sumOf { it.length + 1 }
             }
         }
         
-        if (currentChunk.isNotEmpty()) {
-            chunks.add(currentChunk.toString().trim())
+        if (currentSentences.isNotEmpty()) {
+            chunks.add(currentSentences.joinToString(" "))
         }
         
         return chunks

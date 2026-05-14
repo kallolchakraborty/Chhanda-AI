@@ -17,9 +17,9 @@ class ContextManager @javax.inject.Inject constructor(
      * Optimizes context for the LLM by combining recent history with relevant long-term memory.
      */
     suspend fun getOptimizedContext(query: String, deviceId: String, modelName: String, sessionId: String): Pair<List<Pair<String, String>>, String> {
-        // Short-Term Memory: Last 4 messages for fast immediate conversation context
+        // Short-Term Memory: Last 10 messages for deeper conversation context
         val recentMessages = try {
-            chatDao.getRecentMessagesForSession(sessionId, 4).reversed()
+            chatDao.getRecentMessagesForSession(sessionId, 10).reversed()
         } catch (e: Exception) {
             emptyList<MessageEntity>()
         }
@@ -27,25 +27,34 @@ class ContextManager @javax.inject.Inject constructor(
 
         // Long-Term Memory: Vector search for semantic relevance across all history
         val longTermMemory = try {
-            // ADVANCED SELECTIVITY: Skip RAG for small talk/greetings to prevent irrelevant memory injection
-            val smallTalkKeywords = listOf("hi", "hello", "hey", "how are you", "good morning", "good evening", "thanks", "thank you", "bye", "ok", "okay")
-            val isSmallTalk = smallTalkKeywords.any { query.lowercase().trim() == it } || (query.trim().length < 5 && !query.any { it.isDigit() })
+            // ADVANCED SELECTIVITY: Only skip for very short interactions
+            val smallTalkKeywords = listOf("hi", "hello", "hey", "thanks", "thank you", "bye", "ok", "okay")
+            val isSmallTalk = smallTalkKeywords.any { query.lowercase().trim() == it } || (query.trim().length < 3)
             
-            if (isSmallTalk) {
+            if (isSmallTalk && history.size < 2) {
                 android.util.Log.d("ContextManager", "Small talk detected for '$query'. Skipping RAG.")
                 return history to ""
             }
 
-            val queryEmbedding = embeddingEngine.embed(query)
-            val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 6 else 10, modelId = "shared_rag_db")
+            // QUERY AUGMENTATION: For short/vague follow-ups, include previous user context in the embedding search
+            val augmentedQuery = if (query.split(" ").size < 6 && history.isNotEmpty()) {
+                val lastUserQuery = history.findLast { it.first == "user" }?.second ?: ""
+                if (lastUserQuery.isNotEmpty() && lastUserQuery != query) {
+                    "$lastUserQuery $query"
+                } else query
+            } else query
+
+            android.util.Log.d("ContextManager", "RAG Query: '$augmentedQuery' (Original: '$query')")
+            val queryEmbedding = embeddingEngine.embed(augmentedQuery)
+            val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 8 else 12, modelId = "shared_rag_db")
             
             // Adaptive threshold: lower for attachments/specific files, higher for general KB to prevent hallucinations
             val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || query.lowercase().contains("image")
-            val threshold = if (isExplicitSearch) 0.65f else 0.82f 
+            val threshold = if (isExplicitSearch) 0.55f else 0.68f 
             
             val filtered = results.filter { it.score >= threshold } 
 
-            android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
+            android.util.Log.d("ContextManager", "RAG Search found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
 
             if (filtered.isEmpty()) ""
             else {
