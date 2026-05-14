@@ -23,8 +23,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Public
@@ -91,18 +90,32 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
             ttsInstance = TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     ttsInstance?.language = ttsLocale
+                    ttsInstance?.setSpeechRate(0.9f)
+                    ttsInstance?.setPitch(1.0f)
+                    
                     if (selectedVoice != "Default") {
                         val isMale = selectedVoice.contains("Male")
-                        val voices = ttsInstance?.voices
+                        val voices = ttsInstance?.voices?.toList()
                         val targetVoice = voices?.filter { it.locale.language == ttsLocale.language }
-                            ?.find { v ->
+                            ?.filter { v ->
                                 val name = v.name.lowercase()
                                 if (isMale) {
-                                    name.contains("male") || name.contains("-m-") || name.contains("male_")
+                                    name.contains("male") || name.contains("-m-") || name.contains("_m_") || 
+                                    name.contains("ahp") || name.contains("hie") || name.contains("baq")
                                 } else {
-                                    name.contains("female") || name.contains("-f-") || name.contains("female_")
+                                    name.contains("female") || name.contains("-f-") || name.contains("_f_") || 
+                                    name.contains("ahi") || name.contains("hif") || name.contains("ban")
                                 }
-                            } ?: voices?.filter { it.locale.language == ttsLocale.language }?.firstOrNull()
+                            }
+                            ?.sortedByDescending { v ->
+                                val name = v.name.lowercase()
+                                var score = 0
+                                if (name.contains("network")) score += 100
+                                if (name.contains("neural")) score += 80
+                                if (name.contains("high")) score += 50
+                                if (name.contains("local")) score += 20
+                                score
+                            }?.firstOrNull() ?: voices?.filter { it.locale.language == ttsLocale.language }?.firstOrNull()
                             
                         if (targetVoice != null) {
                             ttsInstance?.voice = targetVoice
@@ -302,6 +315,12 @@ fun parseMessageContent(rawText: String): Pair<String?, String> {
         .replace(Regex("<\\|channel>"), "")
         .replace(Regex("<start_of_turn>"), "")
         .replace(Regex("<end_of_turn>"), "")
+        .replace("\ufeff", "")
+        .replace("\uFEFF", "")
+        .replace("[UTF-8]", "")
+        .replace("(UTF-8)", "")
+        .replace("UTF-8: ", "")
+        .replace("\u00A0", " ")
         .trim()
 
     var thinkingText: String? = null
@@ -349,6 +368,31 @@ fun parseMessageContent(rawText: String): Pair<String?, String> {
     }
     
     return Pair(thinkingText, responseText)
+}
+
+fun cleanTextForTts(text: String): String {
+    return text
+        // Remove Markdown bold
+        .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
+        // Remove Markdown italic
+        .replace(Regex("\\*(.*?)\\*"), "$1")
+        // Remove Markdown inline code
+        .replace(Regex("`(.*?)`"), "$1")
+        // Remove Markdown code blocks
+        .replace(Regex("```[\\s\\S]*?```"), "")
+        // Remove custom tags [CREATE_FILE]...[/CREATE_FILE]
+        .replace(Regex("\\[CREATE_FILE.*?\\][\\s\\S]*?\\[/CREATE_FILE\\]"), "")
+        // Remove custom tags [GENERATE_FILE]...[/GENERATE_FILE]
+        .replace(Regex("\\[GENERATE_FILE.*?\\][\\s\\S]*?\\[/GENERATE_FILE\\]"), "")
+        // Remove Markdown headings
+        .replace(Regex("#+\\s+"), "")
+        // Remove Markdown links [text](url) -> text
+        .replace(Regex("\\[(.*?)\\]\\(.*?\\)"), "$1")
+        // Remove special characters that might sound weird
+        .replace(Regex("[_~>]"), " ")
+        // Normalize whitespace
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }
 
 @Composable
@@ -588,7 +632,10 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
 
                 IconButton(
                     onClick = {
-                        tts?.speak(responseText, TextToSpeech.QUEUE_FLUSH, null, null)
+                        val cleanText = cleanTextForTts(responseText)
+                        if (cleanText.isNotEmpty()) {
+                            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, null)
+                        }
                     },
                     modifier = Modifier.size(24.dp)
                 ) {
@@ -885,7 +932,7 @@ fun CodeBlock(code: String, language: String) {
                 }
             }
             Text(
-                text = code.trim(),
+                text = code.trimNewlines(),
                 modifier = Modifier.padding(12.dp),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -1272,7 +1319,7 @@ fun AttachmentDownload(name: String, type: String) {
             Icon(
                 when(type.lowercase()) {
                     "excel" -> Icons.Default.TableChart
-                    "word" -> Icons.AutoMirrored.Filled.Article
+                    "word" -> Icons.Default.Description
                     "pdf" -> Icons.Default.PictureAsPdf
                     else -> Icons.Default.AttachFile
                 },
@@ -1314,4 +1361,8 @@ fun AttachmentDownload(name: String, type: String) {
             }
         }
     }
+}
+
+fun String.trimNewlines(): String {
+    return this.dropWhile { it == '\n' || it == '\r' }.dropLastWhile { it == '\n' || it == '\r' }
 }

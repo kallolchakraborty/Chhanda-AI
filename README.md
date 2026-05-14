@@ -210,29 +210,156 @@ sequenceDiagram
     WM-->>UI: Broadcast "Ingestion Complete"
 ```
 
-### Chat Orchestration LLD (`SendMessageUseCase`)
-This is the core brain that combines Chat History, RAG Context, and LLM Inference.
+### Detailed Class Architecture & Dependency Graph
+This diagram illustrates the core components of the Chhanda ecosystem, showing how the UI communicates with the domain logic and how the inference engines are abstracted for stability.
 
 ```mermaid
 classDiagram
-    class SendMessageUseCase {
-        +invoke(prompt, deviceId, model, source) Flow~TokenUpdate~
+    %% Presentation Layer (MVVM)
+    class SystemViewModel {
+        -SettingsRepository settingsRepository
+        -LLMEngine llmEngine
+        -VectorStore vectorStore
+        -ChhandaServer chhandaServer
+        +ramUsage Flow~String~
+        +isIngesting Flow~Boolean~
+        +scanForModels()
+        +activateModel(name)
+        +toggleRag(enabled)
+        +startServer()
     }
+
+    class ChatViewModel {
+        -SendMessageUseCase sendMessageUseCase
+        -ChatDao chatDao
+        +uiState Flow~ChatUiState~
+        +sendMessage(text, attachments)
+        +stopInference()
+    }
+
+    %% Domain Layer (Business Logic)
+    class SendMessageUseCase {
+        -LLMEngine llmEngine
+        -ContextManager contextManager
+        -SettingsRepository settingsRepository
+        +invoke(userText, deviceId, modelName, sessionId, attachments) Flow~TokenUpdate~
+    }
+
+    class IngestDocumentUseCase {
+        -MultimodalIngestor ingestor
+        -EmbeddingEngine embeddingEngine
+        -VectorStore vectorStore
+        +ingestLocalUri(uri, type)
+        +ingestScrapedText(text, source, type)
+    }
+
+    class ScrapeUrlUseCase {
+        -IngestDocumentUseCase ingestDocUseCase
+        +scrape(url) Result~String~
+    }
+
     class ContextManager {
+        -ChatDao chatDao
+        -VectorStore vectorStore
         +getOptimizedContext(query, deviceId) Pair~History, RAGContext~
         +maintainMemoryHygiene()
     }
+
+    %% Interfaces (Abstractions)
+    class LLMEngine {
+        <<interface>>
+        +initModel(path)
+        +generateResponse(prompt, history) Flow~TokenUpdate~
+        +stopInference()
+    }
+
     class VectorStore {
-        +searchSimilar(embedding, threshold) List~Chunks~
+        <<interface>>
+        +add(text, embedding, metadata)
+        +search(query, topK) List~SearchResult~
     }
+
+    class EmbeddingEngine {
+        <<interface>>
+        +embed(text) Embedding
+    }
+
+    class MultimodalIngestor {
+        <<interface>>
+        +ingestPdf(uri) List~String~
+        +ingestImage(uri) String
+        +ingestWord(uri) String
+    }
+
+    %% Implementation Layer (Native & Framework)
     class LiteRTLMEngine {
-        +generateResponse(finalPrompt) Flow~String~
+        -LlmInference nativeEngine
+        +initModel(path)
     }
+
+    class LocalVectorStore {
+        -VectorChunkDao vectorChunkDao
+        +search(query, topK)
+    }
+
+    class LiteRTEmbeddingEngine {
+        -TextEmbedder embedder
+        +embed(text)
+    }
+
+    class AndroidMultimodalIngestor {
+        -TextRecognizer ocr
+        -PdfRenderer pdfRenderer
+        +ingestImage(uri)
+    }
+
+    class ChhandaServer {
+        -KtorServer server
+        -SendMessageUseCase sendMessageUseCase
+        +start(port)
+        +stop()
+    }
+
+    %% Data & Infrastructure
+    class AppDatabase {
+        <<RoomDatabase>>
+        +chatDao() ChatDao
+        +vectorChunkDao() VectorChunkDao
+        +uploadedFileDao() UploadedFileDao
+    }
+
+    class SettingsRepository {
+        -DataStore preferences
+        +ragEnabledFlow Flow~Boolean~
+        +updateRagEnabled(enabled)
+    }
+
+    %% Relationships & Dependencies
+    SystemViewModel ..> LLMEngine : uses
+    SystemViewModel ..> VectorStore : uses
+    SystemViewModel ..> ChhandaServer : uses
+    SystemViewModel ..> IngestDocumentUseCase : uses
     
-    SendMessageUseCase --> ContextManager : 1. Fetch Context
-    ContextManager --> VectorStore : 2. Semantic Search
-    SendMessageUseCase --> LiteRTLMEngine : 3. Stream Inference
-    SendMessageUseCase --> ChatDao : 4. Persist Messages (tagged by source)
+    ChatViewModel ..> SendMessageUseCase : uses
+    
+    SendMessageUseCase --> LLMEngine : executes
+    SendMessageUseCase --> ContextManager : fetches context
+    SendMessageUseCase --> SettingsRepository : checks config
+    
+    ContextManager --> VectorStore : semantic search
+    
+    IngestDocumentUseCase --> MultimodalIngestor : extracts
+    IngestDocumentUseCase --> EmbeddingEngine : vectorizes
+    IngestDocumentUseCase --> VectorStore : persists
+    
+    ScrapeUrlUseCase --> IngestDocumentUseCase : triggers ingestion
+    
+    LiteRTLMEngine ..|> LLMEngine : implements
+    LocalVectorStore ..|> VectorStore : implements
+    LiteRTEmbeddingEngine ..|> EmbeddingEngine : implements
+    AndroidMultimodalIngestor ..|> MultimodalIngestor : implements
+    
+    ChhandaServer --> SendMessageUseCase : routes requests
 ```
 
 ### Web Gateway & Server LLD (`ChhandaServer`)

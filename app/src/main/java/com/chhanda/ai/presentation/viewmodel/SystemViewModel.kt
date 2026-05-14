@@ -307,6 +307,17 @@ class SystemViewModel @Inject constructor(
                     }
                     
                     processedFiles++
+                    
+                    // PERSISTENCE: Track this file in the UI's recent uploads
+                    uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = name,
+                        format = type.name,
+                        size = size,
+                        path = uri.toString(),
+                        timestamp = System.currentTimeMillis()
+                    ))
+                    
                     addLog("STORAGE", "Document $name ingested successfully", "SUCCESS")
                 }
                 
@@ -374,7 +385,8 @@ class SystemViewModel @Inject constructor(
     val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 7)
     val autoDeleteEnabled = settingsRepository.autoDeleteEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
-    val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Default")
+    val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Kallol (Indian Male)")
+    val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
     val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
@@ -606,8 +618,7 @@ class SystemViewModel @Inject constructor(
 
     private val _availableVoices = MutableStateFlow<List<String>>(
         listOf(
-            "Kallol (Indian Male)", "Adrit (Indian Male)", "James (Global Male)",
-            "Chhanda (Indian Female)", "Ivanshika (Indian Female)", "Sarah (Global Female)"
+            "Kallol (Indian Male)", "Chhanda (Indian Female)"
         )
     )
     val availableVoices: StateFlow<List<String>> = _availableVoices.asStateFlow()
@@ -636,30 +647,39 @@ class SystemViewModel @Inject constructor(
 
     private fun speakSampleInternal(virtualVoiceName: String, locale: Locale) {
         sampleTts?.language = locale
+        sampleTts?.setSpeechRate(0.9f)
+        sampleTts?.setPitch(1.0f)
+        
         val isMale = virtualVoiceName.contains("Male")
         
         // Clean name for intro (e.g., "Kallol")
         val cleanName = virtualVoiceName.substringBefore(" (")
         
-        val systemVoices = sampleTts?.voices?.filter { it.locale.language == locale.language } ?: emptyList()
+        val systemVoices = sampleTts?.voices?.toList() ?: emptyList()
         
         // Variety Strategy: Use name hash to pick different system voices if multiple are available
-        val genderFiltered = systemVoices.filter { v ->
-            val name = v.name.lowercase()
-            if (isMale) {
-                name.contains("male") || name.contains("-m-") || name.contains("_m_") || name.contains("en-in-x-ahp-local") || name.contains("hi-in-x-hie-local")
-            } else {
-                name.contains("female") || name.contains("-f-") || name.contains("_f_") || name.contains("en-in-x-ahi-local") || name.contains("hi-in-x-hif-local")
+        val pool = systemVoices.filter { v -> v.locale.language == locale.language }
+            .filter { v ->
+                val name = v.name.lowercase()
+                if (isMale) {
+                    name.contains("male") || name.contains("-m-") || name.contains("_m_") || 
+                    name.contains("ahp") || name.contains("hie") || name.contains("baq")
+                } else {
+                    name.contains("female") || name.contains("-f-") || name.contains("_f_") || 
+                    name.contains("ahi") || name.contains("hif") || name.contains("ban")
+                }
             }
-        }
+            .sortedByDescending { v ->
+                val name = v.name.lowercase()
+                var score = 0
+                if (name.contains("network")) score += 100
+                if (name.contains("neural")) score += 80
+                if (name.contains("high")) score += 50
+                if (name.contains("local")) score += 20
+                score
+            }
         
-        // If no gender-specific match, use all for that locale
-        val pool = if (genderFiltered.isNotEmpty()) genderFiltered else systemVoices
-        
-        val voiceToUse = if (pool.isNotEmpty()) {
-            val index = Math.abs(virtualVoiceName.hashCode()) % pool.size
-            pool[index]
-        } else null
+        val voiceToUse = pool.firstOrNull() ?: systemVoices.firstOrNull { it.locale.language == locale.language }
 
         if (voiceToUse != null) {
             sampleTts?.voice = voiceToUse
@@ -1082,6 +1102,13 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setTurboQuantEnabled(enabled)
             addLog("CONFIG", "TurboQuant set to $enabled", "INFO")
+        }
+    }
+
+    fun toggleRag(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setRagEnabled(enabled)
+            addLog("ENGINE", "Long-term Vector Memory ${if (enabled) "Enabled" else "Disabled"}", "INFO")
         }
     }
 

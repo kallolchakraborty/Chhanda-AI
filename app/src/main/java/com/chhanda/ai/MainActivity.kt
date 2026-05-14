@@ -142,8 +142,11 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
                 val appLanguage by systemViewModel.appLanguage.collectAsState()
+                val ragEnabled by systemViewModel.ragEnabled.collectAsState()
                 
                 items.forEach { screen ->
+                    if (screen == Screen.Models && !ragEnabled) return@forEach
+                    
                     val localizedTitle = com.chhanda.ai.util.Localization.getString(screen.translationKey, appLanguage)
                     NavigationBarItem(
                         icon = { Icon(screen.icon, contentDescription = localizedTitle) },
@@ -174,7 +177,18 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
         ) {
             composable("welcome") { WelcomeScreen(navController) }
             composable(Screen.Dashboard.route) { DashboardScreen(navController, systemViewModel) }
-            composable(Screen.Models.route) { KnowledgeBaseScreen(navController, systemViewModel) }
+            composable(Screen.Models.route) { 
+                val ragEnabled by systemViewModel.ragEnabled.collectAsState()
+                if (ragEnabled) {
+                    KnowledgeBaseScreen(navController, systemViewModel) 
+                } else {
+                    LaunchedEffect(Unit) {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                        }
+                    }
+                }
+            }
             composable(Screen.Settings.route) { ConfigScreen(navController, systemViewModel) }
             composable(Screen.Logs.route) { LogsScreen(navController, systemViewModel) }
             composable(

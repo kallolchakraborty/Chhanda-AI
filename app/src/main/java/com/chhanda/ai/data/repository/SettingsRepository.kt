@@ -33,6 +33,7 @@ class SettingsRepository @Inject constructor(
         val AUTO_DELETE_ENABLED = booleanPreferencesKey("auto_delete_enabled")
         val TURBOQUANT_ENABLED = booleanPreferencesKey("turboquant_enabled")
         val SELECTED_VOICE = stringPreferencesKey("selected_voice")
+        val RAG_ENABLED = booleanPreferencesKey("rag_enabled")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -84,7 +85,11 @@ class SettingsRepository @Inject constructor(
     }
 
     val selectedVoiceFlow: Flow<String> = dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.SELECTED_VOICE] ?: "Default"
+        preferences[PreferencesKeys.SELECTED_VOICE] ?: "Kallol (Indian Male)"
+    }
+
+    val ragEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.RAG_ENABLED] ?: true
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -162,6 +167,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setSelectedVoice(voice: String) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.SELECTED_VOICE] = voice
+        }
+    }
+
+    suspend fun setRagEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.RAG_ENABLED] = enabled
         }
     }
 }

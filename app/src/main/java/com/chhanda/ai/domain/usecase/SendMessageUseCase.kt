@@ -20,6 +20,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val contextManager: com.chhanda.ai.domain.model.ContextManager,
     private val ingestor: com.chhanda.ai.domain.model.MultimodalIngestor,
     private val persistentIngestor: com.chhanda.ai.domain.usecase.IngestDocumentUseCase,
+    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
@@ -44,8 +45,12 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         var isContextFound = false
         
         try {
+            // STEP 0: Check Settings
+            val ragEnabled = settingsRepository.ragEnabledFlow.first()
+
             // STEP 1: Get Optimized Context (Short-term + Long-term)
-            val (dbHistory, longTermContext) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
+            val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
+            val longTermContext = if (ragEnabled) longTermContextRaw else ""
             val history = externalHistory ?: dbHistory
             
             // Context Awareness State
@@ -85,7 +90,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             
             // STEP 3: Process Attachments (Direct Context)
             val attachmentContext = if (attachments.isNotEmpty()) {
-                val texts = attachments.map { uri ->
+                val texts = mutableListOf<String>()
+                for (uri in attachments) {
                     try {
                         val uriString = uri.toString()
                         val fileName = uri.lastPathSegment ?: "file"
@@ -103,22 +109,20 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                             else -> ingestor.ingestTxt(uri) to com.chhanda.ai.domain.usecase.DocType.TXT
                         }
                         
-                        // PERSISTENCE: Store in the RAG database so it's available for future queries
-                        val metaText = "[Source: $fileName] [Type: ${type.name}]\n\n$rawText"
                         try {
                             persistentIngestor.ingestScrapedText(rawText, uriString, type.name)
                         } catch (e: Exception) {
                             android.util.Log.e("SendMessageUseCase", "Failed to persist attachment to DB: ${e.message}")
                         }
                         
-                        "--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n"
+                        texts.add("--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n")
                     } catch (e: Exception) {
-                        "Error processing ${uri.lastPathSegment}: ${e.localizedMessage}"
+                        texts.add("Error processing ${uri.lastPathSegment}: ${e.localizedMessage}")
                     }
                 }
                 hasAttachmentKnowledge = true
                 isContextFound = true
-                texts.joinToString("\n")
+                texts.filter { it.isNotBlank() }.joinToString("\n\n")
             } else ""
 
             // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
@@ -372,7 +376,8 @@ private class LoadBalancer(private val numReplicas: Int = 1) {
     fun getReplica(prompt: String): Int {
         val prefix = prompt.take(50) // Take first 50 chars as prefix for cache locality
         val hash = prefix.hashCode()
-        val preferredReplica = Math.abs(hash) % numReplicas
+        val rawIdx = if (hash == Int.MIN_VALUE) 0 else Math.abs(hash)
+        val preferredReplica = rawIdx % numReplicas
         
         synchronized(this) {
             val currentLoad = replicaLoads[preferredReplica] ?: 0

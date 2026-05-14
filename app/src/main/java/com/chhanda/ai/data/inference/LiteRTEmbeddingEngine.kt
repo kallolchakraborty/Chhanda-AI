@@ -77,7 +77,8 @@ class LiteRTEmbeddingEngine @Inject constructor(
                 val seed = word.hashCode().toLong()
                 val random = java.util.Random(seed)
                 for (i in 0 until 12) { // Increased projection density
-                    val dim = Math.abs(random.nextInt()) % 384
+                    val rawIdx = random.nextInt()
+                    val dim = (if (rawIdx == Int.MIN_VALUE) 0 else Math.abs(rawIdx)) % 384
                     val weight = if (random.nextBoolean()) 1.2f else -0.8f
                     vector[dim] += weight
                 }

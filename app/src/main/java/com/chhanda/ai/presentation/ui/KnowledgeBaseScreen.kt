@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -639,12 +639,12 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
     val format = file.format.uppercase().trim()
     val (icon, color, typeLabel) = when {
         format == "PDF" || format.contains("PDF") -> Triple(Icons.Default.PictureAsPdf, Color(0xFFEF4444), "PDF Document")
-        format == "IMAGE" || format.contains("PNG") || format.contains("JPG") || format.contains("JPEG") -> Triple(Icons.Default.Image, Color(0xFF06B6D4), "Image")
-        format == "AUDIO" || format.contains("MP3") || format.contains("WAV") -> Triple(Icons.Default.Mic, Color(0xFF3B82F6), "Audio")
-        format == "WORD" || format.contains("DOC") -> Triple(Icons.Default.Description, Color(0xFF6366F1), "Word Document")
-        format == "EXCEL" || format.contains("XLS") -> Triple(Icons.Default.TableChart, Color(0xFF22C55E), "Excel Sheet")
+        format == "IMAGE" || format.contains("PNG") || format.contains("JPG") || format.contains("JPEG") || format.contains("IMG") -> Triple(Icons.Default.Image, Color(0xFF8B5CF6), "Image Analysis")
+        format == "AUDIO" || format.contains("MP3") || format.contains("WAV") -> Triple(Icons.Default.Mic, Color(0xFF3B82F6), "Audio Clip")
+        format == "WORD" || format.contains("DOC") -> Triple(Icons.Default.Description, Color(0xFF3B82F6), "Word Document")
+        format == "EXCEL" || format.contains("XLS") || format.contains("SHEET") -> Triple(Icons.Default.TableChart, Color(0xFF10B981), "Excel Sheet")
         format == "WEB_URL" || format.contains("WEB") || format.contains("URL") -> Triple(Icons.Default.Public, Color(0xFFF97316), "Website")
-        format == "TXT" || format.contains("TEXT") -> Triple(Icons.AutoMirrored.Filled.Article, Color(0xFF94A3B8), "Text File")
+        format == "TXT" || format.contains("TEXT") -> Triple(Icons.Default.Description, Color(0xFF94A3B8), "Text File")
         else -> Triple(Icons.Default.Description, Color(0xFF94A3B8), file.format)
     }
 

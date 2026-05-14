@@ -48,6 +48,7 @@ fun ConfigScreen(
     val showRestart by viewModel.showRestartDialog.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsState()
+    val ragEnabled by viewModel.ragEnabled.collectAsState()
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
@@ -167,13 +168,6 @@ fun ConfigScreen(
                                 expanded = voiceExpanded,
                                 onDismissRequest = { voiceExpanded = false }
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("System Default") },
-                                    onClick = {
-                                        viewModel.setSelectedVoice("Default")
-                                        voiceExpanded = false
-                                    }
-                                )
                                 for (voice in availableVoices) {
                                     DropdownMenuItem(
                                         text = {
@@ -276,11 +270,28 @@ fun ConfigScreen(
 
                         Spacer(Modifier.height(24.dp))
                         val capacityGb = vectorDbCapacityBytes.toDouble() / (1024 * 1024 * 1024)
-                        Text(Localization.getString("vector_db_capacity", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        Text("Automatically managed (1GB minimum, up to 15% of remaining storage).", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        Spacer(Modifier.height(12.dp))
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
-                            Text(String.format(java.util.Locale.US, "Current Limit: %.1f GB", capacityGb), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Vector Database (RAG)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text("Enable long-term memory via localized vector storage. Disable to save memory/RAM.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(
+                                checked = ragEnabled,
+                                onCheckedChange = { viewModel.toggleRag(it) }
+                            )
+                        }
+
+                        if (ragEnabled) {
+                            Spacer(Modifier.height(12.dp))
+                            Text("Automatically managed (1GB minimum, up to 15% of remaining storage).", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Spacer(Modifier.height(8.dp))
+                            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
+                                Text(String.format(java.util.Locale.US, "Current Limit: %.1f GB", capacityGb), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
                         }
                     }
                 }
