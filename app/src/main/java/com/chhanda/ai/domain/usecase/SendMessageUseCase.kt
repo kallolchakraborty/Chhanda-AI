@@ -50,8 +50,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             
 
 
-            // STEP 2: Save User Turn
-            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = userText, role = "user", deviceId = deviceId, modelName = modelName, sessionId = sessionId, source = source))
+            // STEP 2: Save User Turn (Security check: Don't store API calls)
+            if (source.lowercase() != "api") {
+                chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = userText, role = "user", deviceId = deviceId, modelName = modelName, sessionId = sessionId, source = source))
+            }
 
             // STEP 3: Session Management & Prompt Construction
             if (history.isEmpty()) {
@@ -281,18 +283,21 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                 }
                             }
 
-                            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
-                                text = toSave, 
-                                role = "model", 
-                                deviceId = deviceId, 
-                                modelName = modelName, 
-                                sessionId = sessionId, 
-                                tps = update.tps, 
-                                isRagUsed = isContextFound, 
-                                responseTimeMs = update.responseTimeMs,
-                                generatedFilePath = filePath,
-                                source = source
-                            ))
+                            // Security check: Don't store API calls
+                            if (source.lowercase() != "api") {
+                                chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
+                                    text = toSave, 
+                                    role = "model", 
+                                    deviceId = deviceId, 
+                                    modelName = modelName, 
+                                    sessionId = sessionId, 
+                                    tps = update.tps, 
+                                    isRagUsed = isContextFound, 
+                                    responseTimeMs = update.responseTimeMs,
+                                    generatedFilePath = filePath,
+                                    source = source
+                                ))
+                            }
                             saved = true
                             contextManager.maintainMemoryHygiene()
                         }

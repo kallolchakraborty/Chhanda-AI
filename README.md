@@ -48,6 +48,7 @@ Chhanda is not just a chat app; it is a full-fledged local AI server and gateway
     *   Features strict Device Limits, Captive Portals for unauthorized access, and API Key authentication.
 5.  **Multi-Source Session Management**:
     *   Maintains unified chat history tagged by source: **Local** (Host device), **QR** (Web UI clients), and **API** (Programmatic access).
+    *   **Security Policy**: For enhanced privacy, interactions via the **API source** (Code Editors) are ephemeral and are **not stored** in the local database.
     *   Includes sophisticated searching and sorting across all device histories.
 6.  **Telemetry & Hardware Monitoring**: Real-time tracking of TPS (Tokens Per Second), RT (Response Time), RAM usage, and Battery Temperature.
 

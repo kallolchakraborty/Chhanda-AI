@@ -47,6 +47,10 @@ I leveraged **Google's Gemma 4 (2B & 4B 4-bit Quantized)** models to create a ro
 ## 🚧 Challenges & Triumphs
 
 *   **Memory Management**: Running a 4B model alongside a Ktor server and a Vector Database on Android required aggressive memory hygiene. I solved this using scoped storage and lazy-loading Hilt components.
+*   **Multi-Source Session Management**:
+    *   Maintains unified chat history tagged by source: **Local** (Host device), **QR** (Web UI clients), and **API** (Programmatic access).
+    *   **Security Policy**: For enhanced privacy, interactions via the **API source** (Code Editors) are ephemeral and are **not stored** in the local database.
+    *   Includes sophisticated searching and sorting across all device histories.
 *   **Multilingual Fidelity**: Ensuring the AI maintained its "personality" across English, Bengali, and Hindi required careful prompt engineering and localized system-level instructions.
 *   **Document Generation**: Implementing offline generation of **.pdf**, **.docx**, and **.xlsx** files using Android's native PDF graphics and Apache POI. This was technically demanding due to library constraints and dependency conflicts, which I resolved through targeted ProGuard rules.
 
@@ -56,6 +60,7 @@ Chhanda is designed for:
 *   **Education**: Students in low-connectivity areas can index their textbooks and ask questions in their native language.
 *   **Privacy Advocacy**: Professionals can handle sensitive data (legal, medical) knowing the AI is physically disconnected from the cloud.
 *   **Digital Equity**: By providing a "Gateway" mode, Chhanda allows one smart device to serve an entire group, drastically lowering the cost of AI access.
+*   **Zero-Footprint API Security**: To protect professional workflows, any interactions initiated via the Chhanda API (e.g., from code editors or automated scripts) are processed strictly in-memory. No chat logs from API sources are persisted to the device's local database, ensuring a clean and secure development environment.
 
 ---
 
