@@ -32,7 +32,9 @@ I leveraged **Google's Gemma 4 (2B & 4B 4-bit Quantized)** models to create a ro
 
 ### Key Innovations:
 *   **Chhanda Gateway**: A built-in Ktor-based server that turns the Android phone into a local AI hotspot. Other devices can connect via a QR code to access a high-fidelity Web UI, making one powerful phone an AI hub for an entire classroom or office.
-*   **Privacy-Native RAG**: A completely offline Retrieval-Augmented Generation pipeline using Apache POI and ML Kit. It indexes local documents (PDF, Word, Excel) and images without a single byte leaving the device.
+*   **Adaptive Privacy-Native RAG**: A completely offline Retrieval-Augmented Generation pipeline using Apache POI and ML Kit. Featuring an **Adaptive Similarity Engine** that uses a precision-tuned threshold (0.82) to prevent hallucinations, while maintaining a deep-discovery mode (0.65) for user-provided attachments.
+*   **Multimodal Office Ingestion**: Advanced support for PDF, Word (.doc, .docx), Excel (.xls, .xlsx), and Images (OCR). It indexes local knowledge without a single byte leaving the device.
+*   **Premium Dynamic UI**: A sophisticated design system featuring **Context-Aware Iconography**. The app automatically detects and renders distinct icons and color-coded metadata for various document types, ensuring a professional and intuitive Knowledge Base experience.
 *   **Intelligent Multi-Stage Web Scraper**: An advanced ingestion engine that uses a 3-stage strategy (Jsoup -> Jina Reader -> Semantic DOM) to bypass bot protections and extract clean, structured knowledge from any URL for local indexing.
 *   **Offline Document Generation**: Empowering users to generate professional **.pdf**, **.docx**, and **.xlsx** files directly from AI responses, all while remaining 100% offline.
 *   **Localized TTS & UI**: Deep integration with Bengali and Hindi, featuring localized personalities and accents to make AI interaction feel familiar and inclusive.
@@ -40,9 +42,9 @@ I leveraged **Google's Gemma 4 (2B & 4B 4-bit Quantized)** models to create a ro
 ## 🏗️ Development Process
 
 1.  **Engine Selection**: I opted for GGUF formats optimized for LiteRT to ensure low-latency performance on mid-range Android hardware.
-2.  **Gateway Architecture**: Developed a responsive web dashboard served directly from the Android device, implementing strict API key security and IP-based captive portals.
-3.  **Refined Rendering**: Iterated on a custom Markdown parser to ensure that complex AI responses (tables, code, documents) render beautifully on both small mobile screens and remote desktop browsers.
-4.  **Hardware Optimization**: Implemented thermal-aware inference batching to prevent device overheating during extended multi-client sessions.
+2.  **RAG Hardening**: Implemented an advanced **Selectivity Layer** that filters out "Small Talk" (greetings, thanks) from the RAG pipeline to prevent irrelevant document injection into common conversations.
+3.  **UI/UX Refinement**: Developed a custom `RagFileItem` system in Jetpack Compose that uses semantic metadata to dynamically switch icons and colors, providing a premium feel to the "Memory" management screen.
+4.  **Gateway Architecture**: Developed a responsive web dashboard served directly from the Android device, implementing strict API key security and IP-based captive portals.
 
 ## 🚧 Challenges & Triumphs
 

@@ -36,21 +36,26 @@ This project is a testament to modern AI-assisted software engineering:
 Chhanda is not just a chat app; it is a full-fledged local AI server and gateway.
 
 1.  **Zero-Cloud Local Inference**: Utilizes Gemma 2B and 4B (4-bit quantized GGUF) models running entirely on-device via Google LiteRT-LM. No data is ever sent to the cloud.
-2.  **Multimodal RAG (Retrieval-Augmented Generation)**:
-    *   **Documents**: Parses `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, and `.txt` locally using Apache POI and custom extractors.
+2.  **Adaptive Multimodal RAG (Retrieval-Augmented Generation)**:
+    *   **Documents**: Advanced local parsing for `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, and `.txt` using Apache POI.
+    *   **Adaptive Similarity Engine**: Implements a dual-threshold strategy (0.82 for high-precision KB search, 0.65 for deep attachment discovery) to prevent hallucinations while maintaining thoroughness.
+    *   **Selectivity Layer**: Intelligent "Small Talk" filtering that prevents irrelevant knowledge base injection into general greetings and common conversation.
     *   **Vision**: Extracts text from images using Google ML Kit OCR.
     *   **Web**: Advanced multi-stage scraping engine (Jsoup/Jina) that extracts semantic content and structured JSON-LD metadata from any website.
     *   **Audio**: Speech-to-text integration for indexing spoken content.
-3.  **Document Generation**: The AI can generate `.xlsx`, `.docx`, and `.pdf` files locally on demand, which users can download via the host app or the Web UI.
-4.  **Chhanda AI Gateway (Web UI via QR)**: 
+3.  **Premium Document Interface**:
+    *   **Context-Aware Iconography**: A sophisticated UI system that dynamically renders unique icons and color-coded metadata for various document types.
+    *   **Unified Formatting**: Integrated metadata display (`[Source: filename] [Type: format]`) across the Knowledge Base and Chat interfaces.
+4.  **Offline Document Generation**: The AI can generate `.xlsx`, `.docx`, and `.pdf` files locally on demand, which users can download via the host app or the Web UI.
+5.  **Chhanda AI Gateway (Web UI via QR)**: 
     *   Turns the Android device into a local network server via Ktor.
     *   Other devices on the same Wi-Fi/Hotspot can scan a QR code to access a beautiful, responsive Web Chat UI.
     *   Features strict Device Limits, Captive Portals for unauthorized access, and API Key authentication.
-5.  **Multi-Source Session Management**:
+6.  **Multi-Source Session Management**:
     *   Maintains unified chat history tagged by source: **Local** (Host device), **QR** (Web UI clients), and **API** (Programmatic access).
     *   **Security Policy**: For enhanced privacy, interactions via the **API source** (Code Editors) are ephemeral and are **not stored** in the local database.
     *   Includes sophisticated searching and sorting across all device histories.
-6.  **Telemetry & Hardware Monitoring**: Real-time tracking of TPS (Tokens Per Second), RT (Response Time), RAM usage, and Battery Temperature.
+7.  **Telemetry & Hardware Monitoring**: Real-time tracking of TPS (Tokens Per Second), RT (Response Time), RAM usage, and Battery Temperature.
 
 ---
 
