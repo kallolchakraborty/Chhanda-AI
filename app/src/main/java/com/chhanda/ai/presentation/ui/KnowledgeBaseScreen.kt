@@ -538,7 +538,7 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
 @Composable
 fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.repository.UploadedFileEntity>) {
     val fileCount = allFiles.size
-    val filesThisWeek = allFiles.count { it.timestamp > System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L }
+    val filesThisWeek = allFiles.count { it.timestamp > System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000L }
     val state7DaysAgo = fileCount - filesThisWeek
     val growth = if (state7DaysAgo > 0) {
         (filesThisWeek.toDouble() / state7DaysAgo) * 100
@@ -602,7 +602,9 @@ fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes:
                 trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
             )
             Spacer(Modifier.height(12.dp))
-            val sizeStr = if (totalSizeGB < 0.1) {
+            val sizeStr = if (totalSize < 1024 * 1024) {
+                "%.2f KB".format(totalSize.toDouble() / 1024.0)
+            } else if (totalSizeGB < 0.1) {
                 "%.2f MB".format(totalSize.toDouble() / (1024.0 * 1024.0))
             } else {
                 "%.2f GB".format(totalSizeGB)

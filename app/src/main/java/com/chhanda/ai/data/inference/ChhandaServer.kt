@@ -637,6 +637,27 @@ class ChhandaServer @Inject constructor(
                             val sessionIdToUse = msg.sessionId ?: "api_session"
                             val sourceToUse = if (msg.sessionId != null) "qr" else "api"
                             
+                            try {
+                                val remoteIp = call.request.local.remoteHost
+                                val existing = deviceDao.getDeviceByIp(remoteIp)
+                                if (existing != null) {
+                                    deviceDao.updateDevice(existing.copy(
+                                        connectionTime = System.currentTimeMillis(), 
+                                        isCurrentlyConnected = true,
+                                        connectionType = if (sourceToUse == "api") "API" else existing.connectionType
+                                    ))
+                                } else {
+                                    deviceDao.insertDevice(com.chhanda.ai.data.repository.DeviceEntity(
+                                        deviceName = if (sourceToUse == "api") "API Client" else "Unknown Browser",
+                                        ipAddress = remoteIp,
+                                        connectionTime = System.currentTimeMillis(),
+                                        isCurrentlyConnected = true,
+                                        connectionType = if (sourceToUse == "api") "API" else "BROWSER",
+                                        userAgent = call.request.headers["User-Agent"] ?: "Unknown"
+                                    ))
+                                }
+                            } catch (e: Exception) {}
+                            
                             val promptToSend = if (msg.isRefinement) {
                                 """
                                 ### TRANSCRIPT REFINEMENT TASK
@@ -1232,7 +1253,6 @@ class ChhandaServer @Inject constructor(
         <span id="title"></span>
         <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
         <select id="session-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px;">
-            <option value="new">New Chat</option>
         </select>
         <select id="lang-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:2px 4px; font-size:10px; border-radius:4px;">
             <option value="en">English</option>
@@ -1660,16 +1680,9 @@ class ChhandaServer @Inject constructor(
         
         sessionSel.onchange = () => {
             const val = sessionSel.value;
-            if (val === 'new') {
-                currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
-                localStorage.setItem('currentSessionId', currentSessionId);
-                msgs.innerHTML = ''; 
-                addMsg('Started a new chat session.', 's');
-            } else {
-                currentSessionId = val;
-                localStorage.setItem('currentSessionId', currentSessionId);
-                loadChatHistory(val);
-            }
+            currentSessionId = val;
+            localStorage.setItem('currentSessionId', currentSessionId);
+            loadChatHistory(val);
         };
 
         if (initialSessions.includes(currentSessionId)) {
