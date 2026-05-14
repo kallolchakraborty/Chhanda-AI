@@ -22,6 +22,10 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -1128,10 +1132,10 @@ fun AttachmentDownload(name: String, type: String) {
         ) {
             Icon(
                 when(type.lowercase()) {
-                    "excel" -> Icons.Default.Add
-                    "word" -> Icons.Default.Add
-                    "pdf" -> Icons.Default.Add
-                    else -> Icons.Default.Add
+                    "excel" -> Icons.Default.TableChart
+                    "word" -> Icons.AutoMirrored.Filled.Article
+                    "pdf" -> Icons.Default.PictureAsPdf
+                    else -> Icons.Default.AttachFile
                 },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,

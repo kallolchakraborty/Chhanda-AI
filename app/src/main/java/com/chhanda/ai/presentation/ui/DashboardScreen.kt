@@ -940,11 +940,12 @@ fun DashboardScreen(
             StorageManagerSheet(
                 summary = storageSummary,
                 onClearAll = { 
-                    viewModel.clearAllData()
                     showStorageManager = false
+                    showDeleteConfirm = true
                 },
                 onClearDevice = { deviceId ->
-                    viewModel.clearHistoryForDevice(deviceId)
+                    deviceIdToClear = deviceId
+                    showClearHistoryConfirm = true
                 },
                 navController = navController,
                 viewModel = viewModel
