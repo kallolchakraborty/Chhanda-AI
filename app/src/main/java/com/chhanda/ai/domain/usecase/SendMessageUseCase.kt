@@ -119,12 +119,16 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
                 append(sanitizedUserText)
                 
-                append("\n\n### INSTRUCTIONS\n")
-                append("1. Primary Source: Use 'ATTACHED_DOCUMENTS_CONTENT' above. If it contains the answer, use it and ignore other sources.\n")
-                append("2. Secondary Source: Use 'DATABASE_KNOWLEDGE_CONTEXT' ONLY if the attached documents do not have the answer.\n")
-                append("3. Strict Accuracy: If you are even 1% unsure, prioritize your internal training knowledge.\n")
-                append("4. Language: Always respond in $preferredLanguage.\n")
-                append("5. Professionalism: Be concise and accurate.\n")
+                append("\n\n### MANDATORY KNOWLEDGE HIERARCHY\n")
+                append("You MUST follow this exact order of operations to find the answer:\n")
+                append("1. TIER 1 (ATTACHMENTS): Search 'ATTACHED_DOCUMENTS_CONTENT'. If the answer is there, STOP searching and respond. Do NOT look at other tiers.\n")
+                append("2. TIER 2 (DATABASE): Only if TIER 1 fails, search 'DATABASE_KNOWLEDGE_CONTEXT'. Use it only if it is a high-confidence match.\n")
+                append("3. TIER 3 (INTERNAL): Only if TIER 1 & 2 fail, use your pre-trained knowledge to answer accurately.\n")
+                
+                append("\n### ACCURACY GUARDRAIL\n")
+                append("- Never hallucinate. If the user request is specific to a document and that document is missing or the info is not there, state that clearly instead of providing a generic/wrong answer.\n")
+                append("- Prioritize accuracy over completeness. If you are unsure, admit it.\n")
+                append("- Language: Always respond in $preferredLanguage.\n")
             }
 
             val formatInstruction = """
