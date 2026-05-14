@@ -952,10 +952,11 @@ class SystemViewModel @Inject constructor(
                             name = name,
                             description = "Mobile-optimized $name for on-device inference.",
                             size = when {
-                                name.contains("1b") || name.contains("1.5b") -> "1.2 GB"
-                                name.contains("2b") -> "1.6 GB"
-                                name.contains("3b") -> "2.2 GB"
-                                name.contains("mini") -> "2.0 GB"
+                                name.contains("1.5b", ignoreCase = true) || name.contains("1b", ignoreCase = true) -> "1.2 GB"
+                                name.contains("2b", ignoreCase = true) -> "1.6 GB"
+                                name.contains("4b", ignoreCase = true) -> "3.1 GB"
+                                name.contains("3b", ignoreCase = true) -> "2.2 GB"
+                                name.contains("mini", ignoreCase = true) -> "2.0 GB"
                                 else -> "2.8 GB"
                             },
                             isRecommended = name == recommendedName
