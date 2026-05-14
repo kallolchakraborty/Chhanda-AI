@@ -47,8 +47,10 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
 
         try {
             textChunks.forEachIndexed { index, text ->
+                val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
+                val searchableText = "[Source: $sourceName] [Type: $type]\n\n$text"
                 val embedding = try {
-                    embeddingEngine.embed(text)
+                    embeddingEngine.embed(searchableText)
                 } catch (e: Exception) {
                     android.util.Log.e("IngestUseCase", "Embedding failed for chunk $index: ${e.message}")
                     throw Exception("Embedding engine failure: ${e.message}")
@@ -58,7 +60,7 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
                     VectorChunkEntity(
                         id = java.util.UUID.randomUUID().toString(),
                         modelId = modelId,
-                        text = text,
+                        text = searchableText, // Store with metadata for context
                         source = source,
                         type = type,
                         embeddingBlob = VectorChunkEntity.fromFloatArray(embedding.vector)

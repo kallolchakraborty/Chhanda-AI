@@ -88,8 +88,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 val texts = attachments.map { uri ->
                     try {
                         val uriString = uri.toString()
-                        val (text, type) = when {
-                            uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") -> 
+                        val fileName = uri.lastPathSegment ?: "file"
+                        val (rawText, type) = when {
+                            uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") -> 
                                 ingestor.ingestImage(uri) to com.chhanda.ai.domain.usecase.DocType.IMAGE
                             uriString.endsWith(".pdf") -> 
                                 ingestor.ingestPdf(uri).joinToString("\n") to com.chhanda.ai.domain.usecase.DocType.PDF
@@ -103,34 +104,38 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         }
                         
                         // PERSISTENCE: Store in the RAG database so it's available for future queries
+                        val metaText = "[Source: $fileName] [Type: ${type.name}]\n\n$rawText"
                         try {
-                            persistentIngestor.ingestScrapedText(text, uriString, type.name)
+                            persistentIngestor.ingestScrapedText(rawText, uriString, type.name)
                         } catch (e: Exception) {
                             android.util.Log.e("SendMessageUseCase", "Failed to persist attachment to DB: ${e.message}")
                         }
                         
-                        text
+                        "--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n"
                     } catch (e: Exception) {
                         "Error processing ${uri.lastPathSegment}: ${e.localizedMessage}"
                     }
                 }
                 hasAttachmentKnowledge = true
                 isContextFound = true
-                texts.joinToString("\n---\n")
+                texts.joinToString("\n")
             } else ""
 
             // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
             val prompt = buildString {
                 append("### SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR\n")
-                append("You are an advanced, low-latency AI gateway. Your goal is to provide the most accurate, context-aware response using a tiered knowledge system.\n\n")
+                append("You are Chhanda AI, an expert assistant. You have access to a tiered knowledge system.\n")
+                append("PRIORITY 1 (ATTACHMENTS): Use TIER 1 first. It contains the immediate files the user provided.\n")
+                append("PRIORITY 2 (KNOWLEDGE BASE): Use TIER 2 if the answer isn't in TIER 1.\n")
+                append("PRIORITY 3 (INTERNAL): Only use your pre-trained knowledge if the above tiers are insufficient.\n\n")
 
                 if (attachmentContext.isNotBlank()) {
-                    append("### TIER 1: ATTACHED_DOCUMENTS_CONTENT\n")
+                    append("### [URGENT] TIER 1: CURRENT_ATTACHMENTS\n")
                     append(attachmentContext)
-                    append("\n--- END OF ATTACHMENTS ---\n\n")
+                    append("\n--- END OF CURRENT ATTACHMENTS ---\n\n")
                 }
                 
-                if (isContextFound) {
+                if (longTermContext.isNotBlank()) {
                     append("### TIER 2: DATABASE_KNOWLEDGE_CONTEXT\n")
                     append(longTermContext)
                     append("\n\n")
@@ -139,13 +144,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 append("### USER_QUERY\n")
                 append(sanitizedUserText)
                 
-                append("\n\n### INSTRUCTIONS\n")
-                append("Answer the USER_QUERY by following these rules strictly:\n")
-                append("1. ATTACHMENT FIRST: If TIER 1 (ATTACHED_DOCUMENTS_CONTENT) contains the answer, use it and ignore all other sources.\n")
-                append("2. DATABASE SECOND: If TIER 1 fails, check TIER 2 (DATABASE_KNOWLEDGE_CONTEXT). Use it ONLY if it directly answers the query.\n")
-                append("3. PRE-TRAINED KNOWLEDGE: If the answer is NOT in TIER 1 or TIER 2, OR if the user is just saying hello/making small talk, ignore the context and use your own pre-trained knowledge.\n")
-                append("4. NO FORCED ANSWERS: Do not use the database if it is irrelevant to the query.\n")
-                append("5. LANGUAGE: Always respond in $preferredLanguage.\n")
+                append("\n\n### CRITICAL INSTRUCTIONS\n")
+                append("1. ATTACHMENT PRIORITY: If TIER 1 exists, prioritize it above everything else.\n")
+                append("2. DB RELEVANCE: Only use TIER 2 if it is relevant. If the user asks about an 'attachment' or 'image' and TIER 1 is empty, check TIER 2 for recently added documents.\n")
+                append("3. SMALL TALK: If the query is small talk, ignore all context and use your internal knowledge.\n")
+                append("4. LANGUAGE: Respond in $preferredLanguage.\n")
             }
 
             val formatInstruction = """

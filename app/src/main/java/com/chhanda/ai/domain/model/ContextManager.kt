@@ -31,9 +31,12 @@ class ContextManager @javax.inject.Inject constructor(
         } else {
             try {
                 val queryEmbedding = embeddingEngine.embed(query)
-                val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 3 else 6, modelId = "shared_rag_db")
+                val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 6 else 10, modelId = "shared_rag_db")
                 
-                val threshold = 0.75f // Strictly high-confidence matches only to prevent LLM confusion
+                // Adaptive threshold: lower if query mentions specific technical terms or "attachment"
+                val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || query.lowercase().contains("image")
+                val threshold = if (isExplicitSearch) 0.65f else 0.78f 
+                
                 val filtered = results.filter { it.score >= threshold } 
 
                 android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
