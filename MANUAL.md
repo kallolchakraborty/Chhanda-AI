@@ -14,7 +14,7 @@ When you first launch Chhanda, you will be greeted by the **Welcome Screen**.
 ## 📊 2. Dashboard: The Command Center
 The Dashboard is your primary hub for monitoring system health and managing AI models.
 
-![Dashboard Mockup](/Users/kallolchakraborty/.gemini/antigravity/brain/aaebca28-e26e-48e7-a60f-8ee105aaa47a/chhanda_dashboard_mockup_1778763080425.png)
+![Dashboard Mockup](images/dashboard.png)
 
 ### Key Functions:
 1.  **Hardware Telemetry**: Monitor your **RAM Usage**, **CPU Temperature**, and **TPS** (Tokens Per Second) in real-time. This helps you understand how the model is performing on your hardware.
@@ -31,7 +31,7 @@ The Dashboard is your primary hub for monitoring system health and managing AI m
 ## 💬 3. Chat: Interactive Intelligence
 The Chat screen is where you communicate with the loaded LLM.
 
-![Chat Mockup](/Users/kallolchakraborty/.gemini/antigravity/brain/aaebca28-e26e-48e7-a60f-8ee105aaa47a/chhanda_chat_mockup_1778763108682.png)
+![Chat Mockup](images/chat.png)
 
 ### Key Functions:
 1.  **Tiered Context (RAG)**: Chhanda doesn't just chat; it remembers. It automatically pulls context from your **Knowledge Base** and **Current Attachments**.
@@ -48,7 +48,7 @@ The Chat screen is where you communicate with the loaded LLM.
 ## 🧠 4. Knowledge Base: Long-Term Memory
 The "Memory" or Knowledge Base screen manages your persistent data.
 
-![Memory Mockup](/Users/kallolchakraborty/.gemini/antigravity/brain/aaebca28-e26e-48e7-a60f-8ee105aaa47a/chhanda_memory_mockup_1778763132629.png)
+![Memory Mockup](images/memory.png)
 
 ### Key Functions:
 1.  **Document Ingestion**: View all files that have been vectorized and stored in your local database.
@@ -61,7 +61,7 @@ The "Memory" or Knowledge Base screen manages your persistent data.
 ## ⚙️ 5. Settings: Customization & Optimization
 Tailor Chhanda to your device and personal preferences.
 
-![Settings Mockup](/Users/kallolchakraborty/.gemini/antigravity/brain/aaebca28-e26e-48e7-a60f-8ee105aaa47a/chhanda_settings_mockup_1778763153222.png)
+![Settings Mockup](images/settings.png)
 
 ### Key Functions:
 1.  **Vector Database (RAG) Toggle**: 
