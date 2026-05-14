@@ -483,10 +483,15 @@ class SystemViewModel @Inject constructor(
     private val _connectedDevices = deviceDao.getAllDevices().stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
     val connectedDevices: StateFlow<List<com.chhanda.ai.data.repository.DeviceEntity>> = _connectedDevices
 
-    val activeDeviceCount = _connectedDevices.map { devices -> 
-        val cutoff = System.currentTimeMillis() - 40000 // 40s reactive cutoff
-        devices.count { it.isCurrentlyConnected && it.lastActive > cutoff }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 1) // Default 1 for self
+    val activeDeviceCount = kotlinx.coroutines.flow.flow {
+        while(true) {
+            emit(System.currentTimeMillis())
+            kotlinx.coroutines.delay(2000)
+        }
+    }.combine(_connectedDevices) { now, devices ->
+        val cutoff = now - 40000 // 40s reactive cutoff
+        devices.count { it.connectionType != "LOCAL" && it.isCurrentlyConnected && it.lastActive > cutoff }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0)
 
     val localIpAddress: StateFlow<String> = flow {
         while(true) {
