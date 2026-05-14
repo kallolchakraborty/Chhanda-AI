@@ -1028,15 +1028,16 @@ class ChhandaServer @Inject constructor(
         
         .tts-player {
             display: none;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.12); /* Brighter for visibility */
             border-radius: 12px;
-            padding: 8px 12px;
-            margin-top: 8px;
+            padding: 10px 14px;
+            margin-top: 10px;
             width: 100%;
             align-items: center;
-            gap: 10px;
-            border: 1px solid var(--border);
+            gap: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             animation: slideUp 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
         .tts-progress-container {
             flex: 1;
@@ -1486,6 +1487,7 @@ class ChhandaServer @Inject constructor(
         }
 
         function speakText(text, playerDiv) {
+            console.log("TTS Request for message:", text.substring(0, 30) + "...");
             // If already playing this player, just return
             if (ttsPlayerActive === playerDiv && window.speechSynthesis.speaking) return;
 

@@ -36,11 +36,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.speech.tts.TextToSpeech
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Mic
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
@@ -84,6 +87,11 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
         else -> java.util.Locale.ENGLISH
     }
 
+    var activeTtsMessageId by remember { mutableStateOf<String?>(null) }
+    var ttsProgress by remember { mutableFloatStateOf(0f) }
+    var isTtsPlaying by remember { mutableStateOf(false) }
+    var currentTtsTotalLength by remember { mutableIntStateOf(0) }
+
     DisposableEffect(ttsLocale, selectedVoice) {
         var ttsInstance: TextToSpeech? = null
         try {
@@ -121,6 +129,26 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                             ttsInstance?.voice = targetVoice
                         }
                     }
+
+                    ttsInstance?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            isTtsPlaying = true
+                        }
+                        override fun onDone(utteranceId: String?) {
+                            isTtsPlaying = false
+                            activeTtsMessageId = null
+                            ttsProgress = 0f
+                        }
+                        override fun onError(utteranceId: String?) {
+                            isTtsPlaying = false
+                            activeTtsMessageId = null
+                        }
+                        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                            if (currentTtsTotalLength > 0) {
+                                ttsProgress = start.toFloat() / currentTtsTotalLength
+                            }
+                        }
+                    })
                 }
             }
             tts = ttsInstance
@@ -234,7 +262,30 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                     items = uiState.messages,
                     key = { it.id }
                 ) { message ->
-                    MessageBubble(message, tts)
+                    MessageBubble(
+                        message, 
+                        tts,
+                        isActiveTts = activeTtsMessageId == message.id.toString(),
+                        ttsProgress = if (activeTtsMessageId == message.id.toString()) ttsProgress else 0f,
+                        onTtsToggle = {
+                            val msgIdStr = message.id.toString()
+                            if (activeTtsMessageId == msgIdStr) {
+                                tts?.stop()
+                                activeTtsMessageId = null
+                                isTtsPlaying = false
+                            } else {
+                                tts?.stop()
+                                val (thinking, response) = parseMessageContent(message.text)
+                                val cleanText = cleanTextForTts(response)
+                                if (cleanText.isNotEmpty()) {
+                                    activeTtsMessageId = msgIdStr
+                                    currentTtsTotalLength = cleanText.length
+                                    ttsProgress = 0f
+                                    tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, msgIdStr)
+                                }
+                            }
+                        }
+                    )
                 }
 
                 if (uiState.currentPartialResponse.isNotEmpty()) {
@@ -378,8 +429,8 @@ fun cleanTextForTts(text: String): String {
         .replace(Regex("\\*(.*?)\\*"), "$1")
         // Remove Markdown inline code
         .replace(Regex("`(.*?)`"), "$1")
-        // Remove Markdown code blocks
-        .replace(Regex("```[\\s\\S]*?```"), "")
+        // Remove Markdown code blocks and replace with cue
+        .replace(Regex("```[\\s\\S]*?```"), " Please check the code block for details. ")
         // Remove custom tags [CREATE_FILE]...[/CREATE_FILE]
         .replace(Regex("\\[CREATE_FILE.*?\\][\\s\\S]*?\\[/CREATE_FILE\\]"), "")
         // Remove custom tags [GENERATE_FILE]...[/GENERATE_FILE]
@@ -481,7 +532,59 @@ fun DocumentDownloadCard(file: java.io.File) {
 }
 
 @Composable
-fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
+fun TtsPlayer(
+    progress: Float,
+    isPlaying: Boolean,
+    onStop: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Default.VolumeUp else Icons.Default.Stop,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
+            
+            IconButton(
+                onClick = onStop,
+                modifier = Modifier.size(32.dp).background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f), CircleShape)
+            ) {
+                Icon(
+                    Icons.Default.Stop,
+                    contentDescription = "Stop",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MessageBubble(
+    message: MessageEntity, 
+    tts: TextToSpeech?,
+    isActiveTts: Boolean = false,
+    ttsProgress: Float = 0f,
+    onTtsToggle: () -> Unit = {}
+) {
     val isUser = message.role == "user"
     val alignment = if (isUser) Alignment.End else Alignment.Start
     val bubbleColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -631,19 +734,22 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                 }
 
                 IconButton(
-                    onClick = {
-                        val cleanText = cleanTextForTts(responseText)
-                        if (cleanText.isNotEmpty()) {
-                            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, null)
-                        }
-                    },
+                    onClick = onTtsToggle,
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
-                        Icons.Default.VolumeUp, 
+                        if (isActiveTts) Icons.Default.Stop else Icons.Default.VolumeUp, 
                         contentDescription = "Speak", 
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        tint = if (isActiveTts) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+
+                if (isActiveTts) {
+                    TtsPlayer(
+                        progress = ttsProgress,
+                        isPlaying = true,
+                        onStop = onTtsToggle
                     )
                 }
 
