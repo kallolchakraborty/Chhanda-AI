@@ -5,6 +5,7 @@ import com.chhanda.ai.data.repository.MessageEntity
 import com.chhanda.ai.domain.model.LLMEngine
 import com.chhanda.ai.domain.model.TokenUpdate
 import com.chhanda.ai.domain.model.ContextManager
+import com.chhanda.ai.domain.model.MultimodalIngestor
 import kotlinx.coroutines.flow.*
 
 /**
@@ -17,6 +18,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val llmEngineLazy: dagger.Lazy<com.chhanda.ai.domain.model.LLMEngine>,
     private val chatDao: com.chhanda.ai.data.repository.ChatDao,
     private val contextManager: com.chhanda.ai.domain.model.ContextManager,
+    private val ingestor: com.chhanda.ai.domain.model.MultimodalIngestor,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
@@ -65,23 +67,48 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // Wrap user input and context in defensive delimiters
             val sanitizedUserText = com.chhanda.ai.util.SafetyUtil.sanitizeInput(userText)
             
-            // ORCHESTRATION: Construct the Final RAG-augmented Prompt
-            val prompt = if (isContextFound) {
-                if (modelName.contains("4B")) {
-                    "CONTEXT:\n$longTermContext\n\nQUERY: $sanitizedUserText"
-                } else {
-                    """
-                    DOCUMENT_CONTEXT_START
-                    $longTermContext
-                    DOCUMENT_CONTEXT_END
-                    
-                    Please answer the following user query. Use the documentation above as your primary source if it contains the answer. If the information is not in the documentation, use your own general knowledge to answer accurately.
-                    
-                    $sanitizedUserText
-                    """.trimIndent()
+            // STEP 3: Process Attachments (Direct Context)
+            val attachmentContext = if (attachments.isNotEmpty()) {
+                val texts = attachments.map { uri ->
+                    try {
+                        val uriString = uri.toString()
+                        when {
+                            uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") -> ingestor.ingestImage(uri)
+                            uriString.endsWith(".pdf") -> ingestor.ingestPdf(uri).joinToString("\n")
+                            uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") -> ingestor.ingestAudio(uri)
+                            uriString.endsWith(".docx") || uriString.endsWith(".doc") -> ingestor.ingestWord(uri)
+                            uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> ingestor.ingestExcel(uri)
+                            else -> ingestor.ingestTxt(uri)
+                        }
+                    } catch (e: Exception) {
+                        "Error processing ${uri.lastPathSegment}: ${e.localizedMessage}"
+                    }
                 }
-            } else {
-                sanitizedUserText
+                texts.joinToString("\n---\n")
+            } else ""
+
+            // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
+            val prompt = buildString {
+                if (attachmentContext.isNotBlank()) {
+                    append("### ATTACHED_DOCUMENTS_CONTENT\n")
+                    append(attachmentContext)
+                    append("\n\n")
+                }
+                
+                if (isContextFound) {
+                    append("### DATABASE_KNOWLEDGE_CONTEXT\n")
+                    append(longTermContext)
+                    append("\n\n")
+                }
+                
+                append("### USER_QUERY\n")
+                append(sanitizedUserText)
+                
+                append("\n\n### INSTRUCTIONS\n")
+                append("1. Primary Source: Use the 'ATTACHED_DOCUMENTS_CONTENT' above to answer the query if it contains the relevant information.\n")
+                append("2. Secondary Source: If the answer is not in the attached documents, check 'DATABASE_KNOWLEDGE_CONTEXT'.\n")
+                append("3. Final Fallback: If neither source has the answer, use your own internal knowledge to provide an accurate response in $preferredLanguage.\n")
+                append("4. Be professional and concise.\n")
             }
 
             val formatInstruction = """

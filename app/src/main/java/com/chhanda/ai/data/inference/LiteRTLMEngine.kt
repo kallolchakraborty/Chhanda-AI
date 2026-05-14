@@ -257,30 +257,7 @@ class LiteRTLMEngine @Inject constructor(
         val startTime = System.currentTimeMillis()
 
         // ── Build user content (plain text, NO Gemma tags — session adds them) ─
-        val userContent = if (attachments.isNotEmpty()) {
-            val texts = attachments.map { uri ->
-                try {
-                    when {
-                        uri.toString().contains("image") ||
-                        uri.toString().endsWith(".jpg") ||
-                        uri.toString().endsWith(".png") -> ingestor.ingestImage(uri)
-                        uri.toString().endsWith(".pdf")  -> ingestor.ingestPdf(uri).joinToString("\n")
-                        uri.toString().contains("audio") ||
-                        uri.toString().endsWith(".wav") ||
-                        uri.toString().endsWith(".mp3") -> ingestor.ingestAudio(uri)
-                        else -> "Attachment: ${uri.lastPathSegment}"
-                    }
-                } catch (e: Exception) {
-                    "Error ingesting ${uri.lastPathSegment}: ${e.localizedMessage}"
-                }
-            }
-            "Context from attachments:\n${texts.joinToString("\n")}\n\n$prompt"
-        } else {
-            prompt
-        }
-
-        // Limit to ~3000 chars (approx 750 tokens), leaving room for generation without OOM
-        val sanitized = if (userContent.length > 3000) userContent.takeLast(3000) else userContent
+        val sanitized = if (prompt.length > 4000) prompt.takeLast(4000) else prompt
         Log.d(TAG, "Inference start. Prompt length=${sanitized.length} chars")
 
         // ── Robust Initialization with Retry ───────────────────
