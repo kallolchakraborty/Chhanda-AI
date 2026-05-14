@@ -486,24 +486,32 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                 message.attachmentPaths.split(",").forEach { path ->
                     val pathLower = path.lowercase()
                     val icon = when {
-                        pathLower.contains("pdf") || pathLower.contains(".pdf") -> Icons.Default.PictureAsPdf
-                        pathLower.contains("word") || pathLower.contains(".doc") || pathLower.contains(".docx") -> Icons.Default.Description
-                        pathLower.contains("excel") || pathLower.contains(".xls") || pathLower.contains(".xlsx") -> Icons.Default.TableChart
+                        pathLower.contains("pdf") -> Icons.Default.PictureAsPdf
+                        pathLower.contains("word") || pathLower.contains(".doc") -> Icons.Default.Description
+                        pathLower.contains("excel") || pathLower.contains(".xls") -> Icons.Default.TableChart
                         pathLower.contains("image") || pathLower.contains(".png") || pathLower.contains(".jpg") || pathLower.contains(".jpeg") -> Icons.Default.Image
                         pathLower.contains("audio") || pathLower.contains(".mp3") || pathLower.contains(".wav") -> Icons.Default.Mic
                         else -> Icons.Default.AttachFile
                     }
                     val label = when {
-                        pathLower.contains("pdf") || pathLower.contains(".pdf") -> "PDF"
-                        pathLower.contains("word") || pathLower.contains(".doc") || pathLower.contains(".docx") -> "DOC"
-                        pathLower.contains("excel") || pathLower.contains(".xls") || pathLower.contains(".xlsx") -> "XLS"
-                        pathLower.contains("image") || pathLower.contains(".png") || pathLower.contains(".jpg") || pathLower.contains(".jpeg") -> "IMG"
-                        pathLower.contains("audio") || pathLower.contains(".mp3") || pathLower.contains(".wav") -> "AUD"
+                        pathLower.contains("pdf") -> "PDF"
+                        pathLower.contains("word") || pathLower.contains(".doc") -> "WORD"
+                        pathLower.contains("excel") || pathLower.contains(".xls") -> "EXCEL"
+                        pathLower.contains("image") || pathLower.contains(".png") || pathLower.contains(".jpg") || pathLower.contains(".jpeg") -> "IMAGE"
+                        pathLower.contains("audio") || pathLower.contains(".mp3") || pathLower.contains(".wav") -> "AUDIO"
                         else -> "FILE"
+                    }
+                    val color = when {
+                        pathLower.contains("pdf") -> Color(0xFFEF4444)
+                        pathLower.contains("word") || pathLower.contains(".doc") -> Color(0xFF6366F1)
+                        pathLower.contains("excel") || pathLower.contains(".xls") -> Color(0xFF22C55E)
+                        pathLower.contains("image") || pathLower.contains(".png") || pathLower.contains(".jpg") || pathLower.contains(".jpeg") -> Color(0xFF06B6D4)
+                        pathLower.contains("audio") || pathLower.contains(".mp3") || pathLower.contains(".wav") -> Color(0xFF3B82F6)
+                        else -> MaterialTheme.colorScheme.primary
                     }
                     
                     Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        color = color.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Row(
@@ -515,12 +523,12 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                                 imageVector = icon,
                                 contentDescription = null,
                                 modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                tint = color.copy(alpha = 0.7f)
                             )
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                color = color.copy(alpha = 0.7f)
                             )
                         }
                     }

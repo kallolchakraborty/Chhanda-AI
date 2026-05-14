@@ -330,7 +330,10 @@ class SystemViewModel @Inject constructor(
             mimeType?.startsWith("image/") == true -> com.chhanda.ai.domain.usecase.DocType.IMAGE
             mimeType == "application/pdf" -> com.chhanda.ai.domain.usecase.DocType.PDF
             mimeType == "text/plain" -> com.chhanda.ai.domain.usecase.DocType.TXT
-            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> com.chhanda.ai.domain.usecase.DocType.WORD
+            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || 
+            mimeType == "application/msword" -> com.chhanda.ai.domain.usecase.DocType.WORD
+            mimeType == "application/vnd.ms-excel" || 
+            mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> com.chhanda.ai.domain.usecase.DocType.EXCEL
             mimeType?.startsWith("audio/") == true -> com.chhanda.ai.domain.usecase.DocType.AUDIO
             else -> com.chhanda.ai.domain.usecase.DocType.TXT
         }
