@@ -14,7 +14,6 @@ When you first launch Chhanda, you will be greeted by the **Welcome Screen**.
 ## 📊 2. Dashboard: The Command Center
 The Dashboard is your primary hub for monitoring system health and managing AI models.
 
-![Dashboard Mockup](images/dashboard.png)
 
 ### Key Functions:
 1.  **Hardware Telemetry**: Monitor your **RAM Usage**, **CPU Temperature**, and **TPS** (Tokens Per Second) in real-time. This helps you understand how the model is performing on your hardware.
@@ -31,7 +30,6 @@ The Dashboard is your primary hub for monitoring system health and managing AI m
 ## 💬 3. Chat: Interactive Intelligence
 The Chat screen is where you communicate with the loaded LLM.
 
-![Chat Mockup](images/chat.png)
 
 ### Key Functions:
 1.  **Tiered Context (RAG)**: Chhanda doesn't just chat; it remembers. It automatically pulls context from your **Knowledge Base** and **Current Attachments**.
@@ -48,7 +46,6 @@ The Chat screen is where you communicate with the loaded LLM.
 ## 🧠 4. Knowledge Base: Long-Term Memory
 The "Memory" or Knowledge Base screen manages your persistent data.
 
-![Memory Mockup](images/memory.png)
 
 ### Key Functions:
 1.  **Document Ingestion**: View all files that have been vectorized and stored in your local database.
@@ -61,7 +58,6 @@ The "Memory" or Knowledge Base screen manages your persistent data.
 ## ⚙️ 5. Settings: Customization & Optimization
 Tailor Chhanda to your device and personal preferences.
 
-![Settings Mockup](images/settings.png)
 
 ### Key Functions:
 1.  **Vector Database (RAG) Toggle**: 
