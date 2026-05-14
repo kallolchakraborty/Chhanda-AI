@@ -41,22 +41,31 @@ Chhanda is not just a chat app; it is a full-fledged local AI server and gateway
     *   **Adaptive Similarity Engine**: Implements a dual-threshold strategy (0.82 for high-precision KB search, 0.65 for deep attachment discovery) to prevent hallucinations while maintaining thoroughness.
     *   **Selectivity Layer**: Intelligent "Small Talk" filtering that prevents irrelevant knowledge base injection into general greetings and common conversation.
     *   **Vision**: Extracts text from images using Google ML Kit OCR.
-    *   **Web**: Advanced multi-stage scraping engine (Jsoup/Jina) that extracts semantic content and structured JSON-LD metadata from any website.
+    *   **Web**: Advanced multi-stage scraping engine (Jsoup/Jina) with **Internet Connectivity Guard**. Extracts semantic content and structured JSON-LD metadata from any website only when a stable connection is present.
     *   **Audio**: Speech-to-text integration for indexing spoken content.
-3.  **Premium Document Interface**:
+3.  **Premium Document & Audio Interface**:
     *   **Context-Aware Iconography**: A sophisticated UI system that dynamically renders unique icons and color-coded metadata for various document types.
+    *   **Advanced Media Playback**: Integrated TTS (Text-to-Speech) with a dedicated playback bar, seek controls (forward/backward), and full background execution support.
     *   **Unified Formatting**: Integrated metadata display (`[Source: filename] [Type: format]`) across the Knowledge Base and Chat interfaces.
-4.  **Offline Document Generation**: The AI can generate `.xlsx`, `.docx`, and `.pdf` files locally on demand, which users can download via the host app or the Web UI.
-5.  **Chhanda AI Gateway (Web UI via QR)**: 
+4.  **Production-Grade RAG Observability**:
+    *   **Latency Analysis**: Real-time tracking of p50, p95, and p99 query latencies to monitor tail performance.
+    *   **Throughput Metrics**: Live visualization of Queries Per Second (QPS) and document indexing rates.
+    *   **Retrieval Quality**: Automated tracking of Recall@K and MRR (Mean Reciprocal Rank) to ensure high-fidelity knowledge retrieval.
+    *   **Efficiency Tracking**: Monitoring system-level index efficiency (Chunks per MB) and operational compute costs.
+5.  **Offline Document Generation**: The AI can generate `.xlsx`, `.docx`, and `.pdf` files locally on demand, which users can download via the host app or the Web UI.
+6.  **Chhanda AI Gateway (Web UI via QR)**: 
     *   Turns the Android device into a local network server via Ktor.
     *   Other devices on the same Wi-Fi/Hotspot can scan a QR code to access a beautiful, responsive Web Chat UI.
     *   Features strict Device Limits, Captive Portals for unauthorized access, and API Key authentication.
-6.  **Multi-Source Session Management**:
+7.  **Multi-Source Session Management**:
     *   Maintains unified chat history tagged by source: **Local** (Host device), **QR** (Web UI clients), and **API** (Programmatic access).
     *   **Security Policy**: For enhanced privacy, interactions via the **API source** (Code Editors) are ephemeral and are **not stored** in the local database.
     *   Includes sophisticated searching and sorting across all device histories.
-7.  **Telemetry & Hardware Monitoring**: Real-time tracking of TPS (Tokens Per Second), RT (Response Time), RAM usage, and Battery Temperature.
-8.  **Context-Aware Personalities**: 
+8.  **Telemetry & Accurate Resource Monitoring**: 
+    *   **Native RAM Tracking**: Implements PSS (Proportional Set Size) monitoring to capture both Java heap and the massive native memory footprint of the LLM models.
+    *   **System-Synced Storage**: All file and model sizes are reported using system-standard formatting (consistent with Android OS file managers).
+    *   Real-time tracking of TPS (Tokens Per Second), RT (Response Time), and Battery Temperature.
+9.  **Context-Aware Personalities**: 
     *   **Expert Mode (API)**: When accessed via the API (e.g., from an IDE), Chhanda adopts the persona of a **Senior Software Engineer**, providing optimized, technical, and architectural guidance.
     *   **Assistant Mode (Local/Web)**: For on-device or QR-based chat, it acts as a **General Purpose Assistant**, optimized for helpful, clear, and multi-lingual communication.
 

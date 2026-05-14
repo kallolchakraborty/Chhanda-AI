@@ -48,7 +48,8 @@ class SystemViewModel @Inject constructor(
     private val ingestDocumentUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.IngestDocumentUseCase>,
     private val uploadedFileDao: com.chhanda.ai.data.repository.UploadedFileDao,
     private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao,
-    private val scrapeUrlUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.ScrapeUrlUseCase>
+    private val scrapeUrlUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.ScrapeUrlUseCase>,
+    private val metricsManagerLazy: dagger.Lazy<com.chhanda.ai.domain.model.RAGMetricsManager>,
 ) : ViewModel() {
 
     private val llmEngine get() = llmEngineLazy.get()
@@ -56,7 +57,35 @@ class SystemViewModel @Inject constructor(
     private val chhandaServer get() = chhandaServerLazy.get()
     private val ingestDocumentUseCase get() = ingestDocumentUseCaseLazy.get()
     private val scrapeUrlUseCase get() = scrapeUrlUseCaseLazy.get()
-    
+    private val metricsManager get() = metricsManagerLazy.get()
+
+    private val _latencyMetrics = MutableStateFlow(com.chhanda.ai.domain.model.LatencyMetrics(0, 0, 0))
+    val latencyMetrics = _latencyMetrics.asStateFlow()
+
+    private val _throughputMetrics = MutableStateFlow(com.chhanda.ai.domain.model.ThroughputMetrics(0.0, 0.0))
+    val throughputMetrics = _throughputMetrics.asStateFlow()
+
+    private val _memoryMetrics = MutableStateFlow(com.chhanda.ai.domain.model.MemoryMetrics(0, 0.0, 0f))
+    val memoryMetrics = _memoryMetrics.asStateFlow()
+
+    private val _qualityMetrics = MutableStateFlow(com.chhanda.ai.domain.model.QualityMetrics(0f, 0f))
+    val qualityMetrics = _qualityMetrics.asStateFlow()
+
+    private val _costMetrics = MutableStateFlow(com.chhanda.ai.domain.model.CostMetrics("", "", ""))
+    val costMetrics = _costMetrics.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                _latencyMetrics.value = metricsManager.getLatencyMetrics()
+                _throughputMetrics.value = metricsManager.getThroughputMetrics()
+                _memoryMetrics.value = metricsManager.getMemoryMetrics()
+                _qualityMetrics.value = metricsManager.getQualityMetrics()
+                _costMetrics.value = metricsManager.getCostMetrics()
+                delay(2000)
+            }
+        }
+    }
 
     
     // Removed automated HotspotManager logic in favor of Manual System Hotspot.
@@ -892,10 +921,12 @@ class SystemViewModel @Inject constructor(
                 fun addFoundModel(name: String, file: java.io.File, isOwned: Boolean) {
                     if (processedPaths.contains(file.absolutePath)) return
                     
+                    val sizeStr = android.text.format.Formatter.formatFileSize(context, file.length())
+
                     val info = com.chhanda.ai.presentation.ui.ModelInfo(
                         name = name,
-                        details = if (isOwned) "Internal: ${(file.length() / (1024.0 * 1024)).format(0)}MB" 
-                                 else "Shared: ${(file.length() / (1024.0 * 1024)).format(0)}MB",
+                        details = if (isOwned) "Internal: $sizeStr" 
+                                 else "Shared: $sizeStr",
                         isActive = false
                     )
                     
@@ -952,12 +983,12 @@ class SystemViewModel @Inject constructor(
                             name = name,
                             description = "Mobile-optimized $name for on-device inference.",
                             size = when {
-                                name.contains("1.5b", ignoreCase = true) || name.contains("1b", ignoreCase = true) -> "1.2 GB"
-                                name.contains("2b", ignoreCase = true) -> "1.6 GB"
-                                name.contains("4b", ignoreCase = true) -> "3.1 GB"
-                                name.contains("3b", ignoreCase = true) -> "2.2 GB"
-                                name.contains("mini", ignoreCase = true) -> "2.0 GB"
-                                else -> "2.8 GB"
+                                name.contains("1.5b", ignoreCase = true) || name.contains("1b", ignoreCase = true) -> "1.1 GB"
+                                name.contains("2b", ignoreCase = true) -> "1.5 GB"
+                                name.contains("4b", ignoreCase = true) -> "2.7 GB"
+                                name.contains("3b", ignoreCase = true) -> "2.1 GB"
+                                name.contains("mini", ignoreCase = true) -> "1.9 GB"
+                                else -> "2.5 GB"
                             },
                             isRecommended = name == recommendedName
                         ))
@@ -1059,12 +1090,8 @@ class SystemViewModel @Inject constructor(
                 val finalCapacity = maxOf(1024L * 1024 * 1024, dynamicLimit)
                 _vectorDbCapacityBytes.value = finalCapacity
                 
-                _ramUsage.value = String.format(Locale.US, "%.1f / %.1f GB", usedMem, totalMem)
-                _appStorageUsage.value = if (totalAppSize > 1024 * 1024 * 1024) {
-                    String.format(Locale.US, "%.2f GB", totalAppSize.toDouble() / (1024 * 1024 * 1024))
-                } else {
-                    String.format(Locale.US, "%.1f MB", totalAppSize.toDouble() / (1024 * 1024))
-                }
+                _ramUsage.value = "${android.text.format.Formatter.formatShortFileSize(context, (memoryInfo.totalMem - memoryInfo.availMem))} / ${android.text.format.Formatter.formatShortFileSize(context, memoryInfo.totalMem)}"
+                _appStorageUsage.value = android.text.format.Formatter.formatFileSize(context, totalAppSize)
                 _deviceTemperature.value = celsius
                 _vectorDbUsage.value = vectorUsage
 
@@ -1299,10 +1326,12 @@ class SystemViewModel @Inject constructor(
             currentPaths[name] = file.absolutePath
             _modelPaths.value = currentPaths
             
+            val sizeStr = android.text.format.Formatter.formatFileSize(context, file.length())
+
             // Add to owned models list so it shows up in UI
             val info = com.chhanda.ai.presentation.ui.ModelInfo(
                 name = name,
-                details = "Manually Imported: ${(file.length() / (1024.0 * 1024)).toInt()}MB",
+                details = "Imported: $sizeStr",
                 isActive = false
             )
             _ownedModels.value = _ownedModels.value + info
@@ -1511,6 +1540,7 @@ class SystemViewModel @Inject constructor(
         // Block if no internet
         if (!isInternetAvailable()) {
             _showInternetWarning.value = true
+            addLog("SYSTEM", "Internet not present. Cannot proceed with the scraping of $label.", "ERROR")
             return
         }
 

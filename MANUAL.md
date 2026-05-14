@@ -39,7 +39,11 @@ The Chat screen is where you communicate with the loaded LLM.
     *   Documents are parsed and indexed into temporary memory for the duration of the chat.
 3.  **Code & Tables**: The AI provides beautifully formatted Markdown code blocks with syntax highlighting and structured tables.
 4.  **File Generation**: You can ask Chhanda to "Generate an Excel report" or "Write a Word document". The generated file will appear inline for immediate download.
-5.  **Voice Interaction**: Use the microphone to speak your prompts. You can also listen to the AI's responses with natural, high-quality voices.
+5.  **Advanced Voice Interaction**: 
+    *   Use the microphone to speak your prompts. 
+    *   Listen to responses with natural voices. 
+    *   **Playback Bar**: Use the dedicated player below the chat to seek (forward/backward 10s) and control playback even while the app is in the background.
+6.  **Website Scraping**: Attach a URL to index web content. *Note: Chhanda requires an active internet connection to fetch the website data before it can be processed offline.*
 
 ---
 
@@ -49,9 +53,13 @@ The "Memory" or Knowledge Base screen manages your persistent data.
 
 ### Key Functions:
 1.  **Document Ingestion**: View all files that have been vectorized and stored in your local database.
-2.  **Search & Filter**: Quickly find specific documents or information within your indexed knowledge.
-3.  **Storage Status**: Track how much space the vector database is consuming. 
-4.  **Management**: Delete specific files or purge the entire database to free up memory.
+2.  **Performance & Quality Dashboard**:
+    *   **Latency**: Monitor p50/p95/p99 response times.
+    *   **Throughput**: Track real-time Queries Per Second (QPS).
+    *   **RAG Quality**: View Recall@K and MRR metrics to ensure your documents are being retrieved accurately.
+3.  **Search & Filter**: Quickly find specific documents or information within your indexed knowledge.
+4.  **Storage Status**: Track space usage for the vector database and the overall app, reported in standard system units (GB/MB). 
+5.  **Management**: Delete specific files or purge the entire database to free up memory.
 
 ---
 

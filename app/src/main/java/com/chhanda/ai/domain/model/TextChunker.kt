@@ -8,8 +8,21 @@ object TextChunker {
     fun chunk(text: String, chunkSize: Int = 800, overlap: Int = 100): List<String> {
         if (text.isBlank()) return emptyList()
         
-        // Split into sentences using common punctuation
-        val sentences = text.split(Regex("(?<=[.!?])\\s+"))
+        // World Class Strategy: Prefer splitting by paragraphs first to preserve semantic blocks
+        val paragraphs = text.split(Regex("\n\n+"))
+        
+        val segments = paragraphs.flatMap { p ->
+            if (p.length > chunkSize) {
+                // If paragraph is too big, split into sentences
+                if (p.contains(".") || p.contains("!") || p.contains("?")) {
+                    p.split(Regex("(?<=[.!?])\\s+"))
+                } else {
+                    p.chunked(chunkSize)
+                }
+            } else listOf(p)
+        }
+        
+        val sentences = segments.filter { it.isNotBlank() }
         val chunks = mutableListOf<String>()
         val currentSentences = mutableListOf<String>()
         var currentLength = 0

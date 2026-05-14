@@ -13,7 +13,9 @@ import javax.inject.Inject
  * Implements exponential backoff, rotating user-agents, and a multi-stage fallback strategy
  * (JSON-LD -> Jina Reader -> Semantic DOM) to extract flawless content from any site.
  */
-class ScrapeUrlUseCase @Inject constructor() {
+class ScrapeUrlUseCase @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
+) {
 
     private val userAgents = listOf(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -23,6 +25,10 @@ class ScrapeUrlUseCase @Inject constructor() {
     )
 
     suspend operator fun invoke(url: String, useAi: Boolean = false, maxSizeMb: Int = 300): String = withContext(Dispatchers.IO) {
+        if (!isInternetAvailable()) {
+            throw Exception("INTERNET_REQUIRED: No active connection detected. Scraping aborted.")
+        }
+        
         var lastError: Exception? = null
         
         // 🚀 Senior Strategy: 3-Stage Retry with Identity Stealth
@@ -53,6 +59,7 @@ class ScrapeUrlUseCase @Inject constructor() {
         // 🚀 Stage 2: Jina Reader Fallback (Handles JS/Protections flawlessly)
         try {
             val jinaUrl = "https://r.jina.ai/$url"
+            android.util.Log.d("ScrapeUrl", "Attempting Jina Reader: $jinaUrl")
             val jinaResponse = Jsoup.connect(jinaUrl)
                 .userAgent(userAgents[attempt % userAgents.size])
                 .timeout(20000)
@@ -62,8 +69,11 @@ class ScrapeUrlUseCase @Inject constructor() {
             if (jinaResponse.statusCode() == 200) {
                 val jinaContent = jinaResponse.body()
                 if (jinaContent.length > 300) {
-                    android.util.Log.i("ScrapeUrl", "Successfully recovered content via Jina Reader")
-                    return jinaContent
+                    android.util.Log.i("ScrapeUrl", "Successfully recovered content via Jina Reader (${jinaContent.length} chars)")
+                    // Basic cleaning for Jina's markdown output to reduce noise
+                    val cleanedJina = jinaContent.replace(Regex("\\[.*?\\]\\(.*?\\)"), "") 
+                                                 .replace(Regex("!\\(.*?\\)"), "")
+                    return cleanedJina
                 }
             }
         } catch (e: Exception) {
@@ -78,14 +88,24 @@ class ScrapeUrlUseCase @Inject constructor() {
         val currentUA = userAgents[attempt % userAgents.size]
         val response = Jsoup.connect(url)
             .userAgent(currentUA)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            .header("Accept-Language", "en-US,en;q=0.5")
             .header("Referer", "https://www.google.com/")
+            .header("Sec-Fetch-Dest", "document")
+            .header("Sec-Fetch-Mode", "navigate")
             .header("Sec-Fetch-Site", "cross-site")
             .timeout(15000)
             .followRedirects(true)
             .ignoreContentType(true)
+            .ignoreHttpErrors(true)
             .execute()
 
-        if (response.statusCode() == 403 || response.statusCode() == 429) throw Exception("BLOCK_${response.statusCode()}")
+        val statusCode = response.statusCode()
+        if (statusCode == 403 || statusCode == 429) {
+            android.util.Log.w("ScrapeUrl", "Anti-bot detected (Status $statusCode). Escalating to Stage 2.")
+            throw Exception("BLOCK_$statusCode")
+        }
+        
         if (response.contentType()?.contains("application/pdf") == true) throw Exception("PDF_LINK_DETECTED")
 
         val doc = response.parse()
@@ -96,14 +116,24 @@ class ScrapeUrlUseCase @Inject constructor() {
         val title = doc.title().trim()
         if (title.isNotBlank()) builder.append("# $title\n\n")
 
-        // 💎 Search for JSON-LD (Goldmine for hidden product specs)
+        // 💎 Search for JSON-LD (World Class Strategy: Schema.org detection)
         val jsonData = extractJsonMetadata(doc)
-        if (jsonData.isNotBlank()) builder.append("## Structured Metadata\n$jsonData\n\n")
+        if (jsonData.isNotBlank()) {
+            builder.append("## Structured Specification\n")
+            builder.append(jsonData)
+            builder.append("\n\n")
+        }
 
         val mainContent = findMainContent(doc)
         extractMeaningfulText(mainContent, builder)
         
-        return builder.toString().trim()
+        val result = builder.toString().trim()
+        if (result.length < 500) {
+            android.util.Log.i("ScrapeUrl", "Jsoup content too thin (${result.length} chars). Escalating to Jina.")
+            throw Exception("THIN_CONTENT")
+        }
+        
+        return result
     }
 
     private fun extractJsonMetadata(doc: Document): String {
@@ -111,14 +141,18 @@ class ScrapeUrlUseCase @Inject constructor() {
         doc.select("script[type=application/ld+json]").forEach { script ->
             try {
                 val json = script.data()
-                if (json.contains("\"@type\":\"Product\"") || json.contains("\"description\"")) {
+                // Focus on Product, Article, or Organization
+                if (json.contains("\"@type\":") && (json.contains("Product") || json.contains("Article") || json.contains("Organization"))) {
                     val name = Regex("\"name\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
                     val desc = Regex("\"description\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
                     val brand = Regex("\"brand\":\\s*\\{\"name\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
+                    val price = Regex("\"price\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
+                    val currency = Regex("\"priceCurrency\":\"([^\"]+)\"").find(json)?.groupValues?.get(1)
                     
-                    if (name != null) builder.append("**Name**: $name\n")
-                    if (brand != null) builder.append("**Brand**: $brand\n")
-                    if (desc != null) builder.append("**Details**: $desc\n")
+                    if (name != null) builder.append("- **Item**: $name\n")
+                    if (brand != null) builder.append("- **Brand**: $brand\n")
+                    if (price != null) builder.append("- **Price**: $price $currency\n")
+                    if (desc != null) builder.append("- **Summary**: $desc\n")
                 }
             } catch (e: Exception) { }
         }
@@ -126,10 +160,33 @@ class ScrapeUrlUseCase @Inject constructor() {
     }
 
     private fun performLastResortScrape(url: String, attempt: Int): String {
-        val doc = Jsoup.connect(url).userAgent(userAgents[attempt % userAgents.size]).get()
-        val text = doc.body().text()
-        if (text.length < 100) throw Exception("Access Denied or Empty Content")
-        return "# ${doc.title()}\n\n$text"
+        android.util.Log.w("ScrapeUrl", "Executing Last-Resort Scrape for $url")
+        val doc = Jsoup.connect(url)
+            .userAgent(userAgents[attempt % userAgents.size])
+            .timeout(10000)
+            .ignoreHttpErrors(true)
+            .get()
+        
+        val builder = StringBuilder()
+        val title = doc.title()
+        if (title.isNotBlank()) builder.append("# $title\n\n")
+        
+        // Check for meta descriptions if body might be thin
+        val metaDesc = doc.select("meta[name=description]").attr("content")
+        val ogDesc = doc.select("meta[property=og:description]").attr("content")
+        if (metaDesc.isNotBlank()) builder.append("> Metadata: $metaDesc\n\n")
+        else if (ogDesc.isNotBlank()) builder.append("> Metadata: $ogDesc\n\n")
+
+        // Use semantic extraction even in last resort
+        val mainContent = try { findMainContent(doc) } catch (e: Exception) { doc.body() }
+        val text = mainContent.text().trim()
+        
+        if (text.length < 50 && metaDesc.isBlank() && ogDesc.isBlank()) {
+            throw Exception("CRITICAL_FAILURE: Site returned empty or protected content.")
+        }
+        
+        builder.append(text)
+        return builder.toString().trim()
     }
 
     private fun cleanDocument(doc: Document) {
@@ -205,5 +262,12 @@ class ScrapeUrlUseCase @Inject constructor() {
                 }
             }
         }
+    }
+
+    private fun isInternetAvailable(): Boolean {
+        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val network = connectivityManager.activeNetwork ?: return false
+        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return activeNetwork.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 }

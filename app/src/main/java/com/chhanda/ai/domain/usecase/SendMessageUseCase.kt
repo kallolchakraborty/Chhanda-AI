@@ -20,6 +20,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val contextManager: com.chhanda.ai.domain.model.ContextManager,
     private val ingestor: com.chhanda.ai.domain.model.MultimodalIngestor,
     private val persistentIngestor: com.chhanda.ai.domain.usecase.IngestDocumentUseCase,
+    private val scrapeUrlUseCase: com.chhanda.ai.domain.usecase.ScrapeUrlUseCase,
     private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
@@ -88,42 +89,67 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // Wrap user input and context in defensive delimiters
             val sanitizedUserText = com.chhanda.ai.util.SafetyUtil.sanitizeInput(userText)
             
-            // STEP 3: Process Attachments (Direct Context)
-            val attachmentContext = if (attachments.isNotEmpty()) {
-                val texts = mutableListOf<String>()
-                for (uri in attachments) {
-                    try {
-                        val uriString = uri.toString()
-                        val fileName = uri.lastPathSegment ?: "file"
-                        val (rawText, type) = when {
-                            uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") -> 
-                                ingestor.ingestImage(uri) to com.chhanda.ai.domain.usecase.DocType.IMAGE
-                            uriString.endsWith(".pdf") -> 
-                                ingestor.ingestPdf(uri).joinToString("\n") to com.chhanda.ai.domain.usecase.DocType.PDF
-                            uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") -> 
-                                ingestor.ingestAudio(uri) to com.chhanda.ai.domain.usecase.DocType.AUDIO
-                            uriString.endsWith(".docx") || uriString.endsWith(".doc") -> 
-                                ingestor.ingestWord(uri) to com.chhanda.ai.domain.usecase.DocType.WORD
-                            uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> 
-                                ingestor.ingestExcel(uri) to com.chhanda.ai.domain.usecase.DocType.EXCEL
-                            else -> ingestor.ingestTxt(uri) to com.chhanda.ai.domain.usecase.DocType.TXT
-                        }
-                        
+            // STEP 3: Process Attachments & Detect URLs (Direct Context)
+            val attachmentContext = buildString {
+                // 1. Process explicit attachments
+                if (attachments.isNotEmpty()) {
+                    for (uri in attachments) {
                         try {
-                            persistentIngestor.ingestScrapedText(rawText, uriString, type.name)
+                            val uriString = uri.toString()
+                            val fileName = uri.lastPathSegment ?: "file"
+                            val (rawText, type) = when {
+                                uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") -> 
+                                    ingestor.ingestImage(uri) to com.chhanda.ai.domain.usecase.DocType.IMAGE
+                                uriString.endsWith(".pdf") -> 
+                                    ingestor.ingestPdf(uri).joinToString("\n") to com.chhanda.ai.domain.usecase.DocType.PDF
+                                uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") -> 
+                                    ingestor.ingestAudio(uri) to com.chhanda.ai.domain.usecase.DocType.AUDIO
+                                uriString.endsWith(".docx") || uriString.endsWith(".doc") -> 
+                                    ingestor.ingestWord(uri) to com.chhanda.ai.domain.usecase.DocType.WORD
+                                uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> 
+                                    ingestor.ingestExcel(uri) to com.chhanda.ai.domain.usecase.DocType.EXCEL
+                                else -> ingestor.ingestTxt(uri) to com.chhanda.ai.domain.usecase.DocType.TXT
+                            }
+                            
+                            try {
+                                persistentIngestor.ingestScrapedText(rawText, uriString, type.name)
+                            } catch (e: Exception) {
+                                android.util.Log.e("SendMessageUseCase", "Failed to persist attachment to DB: ${e.message}")
+                            }
+                            
+                            append("--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n\n")
+                            hasAttachmentKnowledge = true
                         } catch (e: Exception) {
-                            android.util.Log.e("SendMessageUseCase", "Failed to persist attachment to DB: ${e.message}")
+                            append("Error processing ${uri.lastPathSegment}: ${e.localizedMessage}\n\n")
                         }
-                        
-                        texts.add("--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n")
-                    } catch (e: Exception) {
-                        texts.add("Error processing ${uri.lastPathSegment}: ${e.localizedMessage}")
                     }
                 }
-                hasAttachmentKnowledge = true
-                isContextFound = true
-                texts.filter { it.isNotBlank() }.joinToString("\n\n")
-            } else ""
+
+                // 2. Proactive URL Scraping (Senior Feature)
+                val urlRegex = """(https?://[^\s$.?#].[^\s]*)""".toRegex()
+                val detectedUrls = urlRegex.findAll(userText).map { it.value }.distinct().toList()
+                
+                if (detectedUrls.isNotEmpty()) {
+                    android.util.Log.i("SendMessageUseCase", "Detected ${detectedUrls.size} URLs in message. Scraping proactively...")
+                    for (url in detectedUrls) {
+                        try {
+                            val scrapedText = scrapeUrlUseCase(url)
+                            if (scrapedText.length > 200) {
+                                append("--- SCRAPED WEB CONTENT: $url ---\n$scrapedText\n\n")
+                                hasAttachmentKnowledge = true
+                                // Also persist to vector DB for long-term memory
+                                try {
+                                    persistentIngestor.ingestScrapedText(scrapedText, url, "AUTO_SCRAPE")
+                                } catch (e: Exception) { /* Silent fail for background ingestion */ }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("SendMessageUseCase", "Proactive scrape failed for $url: ${e.message}")
+                        }
+                    }
+                }
+            }
+            
+            if (hasAttachmentKnowledge) isContextFound = true
 
             // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
             val prompt = buildString {
@@ -164,12 +190,12 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             val formatInstruction = """
                 
-                RESPONSE FORMATTING RULES:
-                - Use structured Markdown for all responses.
-                - FOR CODE: Always use triple backticks with the language name (e.g., ```kotlin). Ensure clean indentation, descriptive comments, and logical structure.
-                - FOR LEARNING/GUIDES: Use a hierarchical structure with headings (###), bullet points, and numbered lists. Start with a brief overview, followed by step-by-step details, and end with a summary or key takeaways.
-                - FOR TABLES: Use standard Markdown table syntax.
-                - VISUAL CLARITY: Use bold text (**word**) to highlight key terms and inline code (`code`) for technical variables.
+                RESPONSE GUIDELINES:
+                - Be extremely compact and to the point. Avoid conversational filler or meta-commentary.
+                - Use structured Markdown ONLY when necessary for clarity (e.g., code blocks, short lists).
+                - FOR CODE: Use triple backticks with the language name. Ensure it is clean and production-ready.
+                - NO UNNECESSARY HEADINGS: Do not use complex hierarchical structures unless the topic is highly complex. Prefer direct paragraphs or bullet points.
+                - Use bold text (**word**) sparingly for critical emphasis only.
             """.trimIndent()
 
             val agentCapabilities = """

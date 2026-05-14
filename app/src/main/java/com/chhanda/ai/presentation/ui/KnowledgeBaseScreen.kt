@@ -28,7 +28,6 @@ import com.chhanda.ai.presentation.ui.ModelInfo
 import androidx.navigation.NavController
 import androidx.compose.foundation.clickable
 import com.chhanda.ai.Screen
-
 import com.chhanda.ai.presentation.ui.components.ChhandaSectionHeader
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -140,6 +139,30 @@ fun KnowledgeBaseScreen(
                     ChhandaSectionHeader(icon = Icons.Default.Storage, title = Localization.getString("storage_metrics", appLanguage))
                     Spacer(Modifier.height(12.dp))
                     VectorStorageStatusCard(appLanguage = appLanguage, totalSize = allFiles.sumOf { it.size }, capacityBytes = vectorDbCapacityBytes)
+                }
+            }
+
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.Troubleshoot, title = "RAG Quality & Search")
+                    Spacer(Modifier.height(12.dp))
+                    RagQualityCard(viewModel = viewModel)
+                }
+            }
+
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.Speed, title = "Production Performance")
+                    Spacer(Modifier.height(12.dp))
+                    RagPerformanceCard(viewModel = viewModel)
+                }
+            }
+
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.Assessment, title = "Readiness & Resource Cost")
+                    Spacer(Modifier.height(12.dp))
+                    ProductionReadinessCard(viewModel = viewModel)
                 }
             }
             
@@ -579,8 +602,6 @@ fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.rep
     }
 }
 
-
-
 @Composable
 fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes: Long) {
     val totalSizeGB = totalSize.toDouble() / (1024.0 * 1024.0 * 1024.0)
@@ -603,15 +624,10 @@ fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes:
                 trackColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
             )
             Spacer(Modifier.height(12.dp))
-            val sizeStr = if (totalSize < 1024 * 1024) {
-                "%.2f KB".format(totalSize.toDouble() / 1024.0)
-            } else if (totalSizeGB < 0.1) {
-                "%.2f MB".format(totalSize.toDouble() / (1024.0 * 1024.0))
-            } else {
-                "%.2f GB".format(totalSizeGB)
-            }
-            val limitStr = "%.1f".format(limitGB)
-            Text("$sizeStr / $limitStr GB " + Localization.getString("used", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            val context = LocalContext.current
+            val sizeStr = android.text.format.Formatter.formatFileSize(context, totalSize)
+            val limitStr = android.text.format.Formatter.formatFileSize(context, capacityBytes)
+            Text("$sizeStr / $limitStr " + Localization.getString("used", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
     }
 }
@@ -678,11 +694,8 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
-                val sizeStr = if (file.size < 1024 * 1024) {
-                    "%.2f KB".format(file.size.toDouble() / 1024.0)
-                } else {
-                    "%.2f MB".format(file.size.toDouble() / (1024.0 * 1024.0))
-                }
+                val context = LocalContext.current
+                val sizeStr = android.text.format.Formatter.formatFileSize(context, file.size)
                 Text("$sizeStr • $typeLabel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
             IconButton(onClick = { showMenu = true }) { 
@@ -702,4 +715,100 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
     }
 }
 
+@Composable
+fun RagQualityCard(viewModel: SystemViewModel) {
+    val quality by viewModel.qualityMetrics.collectAsState()
+    
+    ChhandaCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                QualityMetricItem("Recall@K", "%.0f%%".format(quality.recallAtK * 100), Icons.Default.Search)
+                QualityMetricItem("MRR", "%.2f".format(quality.mrr), Icons.Default.Reorder)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("Measures retrieval accuracy and ranking quality of the vector engine.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+        }
+    }
+}
 
+@Composable
+fun QualityMetricItem(label: String, value: String, icon: ImageVector) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun RagPerformanceCard(viewModel: SystemViewModel) {
+    val latency by viewModel.latencyMetrics.collectAsState()
+    val throughput by viewModel.throughputMetrics.collectAsState()
+
+    ChhandaCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text("Tail Latency (ms)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                LatencyItem("p50", "${latency.p50}ms", MaterialTheme.colorScheme.primary)
+                LatencyItem("p95", "${latency.p95}ms", Color(0xFFF59E0B))
+                LatencyItem("p99", "${latency.p99}ms", Color(0xFFEF4444))
+            }
+            
+            HorizontalDivider(Modifier.padding(vertical = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                ThroughputItem("QPS", "%.2f".format(throughput.qps))
+                ThroughputItem("Ingest Rate", "%.1f ch/s".format(throughput.indexingRate))
+            }
+        }
+    }
+}
+
+@Composable
+fun LatencyItem(label: String, value: String, color: Color) {
+    Column {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
+    }
+}
+
+@Composable
+fun ThroughputItem(label: String, value: String) {
+    Column {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+fun ProductionReadinessCard(viewModel: SystemViewModel) {
+    val memory by viewModel.memoryMetrics.collectAsState()
+    val cost by viewModel.costMetrics.collectAsState()
+    val context = LocalContext.current
+
+    ChhandaCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            ReadinessRow("App RAM", android.text.format.Formatter.formatFileSize(context, memory.appUsedBytes), Icons.Default.Memory)
+            ReadinessRow("Index Efficiency", "%.1f%%".format(memory.indexEfficiency * 100), Icons.Default.AccountTree)
+            ReadinessRow("Compute Cost", cost.computeUnitCost, Icons.Default.ElectricBolt)
+            ReadinessRow("Storage Efficiency", cost.storageEfficiency, Icons.Default.SdStorage)
+        }
+    }
+}
+
+@Composable
+fun ReadinessRow(label: String, value: String, icon: ImageVector) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(8.dp))
+            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}

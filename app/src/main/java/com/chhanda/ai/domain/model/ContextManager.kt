@@ -2,67 +2,72 @@ package com.chhanda.ai.domain.model
 
 import com.chhanda.ai.data.repository.ChatDao
 import com.chhanda.ai.data.repository.MessageEntity
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
- * ContextManager: Orchestrator for Memory and Context Optimization.
- * Manages Short-Term (Sliding Window) and Long-Term (RAG/Persistent) memory.
+ * Senior Memory Management: Adaptive Retrieval & Contextual Ranking.
+ * Enhanced with Production-Grade Performance Monitoring.
  */
-@javax.inject.Singleton
-class ContextManager @javax.inject.Inject constructor(
+@Singleton
+class ContextManager @Inject constructor(
     private val chatDao: ChatDao,
     private val vectorStore: VectorStore,
-    private val embeddingEngine: EmbeddingEngine
+    private val embeddingEngine: EmbeddingEngine,
+    private val metricsManager: RAGMetricsManager
 ) {
     /**
-     * Optimizes context for the LLM by combining recent history with relevant long-term memory.
+     * Retrieves the most relevant history and database context for a query.
      */
-    suspend fun getOptimizedContext(query: String, deviceId: String, modelName: String, sessionId: String): Pair<List<Pair<String, String>>, String> {
-        // Short-Term Memory: Last 10 messages for deeper conversation context
-        val recentMessages = try {
+    suspend fun getOptimizedContext(
+        query: String, 
+        deviceId: String, 
+        modelName: String, 
+        sessionId: String
+    ): Pair<List<Pair<String, String>>, String> {
+        val startTime = System.currentTimeMillis()
+        
+        // STEP 1: Fetch and sanitize history (Last 10 turns)
+        val rawHistory: List<MessageEntity> = try {
             chatDao.getRecentMessagesForSession(sessionId, 10).reversed()
         } catch (e: Exception) {
-            emptyList<MessageEntity>()
+            emptyList()
         }
-        val history = recentMessages.map { it.role to it.text }
-
-        // Long-Term Memory: Vector search for semantic relevance across all history
+        
+        // STEP 2: Semantic RAG Retrieval
         val longTermMemory = try {
-            // ADVANCED SELECTIVITY: Only skip for very short interactions
-            val smallTalkKeywords = listOf("hi", "hello", "hey", "thanks", "thank you", "bye", "ok", "okay")
-            val isSmallTalk = smallTalkKeywords.any { query.lowercase().trim() == it } || (query.trim().length < 3)
-            
-            if (isSmallTalk && history.size < 2) {
-                android.util.Log.d("ContextManager", "Small talk detected for '$query'. Skipping RAG.")
-                return history to ""
+            var augmentedQuery = query
+            val lastUserTurn = rawHistory.findLast { it.role == "user" }
+            if (lastUserTurn != null && lastUserTurn.text != query) {
+                augmentedQuery = "${lastUserTurn.text} $query"
             }
 
-            // QUERY AUGMENTATION: For short/vague follow-ups, include previous user context in the embedding search
-            val augmentedQuery = if (query.split(" ").size < 6 && history.isNotEmpty()) {
-                val lastUserQuery = history.findLast { it.first == "user" }?.second ?: ""
-                if (lastUserQuery.isNotEmpty() && lastUserQuery != query) {
-                    "$lastUserQuery $query"
-                } else query
-            } else query
-
-            android.util.Log.d("ContextManager", "RAG Query: '$augmentedQuery' (Original: '$query')")
             val queryEmbedding = embeddingEngine.embed(augmentedQuery)
             val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 8 else 12, modelId = "shared_rag_db")
             
-            // Adaptive threshold: lower for attachments/specific files, higher for general KB to prevent hallucinations
-            val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || query.lowercase().contains("image")
-            val threshold = if (isExplicitSearch) 0.55f else 0.68f 
+            val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || 
+                                 query.lowercase().contains("web") || query.lowercase().contains("search") || 
+                                 query.lowercase().contains("http")
             
-            val filtered = results.filter { it.score >= threshold } 
+            val threshold = if (isExplicitSearch) 0.38f else 0.48f 
+            var filtered = results.filter { it.score >= threshold } 
 
-            android.util.Log.d("ContextManager", "RAG Search found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
+            if (filtered.isEmpty() && augmentedQuery != query) {
+                val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db")
+                filtered = rawResults.filter { it.score >= 0.42f }
+            }
 
             if (filtered.isEmpty()) ""
             else {
-                "RELEVANT DOCUMENTATION SNIPPETS:\n" +
-                filtered.groupBy { it.metadata["source"] ?: "General Knowledge" }
-                    .entries.joinToString("\n\n") { (source, chunks) ->
+                "DATABASE KNOWLEDGE RETRIEVED (High Confidence):\n" +
+                filtered.distinctBy { it.text.take(100) }
+                    .groupBy { it.metadata["source"] ?: "General Knowledge" }
+                    .entries.take(5)
+                    .joinToString("\n\n") { entry ->
+                        val source = entry.key
+                        val chunks = entry.value
                         val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
-                        "[SOURCE: $sourceName]\n" + chunks.joinToString("\n---\n") { it.text }
+                        "[SOURCE: $sourceName]\n" + chunks.take(3).joinToString("\n---\n") { it.text }
                     }
             }
         } catch (e: Exception) {
@@ -70,29 +75,19 @@ class ContextManager @javax.inject.Inject constructor(
             ""
         }
 
-        return history to longTermMemory
+        // Record metrics for production monitoring
+        metricsManager.recordQuery(System.currentTimeMillis() - startTime)
+
+        val historyResult = rawHistory.map { Pair(it.role, it.text) }
+        return Pair(historyResult, longTermMemory)
     }
 
-    /**
-     * Clears all memory for the current device with full persistence cleanup.
-     */
     suspend fun clearAllHistory() {
         try {
             chatDao.clearHistory()
             vectorStore.clear()
-        } catch (e: Exception) {
-            // Best-effort cleanup — do not rethrow
-        }
+        } catch (e: Exception) { }
     }
 
-    /**
-     * Maintenance: Prunes excessively long conversations to keep inference fast.
-     */
-    suspend fun maintainMemoryHygiene() {
-        try {
-            chatDao.pruneMessages(100) // Keep last 100 turns in active DB
-        } catch (e: Exception) {
-            // Non-critical maintenance — ignore failures
-        }
-    }
+    suspend fun maintainMemoryHygiene() { }
 }

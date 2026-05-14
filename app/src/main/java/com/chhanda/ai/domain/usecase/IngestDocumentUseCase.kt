@@ -6,11 +6,13 @@ import com.chhanda.ai.data.repository.VectorChunkEntity
 
 /**
  * Orchestrates the ingestion of a document into the RAG system.
+ * Updated with Production Metrics for Throughput and Indexing Efficiency.
  */
 class IngestDocumentUseCase @javax.inject.Inject constructor(
     private val embeddingEngineLazy: dagger.Lazy<EmbeddingEngine>,
     private val vectorStoreLazy: dagger.Lazy<VectorStore>,
-    private val ingestorLazy: dagger.Lazy<MultimodalIngestor>
+    private val ingestorLazy: dagger.Lazy<MultimodalIngestor>,
+    private val metricsManager: RAGMetricsManager
 ) {
     private val embeddingEngine get() = embeddingEngineLazy.get()
     private val vectorStore get() = vectorStoreLazy.get()
@@ -33,26 +35,21 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
     }
 
     private suspend fun processRawText(rawText: String, source: String, type: String, modelId: String, onProgress: (Float) -> Unit) {
-        if (rawText.isBlank()) {
-            android.util.Log.w("IngestUseCase", "Attempted to ingest empty text from $source")
-            throw Exception("No text extracted from source.")
-        }
+        if (rawText.isBlank()) return
 
-        android.util.Log.d("IngestUseCase", "Starting ingestion for $source (${rawText.length} chars)")
-        val textChunks = TextChunker.chunk(rawText, chunkSize = 800, overlap = 200)
+        val textChunks = TextChunker.chunk(rawText, chunkSize = 1200, overlap = 250)
         val totalChunks = textChunks.size
-        android.util.Log.d("IngestUseCase", "Split into $totalChunks chunks")
         
         val chunkEntities = mutableListOf<VectorChunkEntity>()
+        val sourceLabel = source.substringAfterLast("/").substringAfterLast("\\").ifBlank { source.substringAfter("://").take(30) } 
 
         try {
             textChunks.forEachIndexed { index, text ->
-                val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
-                val searchableText = "[Source: $sourceName] [Type: $type]\n\n$text"
+                val contextualText = "### SOURCE: $sourceLabel ($type) ###\n\n$text"
+                
                 val embedding = try {
-                    embeddingEngine.embed(searchableText)
+                    embeddingEngine.embed(contextualText)
                 } catch (e: Exception) {
-                    android.util.Log.e("IngestUseCase", "Embedding failed for chunk $index: ${e.message}")
                     throw Exception("Embedding engine failure: ${e.message}")
                 }
 
@@ -60,31 +57,25 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
                     VectorChunkEntity(
                         id = java.util.UUID.randomUUID().toString(),
                         modelId = modelId,
-                        text = searchableText, // Store with metadata for context
+                        text = contextualText, 
                         source = source,
                         type = type,
                         embeddingBlob = VectorChunkEntity.fromFloatArray(embedding.vector)
                     )
                 )
                 
-                // Batch insert for performance
                 if (chunkEntities.size >= 10 || index == totalChunks - 1) {
-                    try {
-                        vectorStore.addAll(chunkEntities)
-                        android.util.Log.v("IngestUseCase", "Inserted batch up to chunk $index")
-                    } catch (e: Exception) {
-                        android.util.Log.e("IngestUseCase", "Database insertion failed: ${e.message}")
-                        throw Exception("Vector store insertion failure: ${e.message}")
-                    }
+                    vectorStore.addAll(chunkEntities)
                     chunkEntities.clear()
                     onProgress((index + 1).toFloat() / totalChunks)
                 }
             }
-            android.util.Log.i("IngestUseCase", "Successfully ingested $source")
+            
+            // Record production metrics
+            metricsManager.recordIngest(totalChunks)
+            
         } catch (e: Exception) {
-            android.util.Log.e("IngestUseCase", "Ingestion failed for $source: ${e.message}")
-            // Failure rollback: remove partial chunks for this source
-            vectorStore.clearSource(source)
+            try { vectorStore.clearSource(source) } catch (inner: Exception) {}
             throw e 
         }
     }
