@@ -19,6 +19,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val chatDao: com.chhanda.ai.data.repository.ChatDao,
     private val contextManager: com.chhanda.ai.domain.model.ContextManager,
     private val ingestor: com.chhanda.ai.domain.model.MultimodalIngestor,
+    private val persistentIngestor: com.chhanda.ai.domain.usecase.IngestDocumentUseCase,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
@@ -87,14 +88,28 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 val texts = attachments.map { uri ->
                     try {
                         val uriString = uri.toString()
-                        when {
-                            uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") -> ingestor.ingestImage(uri)
-                            uriString.endsWith(".pdf") -> ingestor.ingestPdf(uri).joinToString("\n")
-                            uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") -> ingestor.ingestAudio(uri)
-                            uriString.endsWith(".docx") || uriString.endsWith(".doc") -> ingestor.ingestWord(uri)
-                            uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> ingestor.ingestExcel(uri)
-                            else -> ingestor.ingestTxt(uri)
+                        val (text, type) = when {
+                            uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") -> 
+                                ingestor.ingestImage(uri) to com.chhanda.ai.domain.usecase.DocType.IMAGE
+                            uriString.endsWith(".pdf") -> 
+                                ingestor.ingestPdf(uri).joinToString("\n") to com.chhanda.ai.domain.usecase.DocType.PDF
+                            uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") -> 
+                                ingestor.ingestAudio(uri) to com.chhanda.ai.domain.usecase.DocType.AUDIO
+                            uriString.endsWith(".docx") || uriString.endsWith(".doc") -> 
+                                ingestor.ingestWord(uri) to com.chhanda.ai.domain.usecase.DocType.WORD
+                            uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> 
+                                ingestor.ingestExcel(uri) to com.chhanda.ai.domain.usecase.DocType.EXCEL
+                            else -> ingestor.ingestTxt(uri) to com.chhanda.ai.domain.usecase.DocType.TXT
                         }
+                        
+                        // PERSISTENCE: Store in the RAG database so it's available for future queries
+                        try {
+                            persistentIngestor.ingestScrapedText(text, uriString, type.name)
+                        } catch (e: Exception) {
+                            android.util.Log.e("SendMessageUseCase", "Failed to persist attachment to DB: ${e.message}")
+                        }
+                        
+                        text
                     } catch (e: Exception) {
                         "Error processing ${uri.lastPathSegment}: ${e.localizedMessage}"
                     }
