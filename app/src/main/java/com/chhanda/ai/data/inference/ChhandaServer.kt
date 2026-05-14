@@ -525,7 +525,7 @@ class ChhandaServer @Inject constructor(
                         multipart.forEachPart { part ->
                             if (part is PartData.FileItem) {
                                 val name = part.originalFileName ?: "upload_${System.currentTimeMillis()}"
-                                val uploadDir = java.io.File(context.cacheDir, "api_uploads")
+                                val uploadDir = java.io.File(this@ChhandaServer.context.cacheDir, "api_uploads")
                                 if (!uploadDir.exists()) uploadDir.mkdirs()
                                 val file = java.io.File(uploadDir, name)
                                 
