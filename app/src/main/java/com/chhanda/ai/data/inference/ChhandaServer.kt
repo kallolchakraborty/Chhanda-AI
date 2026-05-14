@@ -526,7 +526,7 @@ class ChhandaServer @Inject constructor(
                             if (part is PartData.FileItem) {
                                 val name = part.originalFileName ?: "upload_${System.currentTimeMillis()}"
                                 val file = java.io.File(context.cacheDir, "api_uploads/$name")
-                                if (!file.parentFile.exists()) file.parentFile.mkdirs()
+                                if (file.parentFile?.exists() != true) file.parentFile?.mkdirs()
                                 
                                 part.streamProvider().use { input ->
                                     file.outputStream().use { output ->
