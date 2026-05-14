@@ -15,86 +15,128 @@
 
 ---
 
+## 🏗️ RAG Architecture & Techniques
+
+### 3. How does the Chhanda RAG Pipeline work?
+Chhanda implements a sophisticated, multi-stage RAG pipeline optimized for mobile edge computing.
+
+```mermaid
+graph TD
+    subgraph "Ingestion Layer (Offline)"
+        A[Files: PDF/DOCX/XLSX/IMG] --> B[Multimodal Ingestor]
+        B --> C[TextChunker: Paragraph-First]
+        C --> D[Embedding Engine: Local]
+        D --> E[(Vector Store: SQLite + FTS)]
+    end
+
+    subgraph "Retrieval Layer (Real-time)"
+        F[User Query] --> G[ContextManager]
+        G --> H{Adaptive Similarity Engine}
+        H -- "High Precision (0.82)" --> I[General Knowledge]
+        H -- "Deep Discovery (0.65)" --> J[Explicit Search]
+        I --> K[Context Window]
+        J --> K
+    end
+
+    subgraph "Generation Layer"
+        K --> L[Multi-Tier Prompt Orchestrator]
+        L --> M[LiteRT LLM Engine]
+        M --> N[Streaming Response + TTS]
+    end
+```
+
+### 4. What is "Adaptive Retrieval"?
+Instead of a static similarity threshold, Chhanda uses a **Dual-Threshold Strategy** to balance between accuracy and thoroughness.
+*   **Code Reference**: `ContextManager.kt` (Line 52) implements this logic.
+
+```mermaid
+flowchart LR
+    A[Query Received] --> B{Explicit Search Keywords?}
+    B -- "Yes (files, search, attachment)" --> C[Threshold = 0.65]
+    B -- "No" --> D[Threshold = 0.82]
+    C --> E[Fetch Relevant Chunks]
+    D --> E
+    E --> F[Inject into Prompt Tier 2]
+```
+
+### 5. How are prompts orchestrated in Chhanda?
+Chhanda uses a **Multi-Tier Prompt System** to ensure the LLM prioritizes immediate context (attachments) over long-term indexed knowledge.
+*   **Tier 1 (Immediate)**: Files currently attached to the chat session.
+*   **Tier 2 (Global)**: Documents retrieved from the vector database.
+*   **Tier 3 (Short-term)**: Recent chat history (last 10 turns).
+*   **Code Reference**: `SendMessageUseCase.kt` (Lines 164-165) defines this hierarchy.
+
+---
+
 ## 📈 Metrics & Observability
 
-### 3. What is the significance of "Tail Latency" (p99)?
-While average latency (p50) shows the typical speed, **p99** represents the slowest 1% of your queries. Tracking p99 is critical for identifying performance bottlenecks like thermal throttling or memory pressure that only affect occasional requests.
-*   **Code Reference**: `RAGMetricsManager.kt` (Lines 50-59) calculates these percentiles from a rolling window of recent queries.
+### 6. What is the significance of "Tail Latency" (p99)?
+While average latency (p50) shows the typical speed, **p99** represents the slowest 1% of your queries. Tracking p99 is critical for identifying performance bottlenecks like thermal throttling or memory pressure.
+*   **Code Reference**: `RAGMetricsManager.kt` (Lines 50-59).
 
-### 4. Why track Recall@K and MRR for my documents?
-These are standard industry metrics for search quality:
-*   **Recall@K**: Measures if the relevant information was found at all within the top 'K' results.
-*   **MRR (Mean Reciprocal Rank)**: Measures how high the "perfect" answer appeared in the list. Higher MRR means the AI finds the correct context faster and more accurately.
-*   **Code Reference**: `RAGMetricsManager.kt` (Lines 96-101) monitors these quality indicators to ensure the RAG pipeline is performing as expected.
-
-### 5. What does "Compute Unit Cost" mean?
-Since Chhanda runs on battery-powered devices, we track the **estimated energy cost (Watt-hours)** per query. This helps developers optimize their prompts and model choices for maximum battery efficiency.
-*   **Code Reference**: `RAGMetricsManager.kt` (Lines 108-112) provides a heuristic estimation of operational compute costs.
+### 7. Why track Recall@K and MRR for my documents?
+*   **Recall@K**: Measures if the relevant information was found within the top 'K' results.
+*   **MRR (Mean Reciprocal Rank)**: Measures how high the "perfect" answer appeared. Higher MRR means faster, more accurate context discovery.
 
 ---
 
-## 🚀 Performance & Orchestration
+## 🚀 Orchestration & Server Flow
 
-### 6. How does the internal Load Balancer work?
-Chhanda uses a custom **Prefix-Hash Load Balancer** to manage multiple incoming requests concurrently.
-*   **Locality (Prompt Affinity)**: The balancer hashes the first 50 characters of a prompt to route similar queries to the same model replica. This maximizes **KV-Cache** reuse, significantly reducing the Time To First Token (TTFT).
-*   **Fairness (Least-Loaded Spillover)**: Each model replica has a concurrency bound. If the "affinity" replica is busy, the request is automatically routed to the replica with the lowest active load.
-*   **Code Reference**: `SendMessageUseCase.kt` (Lines 398-438) implements the `LoadBalancer` private class.
+### 8. How does the internal Load Balancer route requests?
+Chhanda handles traffic from three distinct sources (Host UI, Web UI, API) using a prefix-hash load balancer to maximize performance.
 
-### 7. Why do I see "App RAM" in GBs?
-Chhanda monitors **PSS (Proportional Set Size)**, which includes both the Java heap and the **Native Memory** used by the LLM model. Standard RAM monitors often miss the massive native footprint of the active model.
-*   **Code Reference**: `RAGMetricsManager.kt` (Line 82) uses `android.os.Debug.getMemoryInfo()` to capture the full native memory usage.
+```mermaid
+sequenceDiagram
+    participant User as Multi-Client (Web/API/App)
+    participant LB as LoadBalancer (Prefix-Hash)
+    participant Replica1 as Replica A (LiteRT)
+    participant Replica2 as Replica B (LiteRT)
 
----
-
-## 🧠 Knowledge Base & RAG
-
-### 8. How does Chhanda decide which documents are relevant?
-Chhanda uses an **Adaptive Similarity Engine** with two precision tiers based on cosine similarity scores:
-*   **Tier 1 (High Precision - 0.82)**: Default for general queries to minimize hallucinations.
-*   **Tier 2 (Deep Discovery - 0.65)**: Activated when explicit search keywords (e.g., "in the attachment", "find in file") are detected.
-*   **Code Reference**: `ContextManager.kt` (Line 52) implements this dual-threshold logic.
-
-### 9. How is document structure preserved during indexing?
-Chhanda uses a **Paragraph-First Chunking Strategy**. It first identifies logical semantic blocks (paragraphs) before splitting by sentence or character length to ensure context isn't lost mid-thought.
-*   **Code Reference**: `TextChunker.kt` (Lines 11-12) uses regex splitting on line breaks to preserve paragraph boundaries.
+    User->>LB: SendMessage(Prompt)
+    LB->>LB: Hash(Prefix: 50 chars)
+    LB-->>Replica1: Route (KV-Cache Locality)
+    Note over Replica1: Processing...
+    Replica1->>User: Stream(TokenUpdate)
+    
+    User->>LB: Concurrent Request
+    LB-->>Replica2: Spillover (Least Loaded)
+    Replica2->>User: Stream(TokenUpdate)
+```
 
 ---
 
 ## 📡 AI Server Architecture
 
-### 10. What engine powers the Chhanda AI Server?
+### 9. What engine powers the Chhanda AI Server?
 We use **Ktor** with the **CIO (Coroutine-based I/O)** engine.
-*   **Optimization**: We specifically chose **CIO** over **Netty** for Android because Netty's native `tcnative` libraries are often missing or incompatible with various Android architectures. CIO is 100% Kotlin-native and highly performant.
-*   **Code Reference**: `ChhandaServer.kt` (Lines 45-53) explains the rationale for this architecture.
+*   **Optimization**: CIO is 100% Kotlin-native and avoids the Netty/JNI compatibility issues common on Android.
+*   **Code Reference**: `ChhandaServer.kt` (Lines 45-53).
 
-### 11. How does the "Public URL" (Tunneling) work?
-Chhanda uses **JSch** to create a zero-config SSH tunnel via **localhost.run**. This allows you to access your local AI gateway from anywhere in the world without port forwarding on your router.
-*   **Code Reference**: `ChhandaServer.kt` (Lines 284-293) manages the SSH session and remote port forwarding.
+### 10. How does the "Public URL" (Tunneling) work?
+Chhanda uses **JSch** to create an SSH tunnel via **localhost.run**. This provides zero-config remote access without port forwarding.
+*   **Code Reference**: `ChhandaServer.kt` (Lines 284-293).
 
 ---
 
 ## 💬 Chat & Personas
 
-### 12. Why does the AI sound like a "Senior Software Engineer" in my IDE?
-Chhanda performs **Source-Aware Personality Adaptation**. When it detects a request coming via the API (likely from a developer), it injects a technical system role to provide expert-level code reviews and architectural advice.
-*   **Code Reference**: `SendMessageUseCase.kt` (Line 157) injects the `SENIOR SOFTWARE ENGINEER` persona when the source is `api`.
+### 11. Why does the AI sound like a "Senior Software Engineer" in my IDE?
+Chhanda identifies the request source. Programmatic sources (API) trigger an expert technical persona for high-fidelity architectural guidance.
+*   **Code Reference**: `SendMessageUseCase.kt` (Line 157).
 
-### 13. Can I seek through the AI's voice responses?
+### 12. Can I seek through the AI's voice responses?
 **Yes.** The media engine includes a global playback bar with 10s forward/backward seeking and background playback support.
-*   **Code Reference**: `TtsPlayer.kt` manages the `ExoPlayer` state and provides the seeking interface used in the Chat UI.
 
 ---
 
 ## 🛠️ Advanced Settings & Lifecycle
 
-### 14. What is the "Reaper" service?
-The **Active Reaper** is a background coroutine that monitors heartbeats from all connected web clients. If a client stops sending heartbeats (e.g., they closed the browser tab), the Reaper purges them after 30 seconds to free up system resources.
-*   **Code Reference**: `ChhandaServer.kt` (Lines 248-267) implements the `startReaper` lifecycle management.
+### 13. What is the "Reaper" service?
+The **Active Reaper** is a background coroutine that monitors heartbeats from all connected web clients and purges inactive ones after 30 seconds.
+*   **Code Reference**: `ChhandaServer.kt` (Lines 248-267).
 
-### 15. Why does the server restart when I change the app language?
-**Localization Safety Protocol.** To ensure the Web Gateway, API responses, and TTS all reflect your new language choice, Chhanda resets active server instances and clears the inference cache.
-*   **Code Reference**: `SystemViewModel.kt` (Line 1512) triggers a server restart and model re-initialization when the `appLanguage` setting is updated.
+### 14. Why does the server restart when I change the app language?
+**Localization Safety Protocol.** Resets the server and inference cache to ensure all outputs (Web, API, TTS) reflect the new language choice correctly.
 
 ---
 
