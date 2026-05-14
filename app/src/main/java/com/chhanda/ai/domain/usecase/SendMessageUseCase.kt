@@ -46,17 +46,23 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         var isContextFound = false
         
         try {
-            // STEP 0: Check Settings
+            // STEP 0: Safety & Configuration Check
+            // We fetch the RAG status first to decide whether to search the vector database.
             val ragEnabled = settingsRepository.ragEnabledFlow.first()
 
-            // STEP 1: Get Optimized Context (Short-term + Long-term)
+            // STEP 1: Context Orchestration
+            // The ContextManager fetches:
+            // 1. dbHistory: Recent chat turns for short-term memory.
+            // 2. longTermContextRaw: Relevant snippets from the vector database.
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
+            
+            // Only include long-term context if RAG is globally enabled in settings.
             val longTermContext = if (ragEnabled) longTermContextRaw else ""
             val history = externalHistory ?: dbHistory
             
-            // Context Awareness State
+            // Track metadata about what kind of knowledge we have for this turn.
             var hasDbKnowledge = longTermContext.isNotBlank()
-            var hasAttachmentKnowledge = false // Will be updated after processing attachments
+            var hasAttachmentKnowledge = false 
             isContextFound = hasDbKnowledge 
             
 
@@ -151,8 +157,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             
             if (hasAttachmentKnowledge) isContextFound = true
 
-            // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
+            // ORCHESTRATION: Multi-Tiered Prompt Generation
+            // This is where the RAG 'Augmentation' happens. We wrap the user query with context.
             val prompt = buildString {
+                // Adaptive Persona: API requests get a Technical Senior Dev persona, 
+                // while UI requests get the standard Chhanda Gateway identity.
                 if (source.lowercase() == "api") {
                     append("### SYSTEM ROLE: SENIOR SOFTWARE ENGINEER (EXPERT)\n")
                     append("You are a Senior Software Engineer with decades of experience in high-performance computing, clean architecture, and robust system design. ")
@@ -161,29 +170,35 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     append("### SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR\n")
                     append("You are Chhanda AI, an expert assistant developed by Kallol Chakraborty. You have access to a tiered knowledge system.\n")
                 }
+
+                // TIERED HIERARCHY: We explicitly tell the LLM the priority of sources.
                 append("PRIORITY 1 (ATTACHMENTS): Use TIER 1 first. It contains the immediate files the user provided.\n")
                 append("PRIORITY 2 (KNOWLEDGE BASE): Use TIER 2 if the answer isn't in TIER 1.\n")
                 append("PRIORITY 3 (INTERNAL): Only use your pre-trained knowledge if the above tiers are insufficient.\n\n")
 
+                // Tier 1: Immediate Context (Files/URLs processed in this specific turn)
                 if (attachmentContext.isNotBlank()) {
                     append("### [URGENT] TIER 1: CURRENT_ATTACHMENTS\n")
                     append(attachmentContext)
                     append("\n--- END OF CURRENT ATTACHMENTS ---\n\n")
                 }
                 
+                // Tier 2: Historical Context (Retrieved from the Vector Database)
                 if (longTermContext.isNotBlank()) {
                     append("### TIER 2: DATABASE_KNOWLEDGE_CONTEXT\n")
                     append(longTermContext)
                     append("\n\n")
                 }
                 
+                // Final Piece: The User's actual question.
                 append("### USER_QUERY\n")
                 append(sanitizedUserText)
                 
+                // Guardrails: We provide strict instructions to minimize hallucinations.
                 append("\n\n### CRITICAL INSTRUCTIONS\n")
-                append("1. STRICT RELEVANCE: Only use TIER 1 or TIER 2 context if it DIRECTLY and SPECIFICALLY answers the query. If the context is about a different topic, ignore it completely and use your pre-trained knowledge.\n")
-                append("2. ATTACHMENT PRIORITY: If TIER 1 contains the answer, use it and STOP searching. Do not combine with irrelevant snippets from TIER 2.\n")
-                append("3. NO FORCED ANSWERS: If the user asks about an attachment but it's not in TIER 1 or TIER 2, state that the document doesn't seem to contain that information.\n")
+                append("1. STRICT RELEVANCE: Only use TIER 1 or TIER 2 context if it DIRECTLY and SPECIFICALLY answers the query. If the context is about a different topic, ignore it completely.\n")
+                append("2. ATTACHMENT PRIORITY: If TIER 1 contains the answer, use it and STOP searching.\n")
+                append("3. NO FORCED ANSWERS: If information is missing from context, admit it instead of making things up.\n")
                 append("4. SMALL TALK: If the query is greetings or small talk, IGNORE all context and respond naturally.\n")
                 append("5. LANGUAGE: Respond in $preferredLanguage.\n")
             }

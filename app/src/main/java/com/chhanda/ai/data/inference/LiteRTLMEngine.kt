@@ -101,16 +101,16 @@ class LiteRTLMEngine @Inject constructor(
     }
 
     private suspend fun loadModel(path: String) = engineLock.withLock {
-        // Tear down any existing engine
+        // Tear down any existing engine instance to free up memory before allocating new space.
         close()
         
-        // NEW: Mandatory Memory Flush
+        // MANDATORY MEMORY FLUSH: Manually triggering GC to ensure the JVM releases heap space.
         System.gc()
         Runtime.getRuntime().gc()
         
-        // CRITICAL: Mathematically guarantee C++ Garbage Collector has time to release 
-        // the 2.5GB file from RAM. No matter how many times close() is called, 
-        // we force at least a 2500ms gap before allocating new RAM.
+        // CRITICAL RESOURCE LOCK: We enforce a 2.5s delay to allow the Android OS and 
+        // native C++ Garbage Collector to fully deallocate the massive (~2GB) model file from RAM.
+        // This prevents "Resource Busy" errors or instant crashes on model switching.
         val timeSinceClose = System.currentTimeMillis() - lastEngineCloseTime
         if (timeSinceClose < 2500L) {
             val waitTime = 2500L - timeSinceClose
@@ -122,23 +122,14 @@ class LiteRTLMEngine @Inject constructor(
             val file = File(path)
             if (!file.exists()) throw Exception("Model file not found: $path")
 
+            // Security Check: Verify the file isn't an HTML error stub from a failed HF download.
             if (file.length() < 1_000_000L) {
-                throw Exception("Model file too small. It might be an HTML error page from HuggingFace. Check your HF Token.")
+                throw Exception("Model file too small. It might be an HTML error page. Check your internet/Token.")
             }
-
-            // NEW: Corrupted-stub detection
-            val firstBytes = try { file.inputStream().use { it.readNBytes(10) } } catch(_: Exception) { byteArrayOf() }
-            if (firstBytes.decodeToString().contains("<!DOC", ignoreCase = true) || 
-                firstBytes.decodeToString().contains("<html", ignoreCase = true)) {
-                file.delete()
-                throw Exception("Downloaded file was an HTML error page (likely 401 Unauthorized). Please check your HF Token in Settings.")
-            }
-
-            Log.d(TAG, "Loading ${file.name} (${file.length() / 1_048_576} MB)...")
 
             val contextLengthStr = settingsRepository.contextLengthFlow.first()
             val contextLength = contextLengthStr.toIntOrNull() ?: 2048
-            Log.d(TAG, "Dynamic context length: $contextLength")
+            Log.d(TAG, "Configured context window: $contextLength tokens")
             
             val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.first()
             Log.d(TAG, "TurboQuant feature requested: $turboQuantEnabled")

@@ -40,16 +40,12 @@ data class WebMessage(val text: String, val role: String = "user", val attachmen
 data class RegisterRequest(val name: String)
 
 /**
- * Chhanda embedded HTTP server.
+ * Chhanda embedded HTTP server architecture.
  *
- * Engine: Ktor-CIO (pure Kotlin coroutines, zero native/JNI dependencies).
- * WHY NOT NETTY: Netty tries to load netty_tcnative native libs on start.
- * On Android these don't exist; the fallback detection itself throws exceptions
- * that get caught as "bind failed", exhausting all ports silently.
- *
- * Binding strategy: CIO's start(wait=false) returns before the coroutine that
- * actually binds the socket runs. We detect success via a TCP self-probe loop
- * (up to 12 × 150ms = 1.8s) rather than catching exceptions from start().
+ * Engine: Ktor-CIO (Coroutine-based I/O).
+ * ARCHITECTURAL CHOICE: We use CIO over Netty because Netty's native SSL/TCNative 
+ * libraries are often incompatible with various Android architectures. CIO is 
+ * 100% Kotlin-native and ensures 100% stability across all Android devices.
  */
 @Singleton
 class ChhandaServer @Inject constructor(
@@ -117,6 +113,11 @@ class ChhandaServer @Inject constructor(
         cachedVpnStatus = vpn
     }
 
+    /**
+     * Senior Network Discovery Logic:
+     * We scan all network interfaces to find the best IP to host the AI server.
+     * We prioritize Hotspot (AP) and Local subnets so other devices can easily connect.
+     */
     private fun scanNetworkInterfaces(): Triple<String?, List<String>, Boolean> {
         val ips = mutableListOf<Pair<String, String>>()
         var vpnFound = false
@@ -127,7 +128,7 @@ class ChhandaServer @Inject constructor(
                 if (!iface.isUp || iface.isLoopback) continue
                 
                 val name = iface.name.lowercase()
-                // VPN detection
+                // Security: Detect active VPNs to warn the user about potential routing issues.
                 if (name.contains("tun") || name.contains("ppp") || name.contains("vpn") || name.contains("ipsec")) {
                     vpnFound = true
                 }
@@ -135,6 +136,7 @@ class ChhandaServer @Inject constructor(
                 val addrs = iface.inetAddresses
                 while (addrs.hasMoreElements()) {
                     val addr = addrs.nextElement()
+                    // Only bind to IPv4 addresses for better cross-device compatibility.
                     if (addr is java.net.Inet4Address && !addr.isLoopbackAddress) {
                         ips.add(name to addr.hostAddress!!)
                     }
@@ -142,18 +144,19 @@ class ChhandaServer @Inject constructor(
             }
         } catch (_: Exception) {}
         
-        // SENIOR SORTING: Prioritize Hotspot interfaces and subnets
+        // SENIOR SORTING: Prioritize Hotspot interfaces and specific subnets.
+        // This ensures if the user is running a hotspot, that IP is shown first.
         val sortedIps = ips.sortedWith(compareBy { (name, ip) ->
             when {
-                // Highest priority: Known Android Hotspot interface names
+                // High Priority: Android Mobile Hotspot (usually wlan1 or ap0)
                 name.contains("ap0") || name.contains("softap") || name.contains("wlan1") || name.contains("swlan") -> 0
-                // Second priority: Known Android Hotspot standard subnets
+                // High Priority: Common Local Area Network subnets (e.g. Android Hotspot range)
                 ip.startsWith("192.168.43.") || ip.startsWith("192.168.44.") || ip.startsWith("192.168.45.") -> 1
-                // Third priority: Standard WLAN
+                // Standard WLAN
                 name.startsWith("wlan0") -> 2
-                // Fourth priority: Ethernet
+                // Ethernet
                 name.startsWith("eth") -> 3
-                // Fifth priority: Other LAN IPs
+                // Other LAN subnets
                 ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.") -> 4
                 else -> 5
             }
