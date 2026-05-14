@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.*
 class SendMessageUseCase @javax.inject.Inject constructor(
     private val llmEngineLazy: dagger.Lazy<com.chhanda.ai.domain.model.LLMEngine>,
     private val chatDao: com.chhanda.ai.data.repository.ChatDao,
-    private val contextManager: com.chhanda.ai.domain.model.ContextManager
+    private val contextManager: com.chhanda.ai.domain.model.ContextManager,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
     private val loadBalancer = LoadBalancer(numReplicas = 1) // Default to 1 replica for Android constraints
@@ -28,7 +29,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         sessionId: String, 
         attachments: List<android.net.Uri> = emptyList(), 
         preferredLanguage: String = "English",
-        externalHistory: List<Pair<String, String>>? = null
+        externalHistory: List<Pair<String, String>>? = null,
+        isRefinement: Boolean = false,
+        source: String = "Local"
     ): kotlinx.coroutines.flow.Flow<com.chhanda.ai.domain.model.TokenUpdate> = kotlinx.coroutines.flow.flow {
         val replica = loadBalancer.getReplica(userText)
         android.util.Log.d("LoadBalancer", "Routed request to replica: $replica")
@@ -46,7 +49,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
 
             // STEP 2: Save User Turn
-            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = userText, role = "user", deviceId = deviceId, modelName = modelName, sessionId = sessionId))
+            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = userText, role = "user", deviceId = deviceId, modelName = modelName, sessionId = sessionId, source = source))
 
             // STEP 3: Session Management & Prompt Construction
             if (history.isEmpty()) {
@@ -81,12 +84,49 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 sanitizedUserText
             }
 
-            val systemInstruction = if (isContextFound) {
+            val formatInstruction = """
+                
+                RESPONSE FORMATTING RULES:
+                - Use structured Markdown for all responses.
+                - FOR CODE: Always use triple backticks with the language name (e.g., ```kotlin). Ensure clean indentation, descriptive comments, and logical structure.
+                - FOR LEARNING/GUIDES: Use a hierarchical structure with headings (###), bullet points, and numbered lists. Start with a brief overview, followed by step-by-step details, and end with a summary or key takeaways.
+                - FOR TABLES: Use standard Markdown table syntax.
+                - VISUAL CLARITY: Use bold text (**word**) to highlight key terms and inline code (`code`) for technical variables.
+            """.trimIndent()
+
+            val agentCapabilities = """
+                CODING_AGENT_CAPABILITIES:
+                - You are a senior software engineer.
+                - When asked to create or write code, use:
+                  [CREATE_FILE path="path/to/file.ext"]
+                  CODE_CONTENT
+                  [/CREATE_FILE]
+                - You can understand documents uploaded via API or UI. Analyze them to provide context-aware code.
+
+                DOCUMENT_GENERATION:
+                - You can generate Excel, Word, and PDF files.
+                - To generate a file, use the following tag:
+                  [GENERATE_FILE type="excel|word|pdf" name="filename.ext"]
+                  Content here (For excel, use markdown table format)
+                  [/GENERATE_FILE]
+                - Only generate one file per response.
+            """.trimIndent()
+
+            val systemInstruction = if (isRefinement) {
+                """
+                    You are a professional editor and writing assistant.
+                    Your goal is to take the provided text (which may be rough transcript or spoken thoughts) and turn it into polished, professional, and well-structured text in $preferredLanguage.
+                    - Fix grammar, improve vocabulary, and ensure smooth flow.
+                    - Maintain the original meaning and tone.
+                    - Use structured Markdown for lists or headings if appropriate.
+                    - Provide only the polished text without meta-commentary.
+                """.trimIndent()
+            } else if (isContextFound) {
                 if (modelName.contains("4B")) {
-                    "You are a helpful assistant. Use the provided CONTEXT to answer the QUERY. If the CONTEXT doesn't contain the answer, use your pre-trained knowledge to respond accurately and quickly in $preferredLanguage."
+                    "You are a helpful assistant and senior software engineer. Use the provided CONTEXT to answer the QUERY. If the CONTEXT doesn't contain the answer, use your pre-trained knowledge to respond accurately and quickly in $preferredLanguage. $formatInstruction\n\n$agentCapabilities"
                 } else {
                     """
-                        You are a helpful and accurate RAG assistant.
+                        You are a helpful and accurate RAG assistant and senior software engineer.
     
                         Your job is to answer using the provided documentation context first.
                         - If the information is in the documentation, use it as your primary source.
@@ -94,15 +134,22 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         - Do not invent facts or hallucinate if you do not know the answer.
                         - Answer directly and concisely.
     
+                        $formatInstruction
+
+                        $agentCapabilities
+
                         CONSTRAINTS:
                         - RESPONSE LANGUAGE: $preferredLanguage
                     """.trimIndent()
                 }
             } else {
                 """
-                    You are a helpful and accurate assistant.
+                    You are a helpful assistant and senior software engineer.
                     Your job is to answer the user's question accurately using your internal knowledge in $preferredLanguage.
-                    - Answer directly and concisely.
+                    
+                    $formatInstruction
+
+                    $agentCapabilities
                 """.trimIndent()
             }
 
@@ -182,7 +229,43 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         toSave = cleaned
 
                         if (toSave.isNotBlank()) {
-                            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = toSave, role = "model", deviceId = deviceId, modelName = modelName, sessionId = sessionId, tps = update.tps, isRagUsed = isContextFound, responseTimeMs = update.responseTimeMs))
+                            // SENIOR FEATURE: Parse for generated files
+                            var filePath: String? = null
+                            if (toSave.contains("[GENERATE_FILE")) {
+                                try {
+                                    val regex = """\[GENERATE_FILE\s+type="(\w+)"\s+name="([^"]+)"\]([\s\S]*?)\[/GENERATE_FILE\]""".toRegex()
+                                    val match = regex.find(toSave)
+                                    if (match != null) {
+                                        val type = match.groupValues[1].lowercase()
+                                        val name = match.groupValues[2]
+                                        val content = match.groupValues[3].trim()
+                                        
+                                        val file = when(type) {
+                                            "excel" -> com.chhanda.ai.util.DocumentGenerator.generateExcel(context, name, content)
+                                            "word" -> com.chhanda.ai.util.DocumentGenerator.generateWord(context, name, content)
+                                            "pdf" -> com.chhanda.ai.util.DocumentGenerator.generatePdf(context, name, content)
+                                            else -> null
+                                        }
+                                        filePath = file?.absolutePath
+                                        android.util.Log.i("SendMessageUseCase", "Generated $type file: $filePath")
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SendMessageUseCase", "File generation failed: ${e.message}")
+                                }
+                            }
+
+                            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
+                                text = toSave, 
+                                role = "model", 
+                                deviceId = deviceId, 
+                                modelName = modelName, 
+                                sessionId = sessionId, 
+                                tps = update.tps, 
+                                isRagUsed = isContextFound, 
+                                responseTimeMs = update.responseTimeMs,
+                                generatedFilePath = filePath,
+                                source = source
+                            ))
                             saved = true
                             contextManager.maintainMemoryHygiene()
                         }

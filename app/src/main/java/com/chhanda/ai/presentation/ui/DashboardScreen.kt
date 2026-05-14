@@ -1040,25 +1040,91 @@ fun StorageManagerSheet(
             onDismiss = { viewModel.dismissIngestionProgress() }
         )
         
-        Text("DEVICES & HISTORY", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        Spacer(Modifier.height(12.dp))
+        var searchQuery by remember { mutableStateOf("") }
+        var sortOrder by remember { mutableStateOf(HistorySortOrder.LATEST) }
+        var showSortMenu by remember { mutableStateOf(false) }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("DEVICES & HISTORY", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            
+            IconButton(onClick = { showSortMenu = true }) {
+                Icon(Icons.Default.Sort, "Sort", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Latest Activity") },
+                        onClick = { sortOrder = HistorySortOrder.LATEST; showSortMenu = false },
+                        leadingIcon = { Icon(Icons.Default.Schedule, null, modifier = Modifier.size(18.dp)) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Message Count") },
+                        onClick = { sortOrder = HistorySortOrder.MESSAGES; showSortMenu = false },
+                        leadingIcon = { Icon(Icons.Default.Numbers, null, modifier = Modifier.size(18.dp)) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Device Name") },
+                        onClick = { sortOrder = HistorySortOrder.NAME; showSortMenu = false },
+                        leadingIcon = { Icon(Icons.Default.SortByAlpha, null, modifier = Modifier.size(18.dp)) }
+                    )
+                }
+            }
+        }
         
-        // Level 2 & 3: Device List and their History
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            placeholder = { Text("Search chats...", fontSize = 14.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp)) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
+                    }
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            singleLine = true,
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
+        )
+        
+        Spacer(Modifier.height(4.dp))
+        
+        val filteredHistory = remember(summary.devicesHistory, searchQuery, sortOrder) {
+            summary.devicesHistory.filter { device ->
+                device.deviceName.contains(searchQuery, ignoreCase = true) ||
+                device.messages.any { it.text.contains(searchQuery, ignoreCase = true) || it.modelName.contains(searchQuery, ignoreCase = true) }
+            }.let { list ->
+                when (sortOrder) {
+                    HistorySortOrder.LATEST -> list.sortedByDescending { it.lastMessageTime }
+                    HistorySortOrder.MESSAGES -> list.sortedByDescending { it.messageCount }
+                    HistorySortOrder.NAME -> list.sortedBy { it.deviceName }
+                }
+            }
+        }
+
         LazyColumn(
             modifier = Modifier.heightIn(max = 500.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(summary.devicesHistory) { deviceHistory ->
+            items(filteredHistory) { deviceHistory ->
                 DeviceHistoryItem(
                     deviceHistory = deviceHistory,
-                    isExpanded = expandedDeviceId == deviceHistory.deviceId,
+                    isExpanded = expandedDeviceId == deviceHistory.deviceId || searchQuery.isNotEmpty(),
                     onToggleExpand = {
                         expandedDeviceId = if (expandedDeviceId == deviceHistory.deviceId) null else deviceHistory.deviceId
                     },
                     onClear = { onClearDevice(deviceHistory.deviceId) },
                     onThreadClick = { sessionId, modelName, readOnly ->
                         navController.navigate("chat/$modelName?sessionId=$sessionId&readOnly=$readOnly")
-                    }
+                    },
+                    searchQuery = searchQuery
                 )
             }
             
@@ -1211,7 +1277,8 @@ fun DeviceHistoryItem(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onClear: () -> Unit,
-    onThreadClick: (sessionId: String, modelName: String, readOnly: Boolean) -> Unit
+    onThreadClick: (sessionId: String, modelName: String, readOnly: Boolean) -> Unit,
+    searchQuery: String = ""
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -1260,7 +1327,9 @@ fun DeviceHistoryItem(
                 Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                 Column(modifier = Modifier.padding(16.dp)) {
                     val threads = deviceHistory.messages.groupBy { it.sessionId }
-                    threads.forEach { (sessionId, messages) ->
+                    threads.filter { (sid, messages) ->
+                        searchQuery.isBlank() || messages.any { it.text.contains(searchQuery, ignoreCase = true) || it.modelName.contains(searchQuery, ignoreCase = true) }
+                    }.forEach { (sessionId, messages) ->
                         val firstMessage = messages.firstOrNull { it.role == "user" }?.text 
                             ?: messages.firstOrNull()?.text ?: "Empty Chat"
                         val snippet = if (firstMessage.length > 40) firstMessage.take(40) + "..." else firstMessage
@@ -1283,8 +1352,9 @@ fun DeviceHistoryItem(
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(snippet, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                val threadSource = messages.firstOrNull()?.source ?: "device"
                                 Text(
-                                    "${messages.size} messages · $modelName", 
+                                    "${messages.size} messages · $modelName · ${threadSource.uppercase()}", 
                                     fontSize = 10.sp, 
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -2207,4 +2277,6 @@ fun GatewayDialog(
             }
         }
     }
+}enum class HistorySortOrder {
+    LATEST, MESSAGES, NAME
 }

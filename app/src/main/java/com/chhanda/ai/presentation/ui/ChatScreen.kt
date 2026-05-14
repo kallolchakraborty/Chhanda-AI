@@ -249,6 +249,10 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                     viewModel.sendMessage(inputText)
                     inputText = ""
                 },
+                onRefine = {
+                    viewModel.refineText(inputText)
+                    inputText = ""
+                },
                 isGenerating = uiState.isGenerating,
                 onStop = { viewModel.stopInference() },
                 onAttach = { viewModel.addFile(it) },
@@ -338,6 +342,91 @@ fun parseMessageContent(rawText: String): Pair<String?, String> {
 }
 
 @Composable
+fun DocumentDownloadCard(file: java.io.File) {
+    val context = LocalContext.current
+    val fileName = file.name
+    val fileType = when {
+        fileName.endsWith(".xlsx") -> "EXCEL"
+        fileName.endsWith(".docx") -> "WORD"
+        fileName.endsWith(".pdf") -> "PDF"
+        else -> "DOCUMENT"
+    }
+    
+    val icon = when(fileType) {
+        "EXCEL" -> Icons.Default.AutoAwesome // Placeholder for spreadsheet icon
+        "WORD" -> Icons.Default.AttachFile
+        "PDF" -> Icons.Default.Info
+        else -> Icons.Default.AttachFile
+    }
+
+    Surface(
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .widthIn(max = 300.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable {
+                // Share/Open File
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "com.chhanda.ai.fileprovider",
+                    file
+                )
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/octet-stream"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(intent, "Download $fileName"))
+            },
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "$fileType Document",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+            }
+            
+            Icon(
+                imageVector = Icons.Default.Share,
+                contentDescription = "Download",
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
 fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
     val isUser = message.role == "user"
     val alignment = if (isUser) Alignment.End else Alignment.Start
@@ -374,6 +463,14 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                         color = textColor
                     )
                 }
+            }
+        }
+        
+        // SENIOR FEATURE: Document Generation Preview
+        if (message.generatedFilePath != null) {
+            val file = java.io.File(message.generatedFilePath)
+            if (file.exists()) {
+                DocumentDownloadCard(file)
             }
         }
         
@@ -492,71 +589,199 @@ fun MarkdownText(
     style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge
 ) {
     val lines = text.lines()
+    var inCodeBlock = false
+    var inCreateBlock = false
+    var inGenerateBlock = false
+    
+    var codeBlockContent = StringBuilder()
+    var codeLanguage = ""
+    var createPath = ""
+    var genType = ""
+    var genName = ""
+
     androidx.compose.foundation.layout.Column(modifier = modifier) {
         lines.forEach { line ->
-            val trimmed = line.trimStart()
+            val trimmed = line.trim()
+            
+            if (trimmed.startsWith("[CREATE_FILE")) {
+                val pathMatch = """path="([^"]+)"""".toRegex().find(trimmed)
+                createPath = pathMatch?.groupValues?.get(1) ?: "file"
+                inCreateBlock = true
+                return@forEach
+            }
+            if (trimmed == "[/CREATE_FILE]") {
+                CodeBlock(codeBlockContent.toString(), "CREATE: $createPath")
+                codeBlockContent = StringBuilder()
+                inCreateBlock = false
+                return@forEach
+            }
+            if (inCreateBlock) {
+                codeBlockContent.append(line).append("\n")
+                return@forEach
+            }
+
+            if (trimmed.startsWith("[GENERATE_FILE")) {
+                val typeMatch = """type="([^"]+)"""".toRegex().find(trimmed)
+                val nameMatch = """name="([^"]+)"""".toRegex().find(trimmed)
+                genType = typeMatch?.groupValues?.get(1) ?: "DOC"
+                genName = nameMatch?.groupValues?.get(1) ?: "document"
+                inGenerateBlock = true
+                return@forEach
+            }
+            if (trimmed == "[/GENERATE_FILE]") {
+                AttachmentDownload(genName, genType)
+                inGenerateBlock = false
+                return@forEach
+            }
+            if (inGenerateBlock) {
+                // Just content inside the tag, not needed for the card
+                return@forEach
+            }
+
+            if (trimmed.startsWith("```")) {
+                if (inCodeBlock) {
+                    // End of block
+                    CodeBlock(codeBlockContent.toString(), codeLanguage)
+                    codeBlockContent = StringBuilder()
+                    codeLanguage = ""
+                    inCodeBlock = false
+                } else {
+                    // Start of block
+                    codeLanguage = trimmed.removePrefix("```").trim()
+                    inCodeBlock = true
+                }
+                return@forEach
+            }
+
+            if (inCodeBlock) {
+                codeBlockContent.append(line).append("\n")
+                return@forEach
+            }
+
+            val trimmedStart = line.trimStart()
             when {
-                trimmed.startsWith("### ") -> {
+                trimmedStart.startsWith("### ") -> {
                     Text(
-                        text = trimmed.removePrefix("### "),
+                        text = trimmedStart.removePrefix("### "),
                         color = color,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                     )
                 }
-                trimmed.startsWith("## ") -> {
+                trimmedStart.startsWith("## ") -> {
                     Text(
-                        text = trimmed.removePrefix("## "),
+                        text = trimmedStart.removePrefix("## "),
                         color = color,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
                     )
                 }
-                trimmed.startsWith("# ") -> {
+                trimmedStart.startsWith("# ") -> {
                     Text(
-                        text = trimmed.removePrefix("# "),
+                        text = trimmedStart.removePrefix("# "),
                         color = color,
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                     )
                 }
-                trimmed.startsWith("- ") || trimmed.startsWith("* ") -> {
-                    Row {
+                trimmedStart.startsWith("- ") || trimmedStart.startsWith("* ") -> {
+                    Row(modifier = Modifier.padding(vertical = 2.dp)) {
                         Text("•  ", color = color, style = style)
                         Text(
-                            text = buildInlineAnnotated(trimmed.drop(2), color),
+                            text = buildInlineAnnotated(trimmedStart.drop(2), color),
                             color = color,
                             style = style
                         )
                     }
                 }
-                trimmed.startsWith("`") && trimmed.endsWith("`") && trimmed.length > 2 -> {
-                    Surface(
-                        color = color.copy(alpha = 0.12f),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
-                    ) {
+                trimmedStart.getOrNull(0)?.isDigit() == true && trimmedStart.contains(". ") -> {
+                    val dotIdx = trimmedStart.indexOf(". ")
+                    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                        Text(trimmedStart.substring(0, dotIdx + 2), color = color, style = style, fontWeight = FontWeight.Bold)
                         Text(
-                            text = trimmed.removeSurrounding("`"),
+                            text = buildInlineAnnotated(trimmedStart.substring(dotIdx + 2), color),
                             color = color,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                            ),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            style = style
                         )
                     }
+                }
+                line.isBlank() -> {
+                    Spacer(Modifier.height(8.dp))
                 }
                 else -> {
-                    if (line.isBlank() && lines.first() != line) {
-                        Spacer(Modifier.height(4.dp))
-                    } else {
-                        Text(
-                            text = buildInlineAnnotated(line, color),
-                            color = color,
-                            style = style
-                        )
-                    }
+                    Text(
+                        text = buildInlineAnnotated(line, color),
+                        color = color,
+                        style = style,
+                        modifier = Modifier.padding(vertical = 1.dp)
+                    )
                 }
             }
+        }
+        
+        // Safety: if blocks weren't closed
+        if (inCodeBlock && codeBlockContent.isNotEmpty()) {
+            CodeBlock(codeBlockContent.toString(), codeLanguage)
+        }
+        if (inCreateBlock && codeBlockContent.isNotEmpty()) {
+            CodeBlock(codeBlockContent.toString(), "CREATE: $createPath")
+        }
+        if (inGenerateBlock) {
+            AttachmentDownload(genName, genType)
+        }
+    }
+}
+
+@Composable
+fun CodeBlock(code: String, language: String) {
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    Surface(
+        color = Color.Black.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Gray.copy(alpha = 0.1f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = language.ifEmpty { "code" }.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(
+                    onClick = { clipboardManager.setText(AnnotatedString(code.trim())) },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy Code",
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Text(
+                text = code.trim(),
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontSize = 13.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -690,6 +915,7 @@ fun ChatInput(
     isGenerating: Boolean,
     onStop: () -> Unit,
     onAttach: (android.net.Uri) -> Unit,
+    onRefine: () -> Unit,
     appLanguage: String = "English",
     isReadOnly: Boolean = false
 ) {
@@ -776,6 +1002,16 @@ fun ChatInput(
                     singleLine = false,
                     maxLines = 4
                 )
+                
+                if (text.isNotBlank() && !isGenerating) {
+                    IconButton(onClick = onRefine) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Refine",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
                 
                 val context = androidx.compose.ui.platform.LocalContext.current
                 IconButton(onClick = {

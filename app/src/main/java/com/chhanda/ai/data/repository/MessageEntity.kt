@@ -14,5 +14,7 @@ data class MessageEntity(
     val sessionId: String = "default_session",
     val tps: Double = 0.0,
     val isRagUsed: Boolean = false,
-    val responseTimeMs: Long = 0
+    val responseTimeMs: Long = 0,
+    val generatedFilePath: String? = null,
+    val source: String = "Local" // "API", "Web", or "Local"
 )

@@ -14,6 +14,8 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.request.*
+import io.ktor.http.content.*
+import io.ktor.utils.io.streams.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +34,7 @@ import androidx.work.*
 data class WebAttachment(val name: String, val type: String, val data: String)
 
 @Serializable
-data class WebMessage(val text: String, val role: String = "user", val attachments: List<WebAttachment> = emptyList(), val language: String = "en", val sessionId: String? = null)
+data class WebMessage(val text: String, val role: String = "user", val attachments: List<WebAttachment> = emptyList(), val language: String = "en", val sessionId: String? = null, val isRefinement: Boolean = false)
 
 @Serializable
 data class RegisterRequest(val name: String)
@@ -413,6 +415,22 @@ class ChhandaServer @Inject constructor(
                     call.respondText(json, io.ktor.http.ContentType.Application.Json)
                 }
 
+                get("/download/{fileName}") {
+                    val fileName = call.parameters["fileName"] ?: return@get call.respond(io.ktor.http.HttpStatusCode.BadRequest)
+                    val file = java.io.File(context.filesDir, "generated/${fileName}")
+                    if (file.exists()) {
+                        call.response.header(
+                            io.ktor.http.HttpHeaders.ContentDisposition,
+                            io.ktor.http.ContentDisposition.Attachment.withParameter(
+                                io.ktor.http.ContentDisposition.Parameters.FileName, fileName
+                            ).toString()
+                        )
+                        call.respondFile(file)
+                    } else {
+                        call.respond(io.ktor.http.HttpStatusCode.NotFound)
+                    }
+                }
+
                 // Captive Portal Detection Routes (Android, iOS, Windows, Chrome)
                 val portalRoutes = listOf(
                     "/generate_204", "/gen_204", "/check_network_status", 
@@ -463,7 +481,7 @@ class ChhandaServer @Inject constructor(
                     if (existingDevice == null && activeConnections.size >= maxAllowed) {
                         call.response.headers.append("Cache-Control", "no-store")
                         call.respondText(
-                            "<h1>Access Denied</h1><p>Maximum device limit reached (${maxAllowed}). Please disconnect other devices or increase the limit in settings.</p>",
+                            buildMaxLimitReachedHtml(maxAllowed),
                             io.ktor.http.ContentType.Text.Html,
                             io.ktor.http.HttpStatusCode.Forbidden
                         )
@@ -488,6 +506,64 @@ class ChhandaServer @Inject constructor(
                 get("{...}") {
                     val apiKey = settingsRepository.apiKeyFlow.firstOrNull() ?: ""
                     call.respondRedirect("/?key=$apiKey")
+                }
+
+                post("/upload") {
+                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull()
+                    val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-Key"]
+                    
+                    if (apiKey != null && providedKey != apiKey) {
+                        call.respondText("Unauthorized", status = io.ktor.http.HttpStatusCode.Unauthorized)
+                        return@post
+                    }
+
+                    try {
+                        val multipart = call.receiveMultipart()
+                        var uploadedFileName = ""
+                        var uploadedFileUri = ""
+                        
+                        multipart.forEachPart { part ->
+                            if (part is PartData.FileItem) {
+                                val name = part.originalFileName ?: "upload_${System.currentTimeMillis()}"
+                                val file = java.io.File(context.cacheDir, "api_uploads/$name")
+                                if (!file.parentFile.exists()) file.parentFile.mkdirs()
+                                
+                                part.streamProvider().use { input ->
+                                    file.outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                uploadedFileName = name
+                                uploadedFileUri = android.net.Uri.fromFile(file).toString()
+                                
+                                // Trigger RAG ingestion
+                                val ext = name.substringAfterLast(".", "").lowercase()
+                                val docType = when (ext) {
+                                    "pdf" -> com.chhanda.ai.domain.usecase.DocType.PDF
+                                    "docx", "doc" -> com.chhanda.ai.domain.usecase.DocType.WORD
+                                    "xlsx", "xls" -> com.chhanda.ai.domain.usecase.DocType.EXCEL
+                                    else -> com.chhanda.ai.domain.usecase.DocType.TXT
+                                }
+
+                                val workRequest = OneTimeWorkRequestBuilder<com.chhanda.ai.service.IngestionWorker>()
+                                    .setInputData(workDataOf(
+                                        com.chhanda.ai.service.IngestionWorker.KEY_URI to uploadedFileUri,
+                                        com.chhanda.ai.service.IngestionWorker.KEY_TYPE to docType.name,
+                                        com.chhanda.ai.service.IngestionWorker.KEY_NAME to uploadedFileName
+                                    ))
+                                    .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                                    .build()
+                                    
+                                WorkManager.getInstance(this@ChhandaServer.context).enqueue(workRequest)
+                            }
+                            part.dispose()
+                        }
+                        
+                        call.respond(mapOf("status" to "Success", "file" to uploadedFileName, "message" to "File uploaded and indexed for AI understanding."))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Upload failed: ${e.message}")
+                        call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Unknown error")))
+                    }
                 }
 
                 post("/ingest") {
@@ -558,10 +634,28 @@ class ChhandaServer @Inject constructor(
                                 else -> "English"
                             }
                             val sessionIdToUse = msg.sessionId ?: "api_session"
+                            val sourceToUse = if (msg.sessionId != null) "qr" else "api"
                             
+                            val promptToSend = if (msg.isRefinement) {
+                                """
+                                ### TRANSCRIPT REFINEMENT TASK
+                                Please polish the following raw spoken transcript into professional, well-structured text. 
+                                - Fix grammar and punctuation.
+                                - Remove filler words (like "um", "uh", "you know").
+                                - Improve sentence flow and clarity.
+                                - Keep the original tone and all key information.
+                                - Respond ONLY with the polished text.
+                                
+                                RAW TRANSCRIPT:
+                                "${msg.text}"
+                                """.trimIndent()
+                            } else {
+                                msg.text
+                            }
+
                             var clearedInitialThinking = false
 
-                            sendMessageUseCase(msg.text, remoteIp, llmEngine.getCurrentModelName(), sessionIdToUse, uris, languageName).collect { upd ->
+                            sendMessageUseCase(promptToSend, remoteIp, llmEngine.getCurrentModelName(), sessionIdToUse, uris, languageName, isRefinement = msg.isRefinement, source = sourceToUse).collect { upd ->
                                 when (upd) {
                                     is TokenUpdate.Partial -> {
                                         if (!clearedInitialThinking) {
@@ -572,6 +666,30 @@ class ChhandaServer @Inject constructor(
                                         flush()
                                     }
                                     is TokenUpdate.Final -> {
+                                        // Auto-ingest attachments if they are documents
+                                        msg.attachments.forEach { attachment ->
+                                            val ext = attachment.name.substringAfterLast(".", "").lowercase()
+                                            if (listOf("pdf", "docx", "doc", "xlsx", "xls", "txt").contains(ext)) {
+                                                val uri = com.chhanda.ai.util.FileUtils.saveBase64ToFile(this@ChhandaServer.context, attachment.data.substringAfter("base64,"), attachment.name)
+                                                if (uri != null) {
+                                                    val docType = when (ext) {
+                                                        "pdf" -> com.chhanda.ai.domain.usecase.DocType.PDF
+                                                        "docx", "doc" -> com.chhanda.ai.domain.usecase.DocType.WORD
+                                                        "xlsx", "xls" -> com.chhanda.ai.domain.usecase.DocType.EXCEL
+                                                        else -> com.chhanda.ai.domain.usecase.DocType.TXT
+                                                    }
+                                                    val workRequest = OneTimeWorkRequestBuilder<com.chhanda.ai.service.IngestionWorker>()
+                                                        .setInputData(workDataOf(
+                                                            com.chhanda.ai.service.IngestionWorker.KEY_URI to uri.toString(),
+                                                            com.chhanda.ai.service.IngestionWorker.KEY_TYPE to docType.name,
+                                                            com.chhanda.ai.service.IngestionWorker.KEY_NAME to attachment.name
+                                                        ))
+                                                        .build()
+                                                    WorkManager.getInstance(this@ChhandaServer.context).enqueue(workRequest)
+                                                }
+                                            }
+                                        }
+
                                         write("data: RT:${upd.responseTimeMs}\n\n")
                                         write("data: [DONE]\n\n")
                                         flush()
@@ -998,10 +1116,44 @@ class ChhandaServer @Inject constructor(
             background: var(--border);
             color: var(--fg);
         }
-        @keyframes pulse-op {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
+        #row {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+        
+        #input-line {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+        }
+        
+        #preview-area {
+            display: none;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .attach-chip {
+            background: var(--surface-container);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--primary);
+            animation: slideUp 0.2s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         /* Name Modal Styles */
@@ -1099,20 +1251,28 @@ class ChhandaServer @Inject constructor(
     </div>
         <div id="ftr">
             <div id="row">
-            <button id="clip-btn" style="background:transparent; border:none; color:var(--muted); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-                </svg>
-            </button>
-            <input id="file-inp" type="file" style="display:none" multiple accept="image/*,audio/*,text/*,application/pdf,.csv,.json,.xlsx,.txt">
-            <input id="inp" placeholder="Waiting for AI…" autocomplete="off" disabled>
-            <button id="btn" disabled>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-            </button>
+                <div id="preview-area"></div>
+                <div id="input-line">
+                    <button id="clip-btn" style="background:var(--surface-container); border:1px solid var(--border); color:var(--primary); width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                        </svg>
+                    </button>
+                    <input id="file-inp" type="file" style="display:none" multiple accept="image/*,audio/*,text/*,application/pdf,.csv,.json,.xlsx,.txt">
+                    <div style="flex:1; position:relative; display:flex; align-items:center;">
+                        <input id="inp" placeholder="Waiting for AI…" autocomplete="off" disabled style="width:100%; padding-right:45px;">
+                        <button id="polish-btn" style="position:absolute; right:8px; background:none; border:none; color:var(--primary); cursor:pointer; display:none; padding:8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        </button>
+                    </div>
+                    <button id="btn" disabled style="width:44px; height:44px; border-radius:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
-    </div>
     <div id="ovl">
         <div id="crd">
             <h2 id="ovl-title">⚠️ Cannot Reach Node</h2>
@@ -1143,32 +1303,42 @@ class ChhandaServer @Inject constructor(
               bt=document.getElementById('bt'),ovl=document.getElementById('ovl'),
               clipBtn=document.getElementById('clip-btn'),
               fileInp=document.getElementById('file-inp'),
+              polishBtn=document.getElementById('polish-btn'),
               nameModal=document.getElementById('name-modal'),
               nameInp=document.getElementById('name-inp'),
               nameBtn=document.getElementById('name-btn');
         let ready=false,fails=0,errShown=false;
         const MAX=12;
         
-        let selectedFiles = [];
+        let currentFiles = [];
+        const previewArea = document.getElementById('preview-area');
+        
         clipBtn.addEventListener('click', () => fileInp.click());
         fileInp.addEventListener('change', async () => {
             const files = Array.from(fileInp.files);
-            selectedFiles = await Promise.all(files.map(file => {
-                return new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        resolve({
-                            name: file.name,
-                            type: file.type,
-                            data: e.target.result
-                        });
-                    };
-                    reader.readAsDataURL(file);
-                });
-            }));
-            clipBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg> (${'$'}{files.length})`;
-            clipBtn.style.color = "var(--primary)";
+            for(let f of files) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const id = Math.random().toString(36).substr(2, 9);
+                    currentFiles.push({ id, name: f.name, type: f.type, data: e.target.result });
+                    
+                    const chip = document.createElement('div');
+                    chip.className = 'attach-chip';
+                    chip.id = 'chip-' + id;
+                    chip.innerHTML = `<span>${'$'}{f.name}</span><span style="cursor:pointer; opacity:0.5;" onclick="removeFile('${'$'}{id}')">✕</span>`;
+                    previewArea.appendChild(chip);
+                    previewArea.style.display = 'flex';
+                };
+                reader.readAsDataURL(f);
+            }
+            fileInp.value = '';
         });
+
+        function removeFile(id) {
+            currentFiles = currentFiles.filter(f => f.id !== id);
+            document.getElementById('chip-' + id).remove();
+            if(currentFiles.length === 0) previewArea.style.display = 'none';
+        }
 
         const closeBtn = document.getElementById('close-btn');
         if (closeBtn) {
@@ -1192,6 +1362,7 @@ class ChhandaServer @Inject constructor(
                 if(ready){
                     badge.className='on';bt.textContent='ONLINE';
                     inp.disabled=false;btn.disabled=false;inp.placeholder='Message Chhanda…';
+                    if(inp.value.trim()) polishBtn.style.display='block';
                 }else if(d.loadError&&d.loadError.length){
                     badge.className='err';bt.textContent='LOAD ERROR';
                     inp.disabled=true;btn.disabled=true;
@@ -1215,22 +1386,33 @@ class ChhandaServer @Inject constructor(
 
         pulse(); setInterval(pulse,2000);
 
-        async function send(){
+        inp.addEventListener('input', () => {
+            polishBtn.style.display = inp.value.trim() ? 'block' : 'none';
+        });
+
+        async function send(isRefinement = false){
             if(!ready)return;
             const txt=inp.value.trim();if(!txt)return;
             inp.value='';inp.disabled=true;btn.disabled=true;
+            polishBtn.style.display='none';
             addMsg(txt,'u');const ai=addMsg('Thinking…','a');ai.innerHTML = `<div class="think-loader">⚡ Thinking...</div>`;
             let tokenCount = 0;
             let startTime = null;
             try {
                 const res=await fetch('/chat?key='+apiKeyParam,{method:'POST',
                     headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({text:txt,role:'user', attachments: selectedFiles, language: document.getElementById('lang-sel').value, sessionId: currentSessionId})});
+                    body:JSON.stringify({
+                        text:txt,
+                        role:'user', 
+                        attachments: currentFiles.map(f => ({ name: f.name, type: f.type, data: f.data })), 
+                        language: document.getElementById('lang-sel').value, 
+                        sessionId: currentSessionId,
+                        isRefinement: isRefinement
+                    })});
                 
-                selectedFiles = [];
-                clipBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>`;
-                clipBtn.style.color = "var(--muted)";
-                fileInp.value = '';
+                currentFiles = [];
+                previewArea.innerHTML = '';
+                previewArea.style.display = 'none';
                 if(res.status===503){ai.className='msg s';ai.textContent='Model loading — try again.';return;}
                 if(!res.ok){ai.className='msg s';ai.textContent='Error '+res.status;return;}
                 const reader=res.body.getReader(),dec=new TextDecoder();
@@ -1289,6 +1471,12 @@ class ChhandaServer @Inject constructor(
             finally{if(ready){inp.disabled=false;btn.disabled=false;inp.focus();}msgs.scrollTop=msgs.scrollHeight;}
         }
 
+        btn.addEventListener('click', () => send(false));
+        polishBtn.addEventListener('click', () => send(true));
+        inp.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') send(false);
+        });
+
         function formatText(t) {
             let processed = t.trimStart();
             
@@ -1305,23 +1493,73 @@ class ChhandaServer @Inject constructor(
                 }
             }
 
-            const thinkStart = processed.indexOf('<think>');
-            const thinkEnd = processed.indexOf('</think>');
+            // Handle CREATE_FILE tags
+            const createRegex = /\[CREATE_FILE\s+path="([^"]+)"\]([\s\S]*?)\[\/CREATE_FILE\]/g;
+            processed = processed.replace(createRegex, (match, path, content) => {
+                const escapedContent = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<div style="background:var(--surface-container); border:1px solid var(--primary); border-radius:12px; margin:12px 0; overflow:hidden;">
+                    <div style="background:rgba(208, 188, 255, 0.1); padding:8px 12px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border);">
+                        <span style="font-size:12px; font-weight:600; color:var(--primary);">CREATE: ${'$'}{path}</span>
+                        <div style="display:flex; gap:8px;">
+                            <button onclick="copyToClipboard(this)" data-code="${'$'}{btoa(unescape(encodeURIComponent(content)))}" style="background:none; border:none; color:var(--primary); cursor:pointer;">Copy</button>
+                        </div>
+                    </div>
+                    <pre style="padding:12px; margin:0; font-family:monospace; font-size:13px; overflow-x:auto; color:var(--fg);">${'$'}{escapedContent.trim()}</pre>
+                </div>`;
+            });
+
+            // Handle Code Blocks
+            const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+            processed = processed.replace(codeBlockRegex, (match, lang, code) => {
+                const langName = lang.toUpperCase() || 'CODE';
+                const escapedCode = code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<div class="code-block" style="background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:12px; margin:12px 0; overflow:hidden;">
+                    <div style="background:rgba(255,255,255,0.05); padding:6px 12px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border);">
+                        <span style="font-size:10px; font-weight:bold; color:var(--primary);">${'$'}{langName}</span>
+                        <button onclick="copyToClipboard(this)" data-code="${'$'}{btoa(unescape(encodeURIComponent(code)))}" style="background:none; border:none; color:var(--primary); cursor:pointer; padding:4px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
+                    <pre style="padding:12px; margin:0; font-family:monospace; font-size:13px; overflow-x:auto; color:var(--fg); line-height:1.4;">${'$'}{escapedCode.trim()}</pre>
+                </div>`;
+            });
             
-            if (thinkStart !== -1) {
-                const beforeThink = processed.substring(0, thinkStart);
-                if (thinkEnd !== -1) {
-                    const afterThink = processed.substring(thinkEnd + 8);
-                    return escapeHtml(beforeThink) + escapeHtml(afterThink);
-                } else {
-                    return escapeHtml(beforeThink) + 
-                           `<div class="think-loader">⚡ Thinking...</div>`;
-                }
-            }
+            // Handle [GENERATE_FILE] tags
+            const fileRegex = /\[GENERATE_FILE\s+type="(\w+)"\s+name="([^"]+)"\]([\s\S]*?)\[\/GENERATE_FILE\]/g;
+            processed = processed.replace(fileRegex, (match, type, name, content) => {
+                return `<div style="background:var(--surface-container); border:1px solid var(--border); border-radius:12px; padding:12px; margin:12px 0; display:flex; align-items:center; gap:12px; color:var(--fg); text-align:left;">
+                    <div style="background:var(--primary); color:var(--on-primary); width:40px; height:40px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/>
+                        </svg>
+                    </div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:500; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${'$'}{name}</div>
+                        <div style="font-size:11px; color:var(--muted);">${'$'}{type.toUpperCase()} Document</div>
+                    </div>
+                    <a href="/download/${'$'}{name}?key=${'$'}{apiKeyParam}" download="${'$'}{name}" style="background:var(--primary); color:var(--on-primary); padding:6px 16px; border-radius:100px; text-decoration:none; font-size:12px; font-weight:600; white-space:nowrap;">Download</a>
+                </div>`;
+            });
+
             return escapeHtml(processed);
         }
         
         function escapeHtml(text) {
+            // If it already has our custom tags, we need to be careful with escaping
+            const hasCustomTags = text.includes('<div class="code-block"') || text.includes('href="/download/');
+            
+            if (hasCustomTags) {
+                // Surgical Markdown parsing to avoid breaking our injected HTML
+                return text
+                    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                    .replace(/`(.*?)`/g, '<code>$1</code>')
+                    .replace(/^### (.*$)/gm, '<h3 style="margin:12px 0 6px 0; color:var(--fg);">$1</h3>')
+                    .replace(/^## (.*$)/gm, '<h2 style="margin:16px 0 8px 0; color:var(--fg);">$1</h2>')
+                    .replace(/^# (.*$)/gm, '<h1 style="margin:20px 0 10px 0; color:var(--fg);">$1</h1>')
+                    .replace(/^- (.*$)/gm, '<li style="margin-left:16px; color:var(--muted);">$1</li>')
+                    .replace(/\n/g, '<br>');
+            }
+
             return text
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -1330,6 +1568,14 @@ class ChhandaServer @Inject constructor(
                 .replace(/`(.*?)`/g, '<code>$1</code>')
                 .replace(/\n/g, '<br>');
         }
+
+        window.copyToClipboard = function(btn) {
+            const code = decodeURIComponent(escape(atob(btn.getAttribute('data-code'))));
+            navigator.clipboard.writeText(code);
+            const original = btn.innerHTML;
+            btn.innerHTML = '<span style="font-size:10px; color:var(--primary);">Copied!</span>';
+            setTimeout(() => { btn.innerHTML = original; }, 1500);
+        };
 
         function addMsg(t,c){
             const container = document.createElement('div');
@@ -1406,7 +1652,8 @@ class ChhandaServer @Inject constructor(
         initialSessions.forEach(sid => {
             const opt = document.createElement('option');
             opt.value = sid;
-            opt.textContent = sid.substring(0, 8) + '...'; // truncate for UI
+            opt.textContent = sid.substring(0, 8) + '...';
+            if (sid === currentSessionId) opt.selected = true;
             sessionSel.appendChild(opt);
         });
         
@@ -1415,45 +1662,36 @@ class ChhandaServer @Inject constructor(
             if (val === 'new') {
                 currentSessionId = 'session_' + Math.random().toString(36).substring(2, 15);
                 localStorage.setItem('currentSessionId', currentSessionId);
-                msgs.innerHTML = ''; // Clear chat
-                const ai = document.createElement('div');
-                ai.className = 'msg s';
-                ai.textContent = 'Started a new chat session.';
-                msgs.appendChild(ai);
+                msgs.innerHTML = ''; 
+                addMsg('Started a new chat session.', 's');
             } else {
                 currentSessionId = val;
                 localStorage.setItem('currentSessionId', currentSessionId);
                 loadChatHistory(val);
             }
         };
+
+        if (initialSessions.includes(currentSessionId)) {
+            loadChatHistory(currentSessionId);
+        }
         
         function loadChatHistory(sid) {
-            msgs.innerHTML = '<div class="think-loader">⚡ Loading history...</div>'; // Show loader
+            msgs.innerHTML = '<div class="think-loader">⚡ Loading history...</div>';
             fetch(`/chat/history/` + sid + (apiKeyParam ? `?key=` + apiKeyParam : ''))
                 .then(r => r.json())
                 .then(data => {
                     msgs.innerHTML = '';
                     if (data.length === 0) {
-                        const ai = document.createElement('div');
-                        ai.className = 'msg s';
-                        ai.textContent = 'No messages in this chat.';
-                        msgs.appendChild(ai);
+                        addMsg('No messages in this chat.', 's');
                     } else {
                         data.forEach(m => {
-                            const div = document.createElement('div');
-                            div.className = m.role === 'user' ? 'msg u' : 'msg a';
-                            div.textContent = m.text;
-                            msgs.appendChild(div);
+                            addMsg(m.text, m.role === 'user' ? 'u' : 'a');
                         });
-                        msgs.scrollTop = msgs.scrollHeight;
                     }
                 })
                 .catch(e => {
                     msgs.innerHTML = '';
-                    const ai = document.createElement('div');
-                    ai.className = 'msg s';
-                    ai.textContent = 'Failed to load history.';
-                    msgs.appendChild(ai);
+                    addMsg('Failed to load history.', 's');
                 });
         }
 
@@ -1467,6 +1705,7 @@ class ChhandaServer @Inject constructor(
                     localStorage.setItem('userName', val);
                     nameModal.style.display = 'none';
                     registerName(val);
+                    addMsg(`Welcome, ${val}! 👋 How can I help you today?`, 's');
                 }
             };
             nameInp.addEventListener('keypress', e => { if (e.key === 'Enter') nameBtn.click(); });
@@ -1474,6 +1713,9 @@ class ChhandaServer @Inject constructor(
             if (userName) {
                 localStorage.setItem('userName', userName);
                 registerName(userName);
+                if (initialSessions.length === 0) {
+                    addMsg(`Welcome back, ${userName}! 👋 How can I help you today?`, 's');
+                }
             } else {
                 registerName("Device"); // fallback
             }
@@ -1498,6 +1740,62 @@ class ChhandaServer @Inject constructor(
         btn.onclick=send;
         inp.addEventListener('keypress',e=>{if(e.key==='Enter'&&!btn.disabled)send();});
     </script>
+</body>
+</html>""".trimIndent()
+
+    private fun buildMaxLimitReachedHtml(limit: Int) = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Limit Reached - Chhanda</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #141218;
+            color: #E6E1E5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .card {
+            background: #1D1B20;
+            border: 1px solid #F2B8B5; /* Soft error red */
+            border-radius: 28px;
+            padding: 40px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            display: block;
+        }
+        h1 { font-size: 24px; margin-bottom: 16px; color: #F2B8B5; }
+        p { color: #CAC4D0; line-height: 1.6; margin-bottom: 24px; }
+        .hint {
+            background: #211F26;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            border: 1px dashed #F2B8B5;
+            color: #F2B8B5;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <span class="icon">🚫</span>
+        <h1>Device Limit Reached</h1>
+        <p>The maximum limit of <b>$limit devices</b> has been reached for this Chhanda gateway.</p>
+        <div class="hint">
+            Please increase the limit or remove active devices from the <b>Chhanda Host Application</b> settings.
+        </div>
+    </div>
 </body>
 </html>""".trimIndent()
 

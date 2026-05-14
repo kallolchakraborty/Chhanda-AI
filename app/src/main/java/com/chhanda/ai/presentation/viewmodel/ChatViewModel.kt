@@ -101,7 +101,7 @@ class ChatViewModel @Inject constructor(
         _selectedFiles.value = _selectedFiles.value - uri
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String, isRefinement: Boolean = false) {
         if (text.isBlank() || _isGenerating.value) return
 
         // Guard: model must be loaded before attempting inference
@@ -123,7 +123,25 @@ class ChatViewModel @Inject constructor(
             var lastUpdate = System.currentTimeMillis()
             val language = appLanguage.value
             
-            sendMessageUseCase.get()(text, "local", modelName, sessionId, attachments, preferredLanguage = language)
+            // If it's a refinement, we use a specialized system prefix
+            val promptToSend = if (isRefinement) {
+                """
+                ### TRANSCRIPT REFINEMENT TASK
+                Please polish the following raw spoken transcript into professional, well-structured text. 
+                - Fix grammar and punctuation.
+                - Remove filler words (like "um", "uh", "you know").
+                - Improve sentence flow and clarity.
+                - Keep the original tone and all key information.
+                - Respond ONLY with the polished text.
+                
+                RAW TRANSCRIPT:
+                "$text"
+                """.trimIndent()
+            } else {
+                text
+            }
+
+            sendMessageUseCase.get()(promptToSend, "local", modelName, sessionId, attachments, preferredLanguage = language, isRefinement = isRefinement, source = "device")
                 .onCompletion { _isGenerating.value = false }
                 .collect { update ->
                     when (update) {
@@ -151,6 +169,10 @@ class ChatViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    fun refineText(text: String) {
+        sendMessage(text, isRefinement = true)
     }
 
     fun stopInference() {
