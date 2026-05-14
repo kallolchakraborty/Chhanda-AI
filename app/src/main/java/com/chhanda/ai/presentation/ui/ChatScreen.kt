@@ -36,6 +36,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.speech.tts.TextToSpeech
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -88,9 +90,10 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
     }
 
     var activeTtsMessageId by remember { mutableStateOf<String?>(null) }
+    var activeTtsText by remember { mutableStateOf("") }
     var ttsProgress by remember { mutableFloatStateOf(0f) }
     var isTtsPlaying by remember { mutableStateOf(false) }
-    var currentTtsTotalLength by remember { mutableIntStateOf(0) }
+    var ttsOffset by remember { mutableIntStateOf(0) }
 
     DisposableEffect(ttsLocale, selectedVoice) {
         var ttsInstance: TextToSpeech? = null
@@ -135,17 +138,21 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                             isTtsPlaying = true
                         }
                         override fun onDone(utteranceId: String?) {
-                            isTtsPlaying = false
-                            activeTtsMessageId = null
-                            ttsProgress = 0f
+                            if (activeTtsMessageId == utteranceId) {
+                                isTtsPlaying = false
+                                activeTtsMessageId = null
+                                activeTtsText = ""
+                                ttsProgress = 0f
+                                ttsOffset = 0
+                            }
                         }
                         override fun onError(utteranceId: String?) {
                             isTtsPlaying = false
                             activeTtsMessageId = null
                         }
                         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                            if (currentTtsTotalLength > 0) {
-                                ttsProgress = start.toFloat() / currentTtsTotalLength
+                            if (activeTtsText.isNotEmpty()) {
+                                ttsProgress = (ttsOffset + start).toFloat() / activeTtsText.length
                             }
                         }
                     })
@@ -266,21 +273,23 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                         message, 
                         tts,
                         isActiveTts = activeTtsMessageId == message.id.toString(),
-                        ttsProgress = if (activeTtsMessageId == message.id.toString()) ttsProgress else 0f,
                         onTtsToggle = {
                             val msgIdStr = message.id.toString()
                             if (activeTtsMessageId == msgIdStr) {
                                 tts?.stop()
                                 activeTtsMessageId = null
+                                activeTtsText = ""
                                 isTtsPlaying = false
+                                ttsOffset = 0
                             } else {
                                 tts?.stop()
                                 val (thinking, response) = parseMessageContent(message.text)
                                 val cleanText = cleanTextForTts(response)
                                 if (cleanText.isNotEmpty()) {
                                     activeTtsMessageId = msgIdStr
-                                    currentTtsTotalLength = cleanText.length
+                                    activeTtsText = cleanText
                                     ttsProgress = 0f
+                                    ttsOffset = 0
                                     tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, msgIdStr)
                                 }
                             }
@@ -301,6 +310,45 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                 }
             }
             
+            // TTS Player Bar
+            if (activeTtsMessageId != null && activeTtsText.isNotEmpty()) {
+                GlobalTtsPlayer(
+                    progress = ttsProgress,
+                    isPlaying = isTtsPlaying,
+                    onStop = {
+                        tts?.stop()
+                        activeTtsMessageId = null
+                        activeTtsText = ""
+                        isTtsPlaying = false
+                    },
+                    onSeek = { fraction ->
+                        val targetIndex = (fraction * activeTtsText.length).toInt()
+                        tts?.stop()
+                        ttsOffset = targetIndex
+                        val remainingText = activeTtsText.substring(targetIndex)
+                        if (remainingText.isNotEmpty()) {
+                            tts?.speak(remainingText, TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                        } else {
+                            activeTtsMessageId = null
+                        }
+                    },
+                    onForward = {
+                        val currentIdx = (ttsProgress * activeTtsText.length).toInt()
+                        val targetIndex = (currentIdx + 100).coerceAtMost(activeTtsText.length - 1)
+                        tts?.stop()
+                        ttsOffset = targetIndex
+                        tts?.speak(activeTtsText.substring(targetIndex), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                    },
+                    onBackward = {
+                        val currentIdx = (ttsProgress * activeTtsText.length).toInt()
+                        val targetIndex = (currentIdx - 100).coerceAtLeast(0)
+                        tts?.stop()
+                        ttsOffset = targetIndex
+                        tts?.speak(activeTtsText.substring(targetIndex), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                    }
+                )
+            }
+
             // Attachment Preview
             val selectedFiles by viewModel.selectedFiles.collectAsState()
             if (selectedFiles.isNotEmpty()) {
@@ -532,46 +580,83 @@ fun DocumentDownloadCard(file: java.io.File) {
 }
 
 @Composable
-fun TtsPlayer(
+fun GlobalTtsPlayer(
     progress: Float,
     isPlaying: Boolean,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onForward: () -> Unit,
+    onBackward: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+        shape = RoundedCornerShape(20.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+        shadowElevation = 8.dp
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Default.VolumeUp else Icons.Default.Stop,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-            )
-            
-            IconButton(
-                onClick = onStop,
-                modifier = Modifier.size(32.dp).background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f), CircleShape)
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    Icons.Default.Stop,
-                    contentDescription = "Stop",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(18.dp)
+                Text(
+                    "Speaking Response...",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
                 )
+                IconButton(onClick = onStop, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                }
+            }
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(vertical = 4.dp)
+            ) {
+                IconButton(onClick = onBackward) {
+                    Icon(Icons.Default.ArrowBack, null, modifier = Modifier.size(20.dp))
+                }
+
+                Slider(
+                    value = progress,
+                    onValueChange = onSeek,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    )
+                )
+
+                IconButton(onClick = onForward) {
+                    Icon(Icons.Default.ArrowForward, null, modifier = Modifier.size(20.dp))
+                }
+            }
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onStop,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f), CircleShape)
+                ) {
+                    Icon(
+                        Icons.Default.Stop,
+                        contentDescription = "Stop",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }
@@ -582,7 +667,6 @@ fun MessageBubble(
     message: MessageEntity, 
     tts: TextToSpeech?,
     isActiveTts: Boolean = false,
-    ttsProgress: Float = 0f,
     onTtsToggle: () -> Unit = {}
 ) {
     val isUser = message.role == "user"
@@ -742,14 +826,6 @@ fun MessageBubble(
                         contentDescription = "Speak", 
                         modifier = Modifier.size(14.dp),
                         tint = if (isActiveTts) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                }
-
-                if (isActiveTts) {
-                    TtsPlayer(
-                        progress = ttsProgress,
-                        isPlaying = true,
-                        onStop = onTtsToggle
                     )
                 }
 
