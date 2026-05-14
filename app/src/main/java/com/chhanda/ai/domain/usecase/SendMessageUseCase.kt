@@ -46,7 +46,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // STEP 1: Get Optimized Context (Short-term + Long-term)
             val (dbHistory, longTermContext) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
             val history = externalHistory ?: dbHistory
-            isContextFound = longTermContext.isNotBlank()
+            
+            // Context Awareness State
+            var hasDbKnowledge = longTermContext.isNotBlank()
+            var hasAttachmentKnowledge = false // Will be updated after processing attachments
+            isContextFound = hasDbKnowledge 
             
 
 
@@ -95,6 +99,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         "Error processing ${uri.lastPathSegment}: ${e.localizedMessage}"
                     }
                 }
+                hasAttachmentKnowledge = true
+                isContextFound = true
                 texts.joinToString("\n---\n")
             } else ""
 
@@ -165,35 +171,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     - Provide only the polished text without meta-commentary.
                 """.trimIndent()
             } else if (isContextFound) {
-                if (modelName.contains("4B")) {
-                    "You are a helpful assistant and senior software engineer. Use the provided CONTEXT to answer the QUERY. If the CONTEXT doesn't contain the answer, use your pre-trained knowledge to respond accurately and quickly in $preferredLanguage. $formatInstruction\n\n$agentCapabilities"
-                } else {
-                    """
-                        You are a helpful and accurate RAG assistant and senior software engineer.
-    
-                        Your job is to answer using the provided documentation context first.
-                        - If the information is in the documentation, use it as your primary source.
-                        - If the information is not in the documentation, use your own internal knowledge to answer the question accurately.
-                        - Do not invent facts or hallucinate if you do not know the answer.
-                        - Answer directly and concisely.
-    
-                        $formatInstruction
-
-                        $agentCapabilities
-
-                        CONSTRAINTS:
-                        - RESPONSE LANGUAGE: $preferredLanguage
-                    """.trimIndent()
+                val contextSource = when {
+                    hasAttachmentKnowledge && hasDbKnowledge -> "ATTACHED DOCUMENTS and DATABASE"
+                    hasAttachmentKnowledge -> "ATTACHED DOCUMENTS"
+                    else -> "DATABASE"
                 }
+                "Use the provided $contextSource context as your primary source. If it doesn't answer the query, use your own knowledge. Do not hallucinate. $formatInstruction\n\n$agentCapabilities"
             } else {
-                """
-                    You are a helpful assistant and senior software engineer.
-                    Your job is to answer the user's question accurately using your internal knowledge in $preferredLanguage.
-                    
-                    $formatInstruction
-
-                    $agentCapabilities
-                """.trimIndent()
+                "Answer accurately using your internal knowledge in $preferredLanguage. $formatInstruction\n\n$agentCapabilities"
             }
 
             // STEP 4: Streamed Generation — emit tokens as they arrive
@@ -256,7 +241,15 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         }
                         var toSave = partialAccumulated.trim()
                         
-                        // Robustly strip common thinking prefixes that models sometimes output literally
+                        // STEP 5: Final Clean-up and Metadata Attribution
+                        val sourceTag = when {
+                            hasAttachmentKnowledge && hasDbKnowledge -> "\n\n*(Ref: Multi-Source Context)*"
+                            hasAttachmentKnowledge -> "\n\n*(Ref: Attached Documents)*"
+                            hasDbKnowledge -> "\n\n*(Ref: Local Knowledge Base)*"
+                            else -> ""
+                        }
+
+                        // Strip common thinking prefixes
                         val prefixesToStrip = listOf("Thinking...", "Thinking:", "Thought:", "Thought...", "<thought>", "<think>")
                         var cleaned = toSave
                         var changed = true
@@ -269,7 +262,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                 }
                             }
                         }
-                        toSave = cleaned
+                        toSave = cleaned + if (isContextFound) sourceTag else ""
 
                         if (toSave.isNotBlank()) {
                             // SENIOR FEATURE: Parse for generated files
@@ -307,6 +300,12 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                     sessionId = sessionId, 
                                     tps = update.tps, 
                                     isRagUsed = isContextFound, 
+                                    contextSource = when {
+                                        hasAttachmentKnowledge && hasDbKnowledge -> "Multi-Source"
+                                        hasAttachmentKnowledge -> "Attachment"
+                                        hasDbKnowledge -> "Knowledge Base"
+                                        else -> null
+                                    },
                                     responseTimeMs = update.responseTimeMs,
                                     generatedFilePath = filePath,
                                     source = source

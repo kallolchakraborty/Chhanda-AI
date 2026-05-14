@@ -17,5 +17,6 @@ data class MessageEntity(
     val responseTimeMs: Long = 0,
     val generatedFilePath: String? = null,
     val attachmentPaths: String? = null, // Comma-separated paths of user attachments
-    val source: String = "Local" // "API", "Web", or "Local"
+    val source: String = "Local", // "API", "Web", or "Local"
+    val contextSource: String? = null // "Attachment", "Knowledge Base", or "Multi-Source"
 )
