@@ -240,7 +240,33 @@ sequenceDiagram
     WM-->>UI: Broadcast "Ingestion Complete"
 ```
 
-### Detailed Class Architecture & Dependency Graph
+### ⚔️ Chhanda vs. Google AI Edge Gallery
+
+While Google's AI Edge Gallery is an excellent tool for local AI experimentation and research, **Chhanda** is architected for **Production-Grade Utility** and **Enterprise-Level Context**.
+
+| Feature | Google AI Edge Gallery | Chhanda AI Gateway |
+| :--- | :--- | :--- |
+| **Core Philosophy** | Research & Experimentation | Production & Productivity |
+| **RAG Engine** | Limited / Basic Skills | **Enterprise RAG**: PDF, Docx, Xlsx, Images, Web |
+| **Observability** | Basic Benchmarking | **Advanced**: p99 Latency, Recall@K, MRR, PSS Tracking |
+| **Integration** | Standalone App | **Gateway**: QR Web UI + OpenAI-Compatible API |
+| **Personality** | General Assistant | **Context-Aware**: Role switching (e.g., Senior Dev for API) |
+| **Multimedia** | Audio/Vision Demos | **Playback Engine**: Global seek, background TTS |
+| **Data Generation** | None | **Document Creator**: Generate .docx, .xlsx, .pdf locally |
+| **Localization** | Broad (Google Default) | **Deep Local**: Specialized Bengali/Hindi personalities |
+| **Connectivity** | On-Device Only | **Multi-Client**: Connect laptops/IDEs via local network |
+
+### 🏆 Why Choose Chhanda?
+
+1.  **Context is King**: Unlike standard demos, Chhanda's **Multimodal RAG** allows it to truly understand *your* business documents and data structure.
+2.  **Developer Force Multiplier**: By acting as an **API Gateway**, Chhanda turns your Android device into a powerful local co-pilot for your IDE (VS Code, Cursor, etc.), enabling private coding assistance without subscription costs.
+3.  **Production Readiness**: With real-time tracking of **Recall@K** and **Native RAM (PSS)**, Chhanda provides the diagnostics needed to understand exactly how the model is performing on edge hardware.
+4.  **Beyond Chat**: Chhanda doesn't just talk; it **creates**. Whether you need an Excel report or a structured Word doc, Chhanda generates production-ready files entirely offline.
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
 This diagram illustrates the core components of the Chhanda ecosystem, showing how the UI communicates with the domain logic and how the inference engines are abstracted for stability.
 
 ```mermaid
