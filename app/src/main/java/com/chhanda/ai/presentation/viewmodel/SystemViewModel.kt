@@ -841,7 +841,10 @@ class SystemViewModel @Inject constructor(
             try {
                 val potentialModels = listOf(
                     "gemma-4-e2b.litertlm" to "Gemma-4-E2B-IT",
-                    "gemma-4-e4b.litertlm" to "Gemma-4-E4B-IT"
+                    "gemma-4-e4b.litertlm" to "Gemma-4-E4B-IT",
+                    "gemma-3n-e4b.litertlm" to "Gemma-3-E4B-IT",
+                    "qwen-2.5-1.5b.litertlm" to "Qwen-2.5-1.5B",
+                    "deepseek-r1-1.5b.litertlm" to "DeepSeek-R1-1.5B"
                 )
 
                 val recommendedName = "Gemma-4-E2B-IT"
@@ -1281,14 +1284,20 @@ class SystemViewModel @Inject constructor(
     fun downloadModel(model: com.chhanda.ai.presentation.ui.DownloadModelInfo, isResume: Boolean = false) {
         try {
             val filename = when {
-                model.name.contains("E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
-                model.name.contains("E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
+                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
+                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
+                model.name.contains("Gemma-3", ignoreCase = true) -> "gemma-3n-e4b.litertlm"
+                model.name.contains("Qwen", ignoreCase = true) -> "qwen-2.5-1.5b.litertlm"
+                model.name.contains("DeepSeek", ignoreCase = true) -> "deepseek-r1-1.5b.litertlm"
                 else -> "gemma-4-e2b.litertlm"
             }
 
             val url = when {
-                model.name.contains("E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
-                model.name.contains("E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+                model.name.contains("Gemma-3", ignoreCase = true) -> "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4.litertlm"
+                model.name.contains("Qwen", ignoreCase = true) -> "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
+                model.name.contains("DeepSeek", ignoreCase = true) -> "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm"
                 else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
             }
 
