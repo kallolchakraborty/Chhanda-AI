@@ -52,7 +52,16 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             // STEP 2: Save User Turn (Security check: Don't store API calls)
             if (source.lowercase() != "api") {
-                chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = userText, role = "user", deviceId = deviceId, modelName = modelName, sessionId = sessionId, source = source))
+                val attachmentPathsString = if (attachments.isNotEmpty()) attachments.joinToString(",") { it.toString() } else null
+                chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
+                    text = userText, 
+                    role = "user", 
+                    deviceId = deviceId, 
+                    modelName = modelName, 
+                    sessionId = sessionId, 
+                    source = source,
+                    attachmentPaths = attachmentPathsString
+                ))
             }
 
             // STEP 3: Session Management & Prompt Construction

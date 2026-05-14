@@ -24,8 +24,11 @@ import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -469,6 +472,57 @@ fun MessageBubble(message: MessageEntity, tts: TextToSpeech?) {
                         text = responseText,
                         color = textColor
                     )
+                }
+            }
+        }
+        
+        // Attachment Indicator (User only)
+        if (isUser && message.attachmentPaths != null) {
+            Row(
+                modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                message.attachmentPaths.split(",").forEach { path ->
+                    val icon = when {
+                        path.contains(".pdf", true) -> Icons.Default.PictureAsPdf
+                        path.contains(".doc", true) || path.contains(".docx", true) -> Icons.Default.Description
+                        path.contains(".xls", true) || path.contains(".xlsx", true) -> Icons.Default.TableChart
+                        path.contains(".png", true) || path.contains(".jpg", true) || path.contains(".jpeg", true) -> Icons.Default.Image
+                        path.contains(".mp3", true) || path.contains(".wav", true) -> Icons.Default.Mic
+                        else -> Icons.Default.AttachFile
+                    }
+                    val label = when {
+                        path.contains(".pdf", true) -> "PDF"
+                        path.contains(".doc", true) || path.contains(".docx", true) -> "DOC"
+                        path.contains(".xls", true) || path.contains(".xlsx", true) -> "XLS"
+                        path.contains(".png", true) || path.contains(".jpg", true) || path.contains(".jpeg", true) -> "IMG"
+                        path.contains(".mp3", true) || path.contains(".wav", true) -> "AUD"
+                        else -> "FILE"
+                    }
+                    
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
                 }
             }
         }
