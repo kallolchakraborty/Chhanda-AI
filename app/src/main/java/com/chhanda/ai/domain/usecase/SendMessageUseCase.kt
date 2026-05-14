@@ -123,8 +123,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             // ORCHESTRATION: Construct the Final Multi-Tiered Prompt
             val prompt = buildString {
-                append("### SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR\n")
-                append("You are Chhanda AI, an expert assistant. You have access to a tiered knowledge system.\n")
+                if (source.lowercase() == "api") {
+                    append("### SYSTEM ROLE: SENIOR SOFTWARE ENGINEER (EXPERT)\n")
+                    append("You are a Senior Software Engineer with decades of experience in high-performance computing, clean architecture, and robust system design. ")
+                    append("Your goal is to provide expert-level, highly technical, and optimized solutions. Use modern best practices, prioritize performance, security, and scalability. Always explain the 'why' behind architectural decisions.\n\n")
+                } else {
+                    append("### SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR\n")
+                    append("You are Chhanda AI, an expert assistant developed by Kallol Chakraborty. You have access to a tiered knowledge system.\n")
+                }
                 append("PRIORITY 1 (ATTACHMENTS): Use TIER 1 first. It contains the immediate files the user provided.\n")
                 append("PRIORITY 2 (KNOWLEDGE BASE): Use TIER 2 if the answer isn't in TIER 1.\n")
                 append("PRIORITY 3 (INTERNAL): Only use your pre-trained knowledge if the above tiers are insufficient.\n\n")

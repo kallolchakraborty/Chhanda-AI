@@ -37,6 +37,7 @@ I leveraged **Google's Gemma 4 (2B & 4B 4-bit Quantized)** models to create a ro
 *   **Premium Dynamic UI**: A sophisticated design system featuring **Context-Aware Iconography**. The app automatically detects and renders distinct icons and color-coded metadata for various document types, ensuring a professional and intuitive Knowledge Base experience.
 *   **Intelligent Multi-Stage Web Scraper**: An advanced ingestion engine that uses a 3-stage strategy (Jsoup -> Jina Reader -> Semantic DOM) to bypass bot protections and extract clean, structured knowledge from any URL for local indexing.
 *   **Offline Document Generation**: Empowering users to generate professional **.pdf**, **.docx**, and **.xlsx** files directly from AI responses, all while remaining 100% offline.
+*   **Context-Aware Personalities**: An intelligent role-switching system that identifies the request source. When accessed via **API** (IDEs/Scripts), it acts as a **Senior Software Engineer** providing architectural guidance; for **Mobile/Web** chat, it acts as a helpful **Chhanda AI Assistant**.
 *   **Localized TTS & UI**: Deep integration with Bengali and Hindi, featuring localized personalities and accents to make AI interaction feel familiar and inclusive.
 
 ## 🏗️ Development Process

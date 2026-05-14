@@ -56,6 +56,9 @@ Chhanda is not just a chat app; it is a full-fledged local AI server and gateway
     *   **Security Policy**: For enhanced privacy, interactions via the **API source** (Code Editors) are ephemeral and are **not stored** in the local database.
     *   Includes sophisticated searching and sorting across all device histories.
 7.  **Telemetry & Hardware Monitoring**: Real-time tracking of TPS (Tokens Per Second), RT (Response Time), RAM usage, and Battery Temperature.
+8.  **Context-Aware Personalities**: 
+    *   **Expert Mode (API)**: When accessed via the API (e.g., from an IDE), Chhanda adopts the persona of a **Senior Software Engineer**, providing optimized, technical, and architectural guidance.
+    *   **Assistant Mode (Local/Web)**: For on-device or QR-based chat, it acts as a **General Purpose Assistant**, optimized for helpful, clear, and multi-lingual communication.
 
 ---
 
