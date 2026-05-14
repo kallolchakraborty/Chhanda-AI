@@ -26,30 +26,31 @@ class ContextManager @javax.inject.Inject constructor(
         val history = recentMessages.map { it.role to it.text }
 
         // Long-Term Memory: Vector search for semantic relevance across all history
-        val longTermMemory = try {
-            val queryEmbedding = embeddingEngine.embed(query)
-            val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 3 else 6, modelId = "shared_rag_db")
-            
-            // High-fidelity threshold: Ensure snippets are actually relevant to the query.
-            // 0.55f for 4B models (stricter), 0.5f for others.
-            val threshold = if (modelName.contains("4B")) 0.55f else 0.50f
-            val filtered = results
-                .filter { it.score >= threshold } 
+        val longTermMemory = if (query.trim().length < 4 || query.trim().split(" ").size < 2) {
+            ""
+        } else {
+            try {
+                val queryEmbedding = embeddingEngine.embed(query)
+                val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 3 else 6, modelId = "shared_rag_db")
+                
+                val threshold = if (modelName.contains("4B")) 0.75f else 0.70f
+                val filtered = results.filter { it.score >= threshold } 
 
-            android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
+                android.util.Log.d("ContextManager", "RAG Search for '$query' found ${results.size} total. Threshold: $threshold. Filtered to ${filtered.size} snippets.")
 
-            if (filtered.isEmpty()) ""
-            else {
-                "RELEVANT DOCUMENTATION SNIPPETS:\n" +
-                filtered.groupBy { it.metadata["source"] ?: "General Knowledge" }
-                    .entries.joinToString("\n\n") { (source, chunks) ->
-                        val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
-                        "[SOURCE: $sourceName]\n" + chunks.joinToString("\n---\n") { it.text }
-                    }
+                if (filtered.isEmpty()) ""
+                else {
+                    "RELEVANT DOCUMENTATION SNIPPETS:\n" +
+                    filtered.groupBy { it.metadata["source"] ?: "General Knowledge" }
+                        .entries.joinToString("\n\n") { (source, chunks) ->
+                            val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
+                            "[SOURCE: $sourceName]\n" + chunks.joinToString("\n---\n") { it.text }
+                        }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ContextManager", "Long-term memory retrieval failed: ${e.message}")
+                ""
             }
-        } catch (e: Exception) {
-            android.util.Log.e("ContextManager", "Long-term memory retrieval failed: ${e.message}")
-            "" // Graceful fallback
         }
 
         return history to longTermMemory
