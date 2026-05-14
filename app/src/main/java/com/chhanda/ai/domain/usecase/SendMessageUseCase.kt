@@ -118,14 +118,13 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 append("### USER_QUERY\n")
                 append(sanitizedUserText)
                 
-                append("\n\n### COGNITIVE INSTRUCTIONS (SENIOR DEV MODE)\n")
-                append("1. INTENT ANALYSIS: First, determine if the USER_QUERY is a general/casual request or a technical/factual one.\n")
-                append("2. ROUTING LOGIC:\n")
-                append("   - If CASUAL (e.g., greetings, small talk): Respond naturally using your internal weights. IGNORE all Tier 1/2 context.\n")
-                append("   - If TECHNICAL/DOCUMENT-SPECIFIC: Follow the hierarchy: TIER 1 (Attachments) > TIER 2 (Database) > TIER 3 (Internal).\n")
-                append("3. DATA FIDELITY: Use 'DATABASE_KNOWLEDGE_CONTEXT' ONLY if it provides an exact or highly specific answer. If it is only 'vaguely related', treat it as noise and rely on your TIER 3 (Internal) knowledge instead.\n")
-                append("4. NO HALLUCINATION: If the answer is not in TIER 1/2 and TIER 3 is insufficient, clearly state your limitations.\n")
-                append("5. LANGUAGE: Respond in $preferredLanguage.\n")
+                append("\n\n### INSTRUCTIONS\n")
+                append("Answer the USER_QUERY by following these rules strictly:\n")
+                append("1. ATTACHMENT FIRST: If TIER 1 (ATTACHED_DOCUMENTS_CONTENT) contains the answer, use it and ignore all other sources.\n")
+                append("2. DATABASE SECOND: If TIER 1 fails, check TIER 2 (DATABASE_KNOWLEDGE_CONTEXT). Use it ONLY if it directly answers the query.\n")
+                append("3. PRE-TRAINED KNOWLEDGE: If the answer is NOT in TIER 1 or TIER 2, OR if the user is just saying hello/making small talk, ignore the context and use your own pre-trained knowledge.\n")
+                append("4. NO FORCED ANSWERS: Do not use the database if it is irrelevant to the query.\n")
+                append("5. LANGUAGE: Always respond in $preferredLanguage.\n")
             }
 
             val formatInstruction = """
