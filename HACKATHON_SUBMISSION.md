@@ -73,7 +73,59 @@ Chhanda is designed for:
 ### App Interface
 *   **Dashboard**: Real-time telemetry monitoring TPS and hardware health.
 *   **Web Gateway**: The QR-based connection interface for remote devices.
-*   **Chat Experience**: Fluid, high-fidelity Markdown rendering in multiple languages.
+*   **Chat Experience**:
+    *   **Fluid Interface**: High-fidelity Markdown rendering with support for Thinking traces.
+    *   **Multilingual**: Deep localized support for Bengali and Hindi.
+
+---
+
+## ⚙️ Technical Architecture
+
+### 1. The Offline RAG Pipeline
+How Chhanda processes and indexes knowledge without internet access, now featuring optimized $O(N \log K)$ search.
+
+```mermaid
+sequenceDiagram
+    participant UI as ChatScreen / WebUI
+    participant WM as WorkManager (Ingestion)
+    participant EXT as Extractors (PDF/CSV/M4A)
+    participant EE as Embedding Engine (Local)
+    participant DB as Room Vector DB
+    
+    UI->>WM: Upload File (Multimodal)
+    WM->>EXT: Local Parsing
+    EXT-->>WM: Raw Text
+    WM->>EE: Chunk & Vectorize
+    EE-->>WM: 384-d Embedding
+    WM->>DB: Persist Chunks & Vectors
+    DB-->>DB: Index with Min-Heap Strategy
+```
+
+### 2. The Chhanda Gateway Flow
+How the Android device acts as a secure local AI hub for other devices, guarded by real-time thermal throttling.
+
+```mermaid
+graph LR
+    subgraph HostDevice [Android Host Device]
+        LLM[Gemma 4 Engine]
+        TST[Thermal Status Tracker]
+        KTOR[Ktor Server]
+        SM[Session Manager]
+    end
+    
+    subgraph RemoteClients [Remote Clients]
+        Browser[Web Browser]
+        API[External API]
+    end
+    
+    Browser -- Scan QR --> KTOR
+    API -- API Key --> KTOR
+    KTOR --> SM
+    SM --> LLM
+    LLM -- Stream Response --> KTOR
+    KTOR -- SSE / JSON --> Browser
+    LLM -.->|Auto-Throttle| TST
+```
 
 ---
 

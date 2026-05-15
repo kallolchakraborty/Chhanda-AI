@@ -89,15 +89,17 @@ graph TD
     end
 
     subgraph Domain Layer [Domain Layer - Pure Kotlin]
-        UC[Use Cases: SendMessage, IngestDoc, etc.]
+        UC[Use Cases: SendMessage, IngestDoc]
+        TCI[TurnContextIngestor: Routing Logic]
         MOD[Domain Models: TokenUpdate, Session]
         CM[ContextManager: Memory & History]
     end
 
     subgraph Data Layer [Data Layer - Android/Framework Specific]
-        REP[Repositories: ChatRepo, DeviceRepo]
-        DB[(Room DB: VectorStore, Messages)]
-        LRT[LiteRT LM Engine: JNI Bindings]
+        REP[Repositories: ChatRepo, Settings]
+        TST[ThermalStatusTracker: Hardware Guard]
+        DB[(Room DB: Optimized VectorStore)]
+        LRT[LiteRT LM Engine: TurboQuant Enabled]
         KTOR[Ktor Server: Network Gateway]
         WRK[WorkManager: Background Ingestion]
     end
@@ -105,6 +107,10 @@ graph TD
     UI -->|State/Events| VM
     VM -->|Executes| UC
     UC -->|Business Logic| MOD
+    UC -->|Routes via| TCI
+    TCI -->|Scans| REP
+    TCI -->|Triggers| WRK
+    LRT -->|Throttled by| TST
     UC -->|Interacts| REP
     CM -->|Formats RAG| REP
     UC -->|Inference| LRT
@@ -235,7 +241,7 @@ sequenceDiagram
     
     UI->>VM: Upload File / URI
     VM->>WM: Enqueue IngestionWorker
-    WM->>EXT: Route by DocType
+    WM->>EXT: Route by DocType (PDF/CSV/M4A/etc)
     EXT-->>WM: Extracted Raw Text
     WM->>WM: Chunking (Overlap Strategy)
     loop For each chunk
@@ -243,6 +249,7 @@ sequenceDiagram
         EE-->>WM: 384-d Embedding
         WM->>DB: Insert (Text + Vector + Metadata)
     end
+    DB-->>DB: Index with Min-Heap Strategy
     WM-->>UI: Broadcast "Ingestion Complete"
 ```
 
