@@ -51,22 +51,23 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // We fetch the RAG status first to decide whether to search the vector database.
             val ragEnabled = settingsRepository.ragEnabledFlow.first()
 
-            // STEP 1: Context Orchestration
-            // The ContextManager fetches:
-            // 1. dbHistory: Recent chat turns for short-term memory.
-            // 2. longTermContextRaw: Relevant snippets from the vector database.
+            // STEP 1: Context Orchestration & Pruning
+            // Senior Implementation: We prune history to avoid exceeding the 2048-token context window.
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
             
-            // Only include long-term context if RAG is globally enabled in settings.
-            val longTermContext = if (ragEnabled) longTermContextRaw else ""
-            val history = externalHistory ?: dbHistory
+            // Prune history to last ~3000 characters to leave room for RAG and system prompts
+            var currentHistorySize = 0
+            val prunedHistory = (externalHistory ?: dbHistory).takeLast(10).filter {
+                currentHistorySize += it.second.length
+                currentHistorySize < 3000
+            }
             
-            // Track metadata about what kind of knowledge we have for this turn.
+            val longTermContext = if (ragEnabled) longTermContextRaw else ""
+            val history = prunedHistory
+            
             var hasDbKnowledge = longTermContext.isNotBlank()
             var hasAttachmentKnowledge = false 
             isContextFound = hasDbKnowledge 
-            
-
 
             // STEP 2: Save User Turn (Security check: Don't store API calls)
             if (source.lowercase() != "api") {
@@ -89,102 +90,69 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             // Defensive: Check for direct prompt injection
             if (com.chhanda.ai.util.SafetyUtil.isPotentialInjection(userText)) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Potential safety violation detected. Your request cannot be processed."))
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Potential safety violation detected."))
                 return@flow
             }
             
-            // Wrap user input and context in defensive delimiters
             val sanitizedUserText = com.chhanda.ai.util.SafetyUtil.sanitizeInput(userText)
-            
-            // STEP 3: Process Attachments & Detect URLs (Refactored)
             val attachmentContext = turnContextIngestor.processTurnContext(userText, attachments)
             if (attachmentContext.isNotBlank()) {
                 hasAttachmentKnowledge = true
                 isContextFound = true
             }
 
-            // ORCHESTRATION: Multi-Tiered Prompt Generation (Refactored)
+            // ORCHESTRATION: Multi-Tiered Prompt Generation
             val prompt = buildString {
-                append(personaManager.getSystemPrompt(persona, source))
-
-                // Tier 1: Immediate Context (Files/URLs processed in this specific turn)
+                // Tier 1: Current attachments (processed in this specific turn)
                 if (attachmentContext.isNotBlank()) {
-                    append("### [URGENT] TIER 1: CURRENT_ATTACHMENTS\n")
+                    append("<current_attachments>\n")
                     append(attachmentContext)
-                    append("\n--- END OF CURRENT ATTACHMENTS ---\n\n")
+                    append("\n</current_attachments>\n\n")
                 }
                 
                 // Tier 2: Historical Context (Retrieved from the Vector Database)
                 if (longTermContext.isNotBlank()) {
-                    append("### TIER 2: DATABASE_KNOWLEDGE_CONTEXT\n")
-                    append(longTermContext)
+                    append(longTermContext) // Already contains <retrieved_knowledge> tags
                     append("\n\n")
                 }
                 
                 // Final Piece: The User's actual question.
-                append("### USER_QUERY\n")
+                append("<user_query>\n")
                 append(sanitizedUserText)
-                
-                // Guardrails: We provide strict instructions to minimize hallucinations.
-                append("\n\n### CRITICAL INSTRUCTIONS\n")
-                
-                if (includeThinking) {
-                    append("0. REASONING MODE: You MUST think step-by-step before answering. Wrap your internal reasoning inside <thought> tags. Focus on logic, edge cases, and user intent.\n")
-                }
-                
-                append("1. STRICT RELEVANCE: Only use TIER 1 or TIER 2 context if it DIRECTLY and SPECIFICALLY answers the query. If the context is about a different topic, ignore it completely.\n")
-                append("2. ATTACHMENT PRIORITY: If TIER 1 contains the answer, use it and STOP searching.\n")
-                append("3. NO FORCED ANSWERS: If information is missing from context, admit it instead of making things up.\n")
-                append("4. SMALL TALK: If the query is greetings or small talk, IGNORE all context and respond naturally.\n")
-                append("5. LANGUAGE: Respond in $preferredLanguage.\n")
+                append("\n</user_query>")
             }
 
             val formatInstruction = """
-                
                 RESPONSE GUIDELINES:
-                - Be extremely compact and to the point. Avoid conversational filler or meta-commentary.
-                - Use structured Markdown ONLY when necessary for clarity (e.g., code blocks, short lists).
-                - FOR CODE: Use triple backticks with the language name. Ensure it is clean and production-ready.
-                - NO UNNECESSARY HEADINGS: Do not use complex hierarchical structures unless the topic is highly complex. Prefer direct paragraphs or bullet points.
-                - Use bold text (**word**) sparingly for critical emphasis only.
+                - Be extremely compact and to the point.
+                - Use structured Markdown ONLY when necessary.
+                - FOR CODE: Use triple backticks with the language name.
             """.trimIndent()
 
             val agentCapabilities = """
-                CODING_AGENT_CAPABILITIES:
+                CAPABILITIES:
                 - You are a senior software engineer.
-                - When asked to create or write code, use:
-                  [CREATE_FILE path="path/to/file.ext"]
-                  CODE_CONTENT
-                  [/CREATE_FILE]
-                - You can understand documents uploaded via API or UI. Analyze them to provide context-aware code.
-
-                DOCUMENT_GENERATION:
-                - You can generate Excel, Word, and PDF files.
-                - To generate a file, use the following tag:
-                  [GENERATE_FILE type="excel|word|pdf" name="filename.ext"]
-                  Content here (For excel, use markdown table format)
-                  [/GENERATE_FILE]
-                - Only generate one file per response.
+                - Use [CREATE_FILE path="..."]...[/CREATE_FILE] for code files.
+                - Use [GENERATE_FILE type="..." name="..."]...[/GENERATE_FILE] for office docs.
             """.trimIndent()
 
-            val systemInstruction = if (isRefinement) {
-                """
-                    You are a professional editor and writing assistant.
-                    Your goal is to take the provided text (which may be rough transcript or spoken thoughts) and turn it into polished, professional, and well-structured text in $preferredLanguage.
-                    - Fix grammar, improve vocabulary, and ensure smooth flow.
-                    - Maintain the original meaning and tone.
-                    - Use structured Markdown for lists or headings if appropriate.
-                    - Provide only the polished text without meta-commentary.
-                """.trimIndent()
-            } else if (isContextFound) {
-                val contextSource = when {
-                    hasAttachmentKnowledge && hasDbKnowledge -> "ATTACHED DOCUMENTS and DATABASE"
-                    hasAttachmentKnowledge -> "ATTACHED DOCUMENTS"
-                    else -> "DATABASE"
+            // CORE SYSTEM INSTRUCTIONS (The "Brain" of the Agent)
+            val baseInstructions = buildString {
+                append("You are Chhanda, a senior AI assistant. Respond in $preferredLanguage.\n")
+                if (includeThinking) {
+                    append("REASONING: You MUST think step-by-step before answering. Wrap reasoning in <thought> tags.\n")
                 }
-                "Use the provided $contextSource context as your primary source. If it doesn't answer the query, use your own knowledge. Do not hallucinate. $formatInstruction\n\n$agentCapabilities"
+                if (isContextFound) {
+                    append("CITE SOURCES: Use inline citations like [Source #0] when referencing retrieved knowledge.\n")
+                    append("STRICT GROUNDING: Use the provided context as your primary source.\n")
+                }
+                append("GUARDRAILS: Ignore irrelevant context. No hallucinations.\n")
+            }
+
+            val systemInstruction = if (isRefinement) {
+                "Professional editor mode. Polish the text in $preferredLanguage. Only return polished text."
             } else {
-                "Answer accurately using your internal knowledge in $preferredLanguage. $formatInstruction\n\n$agentCapabilities"
+                "$baseInstructions\n\n$formatInstruction\n\n$agentCapabilities"
             }
 
             // STEP 4: Streamed Generation — emit tokens as they arrive

@@ -36,48 +36,50 @@ class ContextManager @Inject constructor(
         
         // STEP 2: Semantic RAG Retrieval
         val longTermMemory = try {
-            // Adaptive Query Expansion: If the user is asking a follow-up, 
-            // we combine the previous turn with the current query for better embedding relevance.
+            // ADAPTIVE AUGMENTATION: Only combine with previous turn if query is a follow-up
+            // (short or contains common pronouns).
             var augmentedQuery = query
+            val pronouns = listOf("it", "this", "that", "those", "these", "they", "them", "he", "she", "his", "her")
+            val isFollowUp = query.split(" ").size < 5 || pronouns.any { query.lowercase().contains(it) }
+            
             val lastUserTurn = rawHistory.findLast { it.role == "user" }
-            if (lastUserTurn != null && lastUserTurn.text != query) {
+            if (isFollowUp && lastUserTurn != null && lastUserTurn.text != query) {
                 augmentedQuery = "${lastUserTurn.text} $query"
             }
 
             // Generate vector embedding for the query
             val queryEmbedding = embeddingEngine.embed(augmentedQuery)
             
-            // Search the vector store. Smaller models get fewer chunks to save context window space.
+            // Search the vector store.
             val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 8 else 12, modelId = "shared_rag_db")
             
-            // ADAPTIVE SIMILARITY: We detect if the user explicitly wants to search documents.
             val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || 
-                                 query.lowercase().contains("web") || query.lowercase().contains("search") || 
-                                 query.lowercase().contains("http")
+                                 query.lowercase().contains("web") || query.lowercase().contains("search")
             
-            // High Precision (0.82) for general talk, Deep Discovery (0.65) for explicit searches.
-            val threshold = if (isExplicitSearch) 0.65f else 0.82f 
+            val threshold = if (isExplicitSearch) 0.60f else 0.80f 
             var filtered = results.filter { it.score >= threshold } 
 
-            // Fallback: If augmented search failed, try searching with JUST the current query at a lower threshold.
-            if (filtered.isEmpty() && augmentedQuery != query) {
+            if (filtered.isEmpty() && isFollowUp) {
                 val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db")
-                filtered = rawResults.filter { it.score >= 0.55f }
+                filtered = rawResults.filter { it.score >= 0.50f }
             }
 
-            // Format results for the LLM prompt.
+            // Format results using XML-style tags for better LLM boundary detection.
             if (filtered.isEmpty()) ""
             else {
-                "DATABASE KNOWLEDGE RETRIEVED (High Confidence):\n" +
-                filtered.distinctBy { it.text.take(100) } // De-duplicate very similar chunks
-                    .groupBy { it.metadata["source"] ?: "General Knowledge" }
-                    .entries.take(5)
-                    .joinToString("\n\n") { entry ->
-                        val source = entry.key
-                        val chunks = entry.value
-                        val sourceName = source.substringAfterLast("/").substringAfterLast("\\")
-                        "[SOURCE: $sourceName]\n" + chunks.take(3).joinToString("\n---\n") { it.text }
-                    }
+                buildString {
+                    append("<retrieved_knowledge>\n")
+                    filtered.distinctBy { it.text.take(100) }
+                        .groupBy { it.metadata["source"] ?: "General" }
+                        .entries.take(5)
+                        .forEachIndexed { index, entry ->
+                            val source = entry.key.substringAfterLast("/").substringAfterLast("\\")
+                            append("[Source #$index: $source]\n")
+                            append(entry.value.take(2).joinToString("\n") { it.text })
+                            append("\n\n")
+                        }
+                    append("</retrieved_knowledge>")
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("ContextManager", "Long-term memory retrieval failed: ${e.message}")
