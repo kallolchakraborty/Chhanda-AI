@@ -48,8 +48,7 @@ class ChatViewModel @Inject constructor(
     fun loadSuggestions() {
         viewModelScope.launch {
             try {
-                val chunks = vectorChunkDao.getAll()
-                val uniqueSources = chunks.map { it.source }.distinct().take(5)
+                val uniqueSources = vectorChunkDao.getDistinctSources(5)
                 _suggestions.value = uniqueSources.mapIndexed { index, source ->
                     val cleanSource = if (source.startsWith("http")) {
                         try {
@@ -170,7 +169,10 @@ class ChatViewModel @Inject constructor(
                             }
                         }
                         is TokenUpdate.Final -> {
-
+                            if (buffer.isNotEmpty()) {
+                                _currentPartialResponse.value += buffer
+                                buffer = ""
+                            }
                             _currentRt.value = update.responseTimeMs
                             _currentPartialResponse.value = ""
                             _currentTps.value = 0.0

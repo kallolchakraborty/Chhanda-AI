@@ -16,6 +16,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.cancel
 import java.net.NetworkInterface
 import java.util.Collections
 import javax.inject.Inject
@@ -77,26 +80,9 @@ class SystemViewModel @Inject constructor(
     private val _costMetrics = MutableStateFlow(com.chhanda.ai.domain.model.CostMetrics("", "", ""))
     val costMetrics = _costMetrics.asStateFlow()
 
-    init {
 
-        viewModelScope.launch {
-            while (true) {
-                try {
-                    if (_isAppVisible.value) {
-                        _latencyMetrics.value = metricsManager.getLatencyMetrics()
-                        _throughputMetrics.value = metricsManager.getThroughputMetrics()
-                        _memoryMetrics.value = metricsManager.getMemoryMetrics()
-                        _qualityMetrics.value = metricsManager.getQualityMetrics()
-                        _costMetrics.value = metricsManager.getCostMetrics()
-                    }
-                } catch (e: Exception) {
-                    Log.e("SystemViewModel", "Telemetry polling failed", e)
-                }
 
-                delay(2000)
-            }
-        }
-    }
+
 
     private var activeScrapeJob: kotlinx.coroutines.Job? = null
 
@@ -212,38 +198,7 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    init {
-        viewModelScope.launch {
-            try {
-                val file = java.io.File(context.filesDir, "crash_log.txt")
-                if (file.exists()) {
-                    val crashLog = file.readText()
-                    addLog("CRASH", crashLog, "ERROR")
-                    file.delete()
-                }
-            } catch (e: Exception) {
 
-            }
-
-            while(true) {
-                try {
-                    val fiveMinutesAgo = System.currentTimeMillis() - 5 * 60 * 1000
-                    val activeDevices = deviceDao.getActiveConnections()
-                    activeDevices.forEach { device ->
-                        if (device.lastActive < fiveMinutesAgo) {
-                            deviceDao.updateDeviceStatus(device.deviceName, false, device.lastActive)
-                            addLog("NETWORK", "Device ${device.deviceName} timed out and marked as disconnected.", "INFO")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("SystemViewModel", "Error in device monitor: ${e.message}")
-                }
-                delay(10000) 
-            }
-        }
-
-        reAttachDownloads()
-    }
 
     private fun reAttachDownloads() {
         viewModelScope.launch {
@@ -421,13 +376,13 @@ class SystemViewModel @Inject constructor(
     }
 
     val darkMode = settingsRepository.darkModeFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
-    val hfToken = settingsRepository.hfTokenFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "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")
+    val hfToken = settingsRepository.hfTokenFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val serverPort = settingsRepository.serverPortFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "8080")
     val contextLength = settingsRepository.contextLengthFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "2048")
     val maxDevices = settingsRepository.maxDevicesFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 5)
     val apiKey = settingsRepository.apiKeyFlow
-        .map { it ?: "8961221281" }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "8961221281")
+        .map { it ?: "Initializing..." }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Initializing...")
     val publicUrl = settingsRepository.publicUrlFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val appLanguage = settingsRepository.appLanguageFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "English")
     val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 7)
@@ -548,9 +503,9 @@ class SystemViewModel @Inject constructor(
     }
 
     fun clearAllLogs() {
-        val count = _logs.value.size
         _logs.value = emptyList()
-        addLog("SYSTEM", "Cleared all logs ($count entries)", "INFO")
+        // We don't add a log entry here so the screen actually appears empty.
+        saveLogsToFile(emptyList()) 
     }
 
     private val _ownedModels = MutableStateFlow<List<com.chhanda.ai.presentation.ui.ModelInfo>>(emptyList())
@@ -820,6 +775,192 @@ class SystemViewModel @Inject constructor(
         sampleTts?.speak(sampleText, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "sample")
     }
 
+    init {
+        // Hardened Initialization: Move all startup logic to a background coroutine
+        // to prevent blocking the main thread and avoid race conditions with Hilt injections.
+        viewModelScope.launch {
+            try {
+                // Short delay to allow the ViewModel and its dependencies to fully settle
+                delay(500)
+                
+                setupLogs()
+                setupSystem()
+                setupNetworkObservables()
+                startSystemMonitors()
+            } catch (e: Throwable) {
+                Log.e("SystemViewModel", "CRITICAL: Initialization failure detected", e)
+            }
+        }
+    }
+
+    private fun setupLogs() {
+        _logs.value = loadLogsFromFile()
+        checkAndPerformCleanup()
+    }
+
+    private fun setupSystem() {
+        viewModelScope.launch {
+            try {
+                val file = java.io.File(context.filesDir, "crash_log.txt")
+                if (file.exists()) {
+                    val crashLog = file.readText()
+                    addLog("CRASH", crashLog, "ERROR")
+                    file.delete()
+                }
+            } catch (e: Exception) {
+                Log.e("SystemViewModel", "Crash log reader failed", e)
+            }
+            
+            reAttachDownloads()
+            scanForModels()
+            delay(1000)
+            provisionDefaultDevice()
+            ensureDefaultPort()
+            delay(1000)
+            checkForModelUpdates()
+            addLog("SYSTEM", "Gateway Engine v18 Active", "SUCCESS")
+        }
+        
+        viewModelScope.launch {
+            try {
+                val currentKey = settingsRepository.apiKeyFlow.first()
+                if (currentKey == null || currentKey == "Initializing..." || currentKey == "8961221281" || currentKey == "000000000") {
+                    val newKey = "CH-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
+                    settingsRepository.setApiKey(newKey)
+                    addLog("SYSTEM", "Provisioned device node key: $newKey", "SUCCESS")
+                }
+            } catch (e: Exception) {
+                Log.e("SystemViewModel", "API Key provision failed", e)
+            }
+        }
+    }
+
+    private fun setupNetworkObservables() {
+        viewModelScope.launch {
+            try {
+                llmEngine.performanceMetrics.collect { tps ->
+                    val formatted = if (tps > 0) tps.format(1) else "0.0"
+                    if (_tokensPerSec.value != formatted) {
+                        _tokensPerSec.value = formatted
+                    }
+                }
+            } catch (e: Exception) {
+                addLog("SYSTEM", "Telemetry observer failed: ${e.message}", "WARNING")
+            }
+        }
+
+        viewModelScope.launch {
+            chhandaServer.boundPortFlow.collect { port ->
+                _isServerRunning.value = port > 0
+            }
+        }
+        
+        viewModelScope.launch {
+            chhandaServer.serverErrorFlow.collect { msg ->
+                if (msg != null) addLog("SERVER", msg.toString(), "ERROR")
+            }
+        }
+    }
+
+    private fun startSystemMonitors() {
+        viewModelScope.launch {
+            var counter = 0
+            while (true) {
+                try {
+                    if (_isAppVisible.value) {
+                        // Fast updates (every 2-3s)
+                        if (counter % 1 == 0) {
+                            updateStats()
+                            updateTelemetry()
+                        }
+                        
+                        // Medium updates (every 10s)
+                        if (counter % 5 == 0) {
+                            reapDevices()
+                            performHealthCheck()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("SystemViewModel", "Monitor loop error", e)
+                }
+                
+                delay(2000)
+                counter++
+                if (counter > 1000) counter = 0
+            }
+        }
+    }
+
+    private fun updateTelemetry() {
+        _latencyMetrics.value = metricsManager.getLatencyMetrics()
+        _throughputMetrics.value = metricsManager.getThroughputMetrics()
+        _memoryMetrics.value = metricsManager.getMemoryMetrics()
+        _qualityMetrics.value = metricsManager.getQualityMetrics()
+        _costMetrics.value = metricsManager.getCostMetrics()
+    }
+
+    private suspend fun provisionDefaultDevice() {
+        try {
+            val existingLocal = deviceDao.getDeviceByIp("127.0.0.1")
+            if (existingLocal == null) {
+                val localDevice = com.chhanda.ai.data.repository.DeviceEntity(
+                    deviceName = "This Device",
+                    ipAddress = "127.0.0.1",
+                    connectionTime = System.currentTimeMillis(),
+                    isCurrentlyConnected = true,
+                    connectionType = "LOCAL",
+                    userAgent = "Native App",
+                    lastActive = System.currentTimeMillis()
+                )
+                deviceDao.insertDevice(localDevice)
+            }
+        } catch (e: Exception) {
+            Log.e("SystemViewModel", "Default device provision failed", e)
+        }
+    }
+
+    private suspend fun ensureDefaultPort() {
+        try {
+            val currentPort = settingsRepository.serverPortFlow.first()
+            if (currentPort == "8000" || currentPort == "8080" || currentPort == "") {
+                settingsRepository.setServerPort("8888")
+            }
+        } catch (e: Exception) {
+            Log.e("SystemViewModel", "Port check failed", e)
+        }
+    }
+
+    private suspend fun reapDevices() {
+        try {
+            val fiveMinutesAgo = System.currentTimeMillis() - 5 * 60 * 1000
+            val activeDevices = deviceDao.getActiveConnections()
+            activeDevices.forEach { device ->
+                if (device.lastActive < fiveMinutesAgo) {
+                    deviceDao.updateDeviceStatus(device.deviceName, false, device.lastActive)
+                    addLog("NETWORK", "Device ${device.deviceName} timed out.", "INFO")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SystemViewModel", "Device reaper failed", e)
+        }
+    }
+
+    private suspend fun performHealthCheck() {
+        if (!_isServerRunning.value) return
+        val port = try { chhandaServer.port } catch (e: Exception) { -1 }
+        if (port <= 0) return
+        
+        val isOk = kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                val client = URL("http://127.0.0.1:$port/ping").openConnection() as HttpURLConnection
+                client.connectTimeout = 1000
+                client.readTimeout = 1000
+                client.inputStream.bufferedReader().use { it.readText() } == "pong"
+            } catch (e: Exception) { false }
+        }
+        _isLocalLinkOk.value = isOk
+    }
+
     override fun onCleared() {
         super.onCleared()
         sampleTts?.stop()
@@ -861,107 +1002,7 @@ class SystemViewModel @Inject constructor(
         return "127.0.0.1"
     }
 
-    init {
-        _logs.value = loadLogsFromFile()
-        checkAndPerformCleanup()
-        viewModelScope.launch {
-            try {
 
-                delay(1000)
-
-                try {
-                    val existingLocal = deviceDao.getDeviceByIp("127.0.0.1")
-                    if (existingLocal == null) {
-                        val localDevice = com.chhanda.ai.data.repository.DeviceEntity(
-                            deviceName = "This Device",
-                            ipAddress = "127.0.0.1",
-                            connectionTime = System.currentTimeMillis(),
-                            isCurrentlyConnected = true,
-                            connectionType = "LOCAL",
-                            userAgent = "Native App",
-                            lastActive = System.currentTimeMillis()
-                        )
-                        deviceDao.insertDevice(localDevice)
-                    }
-                } catch (e: Exception) {
-
-                }
-
-                try {
-                    val currentPort = settingsRepository.serverPortFlow.first()
-                    if (currentPort == "8000" || currentPort == "8080" || currentPort == "") {
-                        settingsRepository.setServerPort("8888")
-                    }
-                } catch (e: Exception) {
-
-                }
-
-                scanForModels()
-
-                delay(2000)
-                checkForModelUpdates()
-                startLocalHealthCheck()
-                addLog("SYSTEM", "Gateway Engine v18 Active", "SUCCESS")
-            } catch (e: Throwable) {
-                addLog("CRITICAL", "Startup engine failure: ${e.localizedMessage}", "ERROR")
-            }
-        }
-
-        viewModelScope.launch {
-            try {
-                val currentKey = settingsRepository.apiKeyFlow.first()
-                if (currentKey == null || currentKey == "Initializing...") {
-                    val newKey = "CH-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
-                    settingsRepository.setApiKey(newKey)
-                    addLog("SYSTEM", "Provisioned device node key: $newKey", "SUCCESS")
-                }
-            } catch (e: Exception) {}
-        }
-
-        viewModelScope.launch {
-            while (true) {
-
-                if (_isAppVisible.value) {
-                    updateStats()
-                }
-                delay(if (_isAppVisible.value) 3000 else 10000)
-            }
-        }
-
-        viewModelScope.launch {
-            Log.d("SystemViewModel", "Starting performance metrics collection...")
-            try {
-                llmEngine.performanceMetrics.collect { tps ->
-                    Log.v("SystemViewModel", "Received TPS update: $tps")
-                    val formatted = if (tps > 0) tps.format(1) else "0.0"
-                    if (_tokensPerSec.value != formatted) {
-                        _tokensPerSec.value = formatted
-                    }
-                }
-            } catch (e: Exception) { 
-                Log.e("SystemViewModel", "Telemetry observer failed", e)
-                addLog("SYSTEM", "Telemetry observer failed: ${e.message}", "WARNING")
-            }
-        }
-
-        val localServer = chhandaServer
-        val pFlow: kotlinx.coroutines.flow.Flow<Int> = localServer.boundPortFlow
-        val eFlow: kotlinx.coroutines.flow.Flow<String?> = localServer.serverErrorFlow
-
-        viewModelScope.launch {
-            pFlow.collect { port ->
-                _isServerRunning.value = port > 0
-            }
-        }
-        viewModelScope.launch {
-            eFlow.collect { msg ->
-                if (msg != null) {
-                    addLog("SERVER", msg.toString(), "ERROR")
-                }
-            }
-        }
-
-    }
 
     private val _modelPaths = MutableStateFlow<Map<String, String>>(emptyMap())
 
@@ -1131,8 +1172,14 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
 
-                val totalAppSize = getAppStorageSize()
-
+                val now = System.currentTimeMillis()
+                val totalAppSize = if (now - lastStorageCheck > 30000 || storageDirty) {
+                    lastStorageCheck = now
+                    storageDirty = false
+                    getAppStorageSize()
+                } else cachedStorageSize
+                
+                cachedStorageSize = totalAppSize
                 val vectorUsage = getVectorDbSize()
 
                 val rawCpu = getCpuName()
@@ -1875,8 +1922,18 @@ class SystemViewModel @Inject constructor(
         _logs.update { current ->
             (listOf(entry) + current).take(100)
         }
-        saveLogsToFile(_logs.value)
+        
+        logSaveJob?.cancel()
+        logSaveJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(2000)
+            saveLogsToFile(_logs.value)
+        }
     }
+    
+    private var logSaveJob: Job? = null
+    private var cachedStorageSize: Long = 0L
+    private var lastStorageCheck: Long = 0L
+    private var storageDirty: Boolean = true
 
     fun simulateQrConnection() {
         viewModelScope.launch {

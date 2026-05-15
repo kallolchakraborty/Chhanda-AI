@@ -33,4 +33,7 @@ interface VectorChunkDao {
 
     @Query("DELETE FROM vector_chunks")
     suspend fun clearAll()
+
+    @Query("SELECT DISTINCT source FROM vector_chunks LIMIT :limit")
+    suspend fun getDistinctSources(limit: Int = 5): List<String>
 }

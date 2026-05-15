@@ -302,8 +302,8 @@ class ChhandaServer @Inject constructor(
 
                 val validateAuth: suspend (io.ktor.server.application.ApplicationCall) -> Boolean = { call ->
                     val providedKey = call.request.headers["X-API-KEY"] ?: call.request.queryParameters["key"]
-                    val actualKey = settingsRepository.apiKeyFlow.firstOrNull() ?: "000000000"
-                    if (providedKey != actualKey) {
+                    val actualKey = settingsRepository.apiKeyFlow.firstOrNull()
+                    if (actualKey.isNullOrBlank() || actualKey == "Initializing..." || providedKey != actualKey) {
                         call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid API Key"))
                         false
                     } else true
@@ -331,6 +331,14 @@ class ChhandaServer @Inject constructor(
 
                 post("/v1/chat/completions") {
                     if (!validateAuth(call)) return@post
+                    val remoteIp = call.request.local.remoteHost
+                    val now = System.currentTimeMillis()
+                    val lastRequest = clientRequestWindow[remoteIp] ?: 0L
+                    if (now - lastRequest < RATE_LIMIT_MS) {
+                        call.respond(io.ktor.http.HttpStatusCode.TooManyRequests, mapOf("error" to "Rate limit exceeded"))
+                        return@post
+                    }
+                    clientRequestWindow[remoteIp] = now
                     try {
                         val req = call.receive<OpenAiChatRequest>()
                         val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.content ?: ""

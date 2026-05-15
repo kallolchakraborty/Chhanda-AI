@@ -18,8 +18,6 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
-    private val loadBalancer = LoadBalancer(numReplicas = 1) 
-
     operator fun invoke(
         userText: String, 
         deviceId: String, 
@@ -33,8 +31,6 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         persona: String? = null,
         includeThinking: Boolean = true
     ): kotlinx.coroutines.flow.Flow<com.chhanda.ai.domain.model.TokenUpdate> = kotlinx.coroutines.flow.flow {
-        val replica = loadBalancer.getReplica(userText)
-        android.util.Log.d("LoadBalancer", "Routed request to replica: $replica")
 
         var saved = false
         var partialAccumulated = ""
@@ -47,9 +43,12 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
             var currentHistorySize = 0
+            val ctxLen = settingsRepository.contextLengthFlow.firstOrNull()?.toIntOrNull() ?: 2048
+            val charBudget = (ctxLen * 3.5).toInt() 
+            
             val prunedHistory = (externalHistory ?: dbHistory).takeLast(10).filter {
                 currentHistorySize += it.second.length
-                currentHistorySize < 3000
+                currentHistorySize < charBudget
             }
 
             val longTermContext = if (ragEnabled) longTermContextRaw else ""
@@ -127,8 +126,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     "api", "qr" -> "Senior Technical Architect & Software Engineer"
                     else -> "Chhanda, a highly capable Senior AI Assistant"
                 }
-                val sanitizedPersona = persona?.replace(Regex("[^a-zA-Z0-9 ]"), "")?.take(50)
-                append("IDENTITY: You are ${sanitizedPersona ?: role}. Respond in $preferredLanguage.\n")
+                val allowedPersonas = setOf("Senior Teacher", "Senior Software Engineer", "General Companion", "Friend", "Default")
+                val validatedPersona = if (persona != null && persona in allowedPersonas && persona != "Default") persona else null
+                append("IDENTITY: You are ${validatedPersona ?: role}. Respond in $preferredLanguage.\n")
 
                 append("REASONING (CoVe): You MUST think step-by-step using a 'Chain of Verification' approach.\n")
                 append("1. Analyze the user intent and constraints.\n")
@@ -323,7 +323,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         } catch (e: Throwable) {
             emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Generation failure: ${e.localizedMessage}"))
         } finally {
-            loadBalancer.releaseReplica(replica)
+            // Load balancer logic removed
 
             if (!saved && partialAccumulated.trim().isNotBlank()) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
@@ -335,41 +335,3 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     }
 }
 
-private class LoadBalancer(private val numReplicas: Int = 1) {
-    private val replicaLoads = mutableMapOf<Int, Int>()
-    private val maxLoadBound = 2 
-
-    fun getReplica(prompt: String): Int {
-        val prefix = prompt.take(50) 
-        val hash = prefix.hashCode()
-        val rawIdx = if (hash == Int.MIN_VALUE) 0 else Math.abs(hash)
-        val preferredReplica = rawIdx % numReplicas
-
-        synchronized(this) {
-            val currentLoad = replicaLoads[preferredReplica] ?: 0
-            if (currentLoad < maxLoadBound) {
-                replicaLoads[preferredReplica] = currentLoad + 1
-                return preferredReplica
-            }
-
-            val leastLoaded = replicaLoads.minByOrNull { it.value }?.key ?: 0
-            val leastLoad = replicaLoads[leastLoaded] ?: 0
-            if (leastLoad < maxLoadBound) {
-                replicaLoads[leastLoaded] = leastLoad + 1
-                return leastLoaded
-            }
-
-            replicaLoads[leastLoaded] = leastLoad + 1
-            return leastLoaded
-        }
-    }
-
-    fun releaseReplica(replica: Int) {
-        synchronized(this) {
-            val currentLoad = replicaLoads[replica] ?: 0
-            if (currentLoad > 0) {
-                replicaLoads[replica] = currentLoad - 1
-            }
-        }
-    }
-}
