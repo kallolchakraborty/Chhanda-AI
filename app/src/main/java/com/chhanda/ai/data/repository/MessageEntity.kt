@@ -18,5 +18,6 @@ data class MessageEntity(
     val generatedFilePath: String? = null,
     val attachmentPaths: String? = null, // Comma-separated paths of user attachments
     val source: String = "Local", // "API", "Web", or "Local"
-    val contextSource: String? = null // "Attachment", "Knowledge Base", or "Multi-Source"
+    val contextSource: String? = null, // "Attachment", "Knowledge Base", or "Multi-Source"
+    val thinking: String? = null // Extracted reasoning content (e.g. from <think> tags)
 )

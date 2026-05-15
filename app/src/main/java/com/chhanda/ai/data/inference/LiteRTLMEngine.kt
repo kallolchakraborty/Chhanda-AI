@@ -294,8 +294,8 @@ class LiteRTLMEngine @Inject constructor(
         
         val hardenedSystemPrompt = com.chhanda.ai.util.SafetyGuardrails.getHardenedSystemPrompt(systemInstruction)
 
-        // ── Build user content (plain text, NO Gemma tags — session adds them) ─
-        val sanitized = if (auditedPrompt.length > 4000) auditedPrompt.takeLast(4000) else auditedPrompt
+        // ── Build user content (Increased limit to accommodate codebase context) ─
+        val sanitized = if (auditedPrompt.length > 32000) auditedPrompt.takeLast(32000) else auditedPrompt
         Log.d(TAG, "Inference start. Prompt length=${sanitized.length} chars")
 
         // ── Robust Initialization with Retry ───────────────────
@@ -371,6 +371,8 @@ class LiteRTLMEngine @Inject constructor(
                                 // into the native callback thread to slow down the generation loop.
                                 val thermal = thermalStatusTracker.thermalStatus.value
                                 when (thermal) {
+                                    "Fair" -> Thread.sleep(5)
+                                    "Serious" -> Thread.sleep(15)
                                     "Severe" -> Thread.sleep(30)
                                     "Critical" -> Thread.sleep(80)
                                     "Emergency" -> Thread.sleep(200)

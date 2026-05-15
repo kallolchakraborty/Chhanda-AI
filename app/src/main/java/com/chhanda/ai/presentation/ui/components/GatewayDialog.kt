@@ -1,8 +1,10 @@
 package com.chhanda.ai.presentation.ui.components
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -50,7 +52,7 @@ fun GatewayDialog(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth().wrapContentHeight()
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 // Unified Title
@@ -61,7 +63,7 @@ fun GatewayDialog(
                     Icon(Icons.Default.QrCode, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        if (showSetup) "Network Setup" else "Chhanda Gateway", 
+                        if (showSetup) "Network Setup" else "Connection Details", 
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f)
                     )
@@ -142,24 +144,59 @@ fun GatewayDialog(
                     
                     val apiUrl = "$baseServerUrl/v1"
                     
-                    val modelId = when {
-                        activeModelName.contains("E2B", ignoreCase = true) -> "gemma-4-e2b"
-                        activeModelName.contains("E4B", ignoreCase = true) -> "gemma-4-e4b"
-                        else -> "gemma-4"
+                    val lowerName = activeModelName.lowercase()
+                    val modelId = activeModelName.replace(" ", "-").lowercase()
+                    
+                    val template = when {
+                        lowerName.contains("llama") -> "llama3"
+                        lowerName.contains("mistral") || lowerName.contains("mixtral") -> "mistral"
+                        lowerName.contains("phi") -> "phi3"
+                        lowerName.contains("gemma") -> "gemma"
+                        lowerName.contains("deepseek") -> "deepseek"
+                        else -> "chatml"
                     }
+                    
+                    val useToolCalling = lowerName.contains("gemma") && 
+                        (lowerName.contains("e2b") || lowerName.contains("e4b"))
 
                     val continueConfig = """
-                    models:
-                      - name: "Chhanda: $activeModelName"
-                        provider: "openai"
-                        model: "$modelId"
-                        apiBase: "$baseServerUrl"
-                        apiKey: "$apiKey"
-                        template: "chatml"
-                    """.trimIndent()
+                    |name: Local Config
+                    |version: 1.0.0
+                    |schema: v1
+                    |
+                    |models:
+                    |  - name: "Chhanda: $activeModelName"
+                    |    provider: "openai"
+                    |    model: "$modelId"
+                    |    apiBase: "$baseServerUrl/v1"
+                    |    apiKey: "$apiKey"
+                    |    template: "$template"
+                    |    useToolCalling: $useToolCalling
+                    |
+                    |tabAutocompleteModel:
+                    |  name: "Chhanda Autocomplete"
+                    |  provider: "openai"
+                    |  model: "$modelId"
+                    |  apiBase: "$baseServerUrl/v1"
+                    |  apiKey: "$apiKey"
+                    |
+                    |contextProviders:
+                    |  - name: "code"
+                    |  - name: "docs"
+                    |  - name: "diff"
+                    |  - name: "terminal"
+                    |
+                    |slashCommands:
+                    |  - name: "edit"
+                    |    description: "Edit selected code"
+                    |  - name: "explain"
+                    |    description: "Explain selected code"
+                    |  - name: "comment"
+                    |    description: "Write comments for selected code"
+                    """.trimMargin("|")
 
                     Column(
-                        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // QR Code
@@ -186,74 +223,115 @@ fun GatewayDialog(
                         
                         Spacer(Modifier.height(20.dp))
                         
-                        // API Credentials
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                        // API Credentials — with visible vertical color bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("API URL", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.weight(1f))
-                                    IconButton(onClick = {
-                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API URL", apiUrl))
-                                    }, modifier = Modifier.size(20.dp)) {
-                                        Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(12.dp))
+                            // Visible vertical bar
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        color = Color(0xFF4CAF50),
+                                        shape = RoundedCornerShape(2.dp)
+                                    )
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    // API URL row
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("API URL", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            Text(apiUrl, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                                        }
+                                        IconButton(onClick = {
+                                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API URL", apiUrl))
+                                        }, modifier = Modifier.size(28.dp)) {
+                                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                    
+                                    Spacer(Modifier.height(12.dp))
+                                    
+                                    // API KEY row
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("API KEY", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                                Spacer(Modifier.width(4.dp))
+                                                IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }, modifier = Modifier.size(18.dp)) {
+                                                    Icon(if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, modifier = Modifier.size(12.dp))
+                                                }
+                                            }
+                                            Text(
+                                                if (isApiKeyMasked) "••••••••••••••••" else apiKey, 
+                                                fontSize = 11.sp, 
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                modifier = Modifier.clickable { isApiKeyMasked = !isApiKeyMasked }
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API Key", apiKey))
+                                        }, modifier = Modifier.size(28.dp)) {
+                                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
                                     }
                                 }
-                                Text(apiUrl, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                                
-                                Spacer(Modifier.height(8.dp))
-                                
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("API KEY", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                    IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }, modifier = Modifier.size(20.dp)) {
-                                        Icon(if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, modifier = Modifier.size(12.dp))
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    IconButton(onClick = {
-                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API Key", apiKey))
-                                    }, modifier = Modifier.size(20.dp)) {
-                                        Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(12.dp))
-                                    }
-                                }
-                                Text(
-                                    if (isApiKeyMasked) "••••••••••••••••" else apiKey, 
-                                    fontSize = 11.sp, 
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    modifier = Modifier.clickable { isApiKeyMasked = !isApiKeyMasked }
-                                )
                             }
                         }
                         
                         Spacer(Modifier.height(16.dp))
                         
-                        // Continue Config
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Continue Config", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Spacer(Modifier.weight(1f))
-                                IconButton(
-                                    onClick = {
-                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Config", continueConfig))
-                                    },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                                }
+                        // Continue Config — with visible vertical color bar
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Continue Config", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Spacer(Modifier.weight(1f))
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Config", continueConfig))
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                             }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        color = Color(0xFF2196F3),
+                                        shape = RoundedCornerShape(2.dp)
+                                    )
+                            )
+                            Spacer(Modifier.width(4.dp))
                             Surface(
                                 color = Color.Black.copy(alpha = 0.05f),
                                 shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.weight(1f).heightIn(max = 140.dp)
                             ) {
                                 Text(
                                     continueConfig,
-                                    modifier = Modifier.padding(8.dp),
+                                    modifier = Modifier.verticalScroll(rememberScrollState()).padding(8.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontSize = 10.sp,
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace

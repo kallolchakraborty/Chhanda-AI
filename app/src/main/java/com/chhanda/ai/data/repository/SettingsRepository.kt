@@ -18,11 +18,6 @@ class SettingsRepository @Inject constructor(
 ) {
     private val dataStore = context.dataStore
 
-    /**
-     * Senior Hardening: Sensitive credentials (HF_TOKEN, API_KEY) are stored in hardware-backed
-     * EncryptedSharedPreferences. This uses the Android KeyStore System (TEE/SE) to prevent 
-     * extraction even on rooted devices.
-     */
     private val masterKey = androidx.security.crypto.MasterKeys.getOrCreate(androidx.security.crypto.MasterKeys.AES256_GCM_SPEC)
     private val encryptedPrefs = try {
         androidx.security.crypto.EncryptedSharedPreferences.create(
@@ -37,10 +32,8 @@ class SettingsRepository @Inject constructor(
         context.getSharedPreferences("secure_settings_fallback", Context.MODE_PRIVATE)
     }
 
-    // StateFlows are used to provide a reactive bridge between the synchronous SharedPreferences
-    // and the asynchronous Compose UI, ensuring consistent state across the app.
     private val _hfTokenState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("hf_token", "") ?: "")
-    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("api_key", ""))
+    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("api_key", null) ?: "000000000")
 
     object PreferencesKeys {
         val DARK_MODE = booleanPreferencesKey("dark_mode")

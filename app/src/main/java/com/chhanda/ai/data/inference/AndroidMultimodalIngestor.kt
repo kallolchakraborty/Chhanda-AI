@@ -51,8 +51,8 @@ class AndroidMultimodalIngestor @Inject constructor(
                     // We trigger the compute-heavy OCR fallback in this case.
                     if (text.isNotBlank() && text.trim().length > 50) {
                         android.util.Log.i("Ingestor", "PDF native extraction successful (${text.length} chars)")
-                        // Chunking ensures the RAG model receives manageable context windows
-                        chunks.addAll(text.chunked(1000))
+                        // Senior Semantic Chunking: Honors paragraphs and sentences
+                        chunks.addAll(semanticChunking(text, targetSize = 1000))
                     } else {
                         android.util.Log.w("Ingestor", "PDF native text sparse, falling back to OCR...")
                         val ocrChunks = performOcrOnPdf(uri)
@@ -365,5 +365,57 @@ class AndroidMultimodalIngestor @Inject constructor(
             throw Exception("Failed to extract text from CSV file: ${e.message}")
         }
         stringBuilder.toString().trim()
+    }
+    /**
+     * Senior Semantic Chunking:
+     * Splits text by structural markers (paragraphs, then sentences) to maintain
+     * contextual integrity for the RAG pipeline.
+     */
+    private fun semanticChunking(text: String, targetSize: Int): List<String> {
+        if (text.length <= targetSize) return listOf(text)
+
+        val chunks = mutableListOf<String>()
+        val paragraphs = text.split(Regex("\n\n+"))
+        var currentChunk = StringBuilder()
+
+        for (para in paragraphs) {
+            if (currentChunk.length + para.length <= targetSize) {
+                currentChunk.append(para).append("\n\n")
+            } else {
+                if (currentChunk.isNotEmpty()) {
+                    chunks.add(currentChunk.toString().trim())
+                    currentChunk = StringBuilder()
+                }
+                
+                if (para.length > targetSize) {
+                    // Paragraph itself is too big, split by sentences
+                    val sentences = para.split(Regex("(?<=[.!?])\\s+"))
+                    for (sentence in sentences) {
+                        if (currentChunk.length + sentence.length <= targetSize) {
+                            currentChunk.append(sentence).append(" ")
+                        } else {
+                            if (currentChunk.isNotEmpty()) {
+                                chunks.add(currentChunk.toString().trim())
+                                currentChunk = StringBuilder()
+                            }
+                            // Sentence itself is too big (very rare), naive split
+                            if (sentence.length > targetSize) {
+                                chunks.addAll(sentence.chunked(targetSize))
+                            } else {
+                                currentChunk.append(sentence).append(" ")
+                            }
+                        }
+                    }
+                } else {
+                    currentChunk.append(para).append("\n\n")
+                }
+            }
+        }
+        
+        if (currentChunk.isNotEmpty()) {
+            chunks.add(currentChunk.toString().trim())
+        }
+        
+        return chunks
     }
 }

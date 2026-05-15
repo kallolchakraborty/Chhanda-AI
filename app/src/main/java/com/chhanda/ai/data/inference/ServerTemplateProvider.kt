@@ -3,10 +3,6 @@ package com.chhanda.ai.data.inference
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Senior Architect Move: Decoupling UI from Business Logic.
- * This provider manages the embedded Web UI templates for the AI Gateway.
- */
 @Singleton
 class ServerTemplateProvider @Inject constructor() {
 
@@ -62,7 +58,6 @@ class ServerTemplateProvider @Inject constructor() {
         savedName: String, 
         sessions: List<String>
     ): String {
-        val ip = host // Simple mapping for now
         return """
         <!DOCTYPE html>
         <html lang="en">
@@ -70,246 +65,367 @@ class ServerTemplateProvider @Inject constructor() {
             <meta charset="UTF-8">
             <title>Chhanda AI Gateway</title>
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+            <script src="https:
+            <link href="https:
             <style>
                 :root {
-                    --primary: #d0bcff;
-                    --on-primary: #381e72;
-                    --surface: #1c1b1f;
-                    --on-surface: #e6e1e5;
-                    --surface-container: #2b2930;
-                    --fg: #e6e1e5;
-                    --muted: #938f99;
-                    --border: #49454f;
-                    --user-bubble: #4a4458;
-                    --ai-bubble: #2b2930;
+                    --primary: #a8c7fa;
+                    --on-primary: #062e6f;
+                    --surface: #1e1e1e;
+                    --on-surface: #e3e3e3;
+                    --surface-container: #2d2d2d;
+                    --fg: #e3e3e3;
+                    --muted: #c4c7c5;
+                    --border: #444746;
+                    --user-bubble: #0b57d0;
+                    --user-text: #ffffff;
+                    --ai-bubble: #2d2d2d;
                 }
-                
+
                 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
                 body {
                     background: var(--surface);
                     color: var(--fg);
                     font-family: 'Inter', -apple-system, system-ui, sans-serif;
                     margin: 0;
-                    height: 100vh;
+                    height: 100dvh;
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
                 }
-                
+
+                #app-container {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    max-width: 1000px;
+                    width: 100%;
+                    height: 100%;
+                    overflow: hidden;
+                    margin: 0 auto;
+                    position: relative;
+                }
+
                 #hdr {
-                    padding: 8px 16px;
-                    background: var(--surface);
+                    padding: 12px 20px;
+                    background: rgba(30, 30, 30, 0.8);
+                    backdrop-filter: blur(12px);
                     border-bottom: 1px solid var(--border);
                     display: flex;
                     align-items: center;
-                    gap: 12px;
+                    gap: 16px;
                     flex-shrink: 0;
                     z-index: 10;
                 }
-                
-                #logo { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
-                #title { font-weight: 700; font-size: 16px; color: var(--fg); flex: 1; }
-                
+
+                #logo { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+                #title { font-weight: 700; font-size: 18px; color: var(--fg); flex: 1; }
+
                 #badge {
                     display: flex;
                     align-items: center;
                     gap: 6px;
-                    padding: 4px 10px;
+                    padding: 6px 12px;
                     background: var(--surface-container);
                     border-radius: 100px;
-                    font-size: 11px;
-                    font-weight: 700;
+                    font-size: 12px;
+                    font-weight: 600;
                     color: var(--muted);
                 }
-                #badge.on { color: #10B981; }
-                #badge.err { color: #EF4444; }
-                #badge.warm { color: #F59E0B; }
-                #dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-                
+                #badge.on { color: #6dd68c; background: rgba(109, 214, 140, 0.1); }
+                #badge.err { color: #f28b82; background: rgba(242, 139, 130, 0.1); }
+                #badge.warm { color: #fde293; background: rgba(253, 226, 147, 0.1); }
+                #dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+
                 #msgs {
                     flex: 1;
                     overflow-y: auto;
-                    padding: 20px 16px;
+                    padding: 24px 20px;
                     display: flex;
                     flex-direction: column;
-                    gap: 16px;
-                    scroll-behavior: smooth;
-                    -webkit-overflow-scrolling: touch;
+                    gap: 24px;
                 }
-                
-                .msg-container { display: flex; flex-direction: column; max-width: 90%; }
+
+                #msgs::-webkit-scrollbar { width: 6px; }
+                #msgs::-webkit-scrollbar-track { background: transparent; }
+                #msgs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+                .msg-container { display: flex; flex-direction: column; max-width: 85%; animation: fadeIn 0.3s ease; }
                 .msg-container.u { align-self: flex-end; }
                 .msg-container.a { align-self: flex-start; }
                 .msg-container.s { align-self: center; max-width: 100%; width: 100%; }
-                
+
                 .msg {
-                    padding: 12px 16px;
-                    border-radius: 20px;
+                    padding: 14px 20px;
+                    border-radius: 24px;
                     font-size: 15px;
-                    line-height: 1.5;
+                    line-height: 1.6;
                     word-wrap: break-word;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
                 }
-                
-                .msg.u { background: var(--user-bubble); color: #fff; border-bottom-right-radius: 4px; }
-                .msg.a { background: var(--ai-bubble); color: var(--fg); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
-                .msg.s { background: transparent; color: var(--muted); font-size: 12px; text-align: center; padding: 4px; }
-                
-                .actions {
-                    display: flex;
-                    gap: 8px;
-                    margin-top: 4px;
-                    margin-left: 4px;
-                    align-items: center;
-                    width: 100%;
+
+                .msg.u { background: var(--user-bubble); color: var(--user-text); border-bottom-right-radius: 6px; }
+                .msg.a { background: var(--ai-bubble); color: var(--fg); border-bottom-left-radius: 6px; border: 1px solid var(--border); }
+                .msg.s { background: transparent; color: var(--muted); font-size: 13px; text-align: center; padding: 4px; box-shadow: none; }
+
+                .msg.a p { margin: 0 0 1em 0; }
+                .msg.a p:last-child { margin: 0; }
+                .msg.a pre { background: #1a1a1a; padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; margin: 12px 0; }
+                .msg.a code { font-family: monospace; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
+                .msg.a pre code { background: transparent; padding: 0; color: #e3e3e3; }
+                .msg.a ul, .msg.a ol { margin: 0 0 1em 0; padding-left: 24px; }
+                .msg.a table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+                .msg.a th, .msg.a td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+                .msg.a th { background: rgba(255,255,255,0.05); }
+                .msg.a blockquote { border-left: 4px solid var(--primary); margin: 0; padding-left: 12px; color: var(--muted); }
+
+                #ftr { padding: 16px 20px; background: rgba(30, 30, 30, 0.9); backdrop-filter: blur(12px); border-top: 1px solid var(--border); flex-shrink: 0; }
+                #input-line { display: flex; align-items: flex-end; gap: 12px; width: 100%; background: var(--surface-container); border-radius: 24px; border: 1px solid var(--border); padding: 6px; transition: border-color 0.2s; }
+                #input-line:focus-within { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+
+                #inp { 
+                    flex: 1; 
+                    background: transparent; 
+                    border: none; 
+                    color: var(--fg); 
+                    font-size: 16px; 
+                    padding: 12px 16px; 
+                    outline: none; 
+                    min-height: 44px; 
+                    max-height: 400px; 
+                    resize: none; 
+                    font-family: inherit; 
+                    line-height: 1.5;
                 }
-                
-                .action-btn {
-                    background: transparent;
-                    border: none;
-                    color: var(--muted);
-                    cursor: pointer;
-                    padding: 4px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: 4px;
-                    transition: all 0.2s;
-                }
-                
-                .action-btn:hover { color: var(--primary); background: rgba(255,255,255,0.05); }
-                .speed-label { font-size: 11px; color: var(--muted); align-self: center; margin-right: auto; }
-                
-                .tts-player {
-                    display: none;
-                    background: rgba(255, 255, 255, 0.12);
-                    border-radius: 12px;
-                    padding: 10px 14px;
-                    margin-top: 10px;
-                    width: 100%;
-                    align-items: center;
-                    gap: 12px;
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                    animation: slideUp 0.2s ease;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                }
-                .tts-progress-container { flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; position: relative; }
-                .tts-progress-bar { height: 100%; background: var(--primary); width: 0%; transition: width 0.2s linear; }
-                .tts-btn { background: transparent; border: none; color: var(--primary); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: all 0.2s; }
-                
-                #ftr { padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0; }
-                #row { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 720px; margin: 0 auto; }
-                #input-line { display: flex; align-items: center; gap: 12px; width: 100%; }
-                #preview-area { display: none; flex-wrap: wrap; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-                
-                #inp { flex: 1; background: var(--surface-container); border: none; border-radius: 28px; color: var(--fg); font-size: 16px; padding: 12px 16px; outline: none; transition: all 0.3s ease; }
-                #inp:focus { background: #36343b; }
                 #inp::placeholder { color: var(--muted); }
-                
-                #btn { width: 44px; height: 44px; border-radius: 50%; background: var(--primary); border: none; color: var(--on-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 0.2s; }
-                #btn:disabled { opacity: 0.3; cursor: not-allowed; }
-                
-                .attach-chip { background: var(--surface-container); border: 1px solid var(--border); border-radius: 12px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--primary); animation: slideUp 0.2s ease-out; }
-                
-                /* Modal Styles */
-                #name-modal, #ovl { display: none; position: fixed; inset: 0; background: rgba(20, 18, 24, 0.9); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
-                .card { background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 24px; max-width: 360px; width: 90%; text-align: center; }
-                
-                @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-                @media (max-width: 600px) { .msg-container { max-width: 95%; } #title { display: none; } }
+
+                #btn { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); border: none; color: var(--on-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+                #btn:disabled { opacity: 0.5; cursor: not-allowed; background: var(--surface-container); color: var(--muted); }
+                #btn:not(:disabled):hover { transform: scale(1.05); background: #bcdcff; }
+
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+                @media (max-width: 600px) { 
+                    .msg-container { max-width: 92%; } 
+                    #title { font-size: 16px; }
+                    #hdr { padding: 12px; gap: 8px; }
+                    #badge span { display: none; } 
+                }
             </style>
         </head>
         <body>
-            <div id="name-modal">
-                <div class="card">
-                    <h2>Welcome!</h2>
-                    <p>Enter your name to start chatting.</p>
-                    <input id="name-inp" type="text" placeholder="Your Name" style="width:100%; background:var(--surface-container); border:1px solid var(--border); border-radius:12px; padding:12px; color:var(--fg); margin-bottom:16px; text-align:center; outline:none;">
-                    <button id="name-btn" style="width:100%; background:var(--primary); color:var(--on-primary); border:none; padding:12px; border-radius:100px; font-weight:600; cursor:pointer;">Continue</button>
+            <div id="app-container">
+                <div id="hdr">
+                    <div id="logo">
+                        <svg width="28" height="28" viewBox="0 0 108 108">
+                            <path d="M 70,30 A 28,28 0 1,0 70,78" stroke="var(--primary)" stroke-width="8" stroke-linecap="round" fill="none"/>
+                            <path d="M 46,44 h 5 v 20 h -5 z" fill="#6dd68c"/><path d="M 56,38 h 5 v 32 h -5 z" fill="#f28b82"/><path d="M 66,48 h 5 v 12 h -5 z" fill="#a8c7fa"/>
+                        </svg>
+                    </div>
+                    <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
+                    <div style="flex:1"></div>
+                    <button id="close-btn" style="background: transparent; border: none; color: var(--fg); font-size: 20px; cursor: pointer; padding: 0 8px;" onclick="window.close()">&times;</button>
                 </div>
-            </div>
-            
-            <div id="hdr">
-                <div id="logo">
-                    <svg width="24" height="24" viewBox="0 0 108 108">
-                        <path d="M 70,30 A 28,28 0 1,0 70,78" stroke="#d0bcff" stroke-width="8" stroke-linecap="round" fill="none"/>
-                        <path d="M 46,44 h 5 v 20 h -5 z" fill="#10B981"/><path d="M 56,38 h 5 v 32 h -5 z" fill="#EF4444"/><path d="M 66,48 h 5 v 12 h -5 z" fill="#2563EB"/>
-                    </svg>
+
+                <div id="msgs">
+                    <div class="msg-container s" id="establishing-msg"><div class="msg s">Establishing secure link...</div></div>
                 </div>
-                <span id="title">Chhanda AI</span>
-                <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
-                <select id="lang-sel" style="background:var(--surface-container); border:1px solid var(--border); color:var(--muted); padding:2px 8px; font-size:11px; border-radius:100px; outline:none; margin-left:auto;">
-                    <option value="en">EN</option><option value="bn">BN</option><option value="hi">HI</option>
-                </select>
-            </div>
-            
-            <div id="msgs">
-                <div class="msg-container s"><div class="msg s">Establishing secure link...</div></div>
-            </div>
-            
-            <div id="ftr">
-                <div id="row">
-                    <div id="preview-area"></div>
+
+                <div id="ftr">
+                    <div id="preview-area" style="display:none; gap: 8px; margin-bottom: 8px; padding: 4px; overflow-x: auto; white-space: nowrap;"></div>
                     <div id="input-line">
-                        <button id="clip-btn" style="background:var(--surface-container); border:1px solid var(--border); color:var(--primary); width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; cursor:pointer;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
-                        <input id="file-inp" type="file" style="display:none" multiple>
-                        <input id="inp" placeholder="Waiting for AI..." disabled autocomplete="off">
-                        <button id="btn" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+                        <input type="file" id="file-inp" style="display:none" />
+                        <button id="attach-btn" style="background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                        <textarea id="inp" placeholder="Waiting for node..." disabled rows="1"></textarea>
+                        <button id="btn" disabled>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
                     </div>
                 </div>
             </div>
-            
-            <div id="ovl">
-                <div class="card">
-                    <h2 id="ovl-title">⚠️ Disconnected</h2>
-                    <p id="ovl-text">Lost connection to the AI Node at ${'$'}{ip}:${'$'}{port}.</p>
-                    <button onclick="location.reload()" style="width:100%; background:var(--primary); color:var(--on-primary); border:none; padding:12px; border-radius:100px; font-weight:600; cursor:pointer;">Retry</button>
-                </div>
-            </div>
-            
+
             <script>
-                // Logic minimized for brevity in this refactor move
-                const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),btn=document.getElementById('btn'),bt=document.getElementById('bt'),badge=document.getElementById('badge');
-                let ready=false;
-                const apiKeyParam = new URLSearchParams(window.location.search).get('key');
-                
+                const msgs = document.getElementById('msgs');
+                const inp = document.getElementById('inp');
+                const btn = document.getElementById('btn');
+                const bt = document.getElementById('bt');
+                const badge = document.getElementById('badge');
+                let ready = false;
+                let isThinkingOn = true;
+                const apiKeyParam = new URLSearchParams(window.location.search).get('key') || '';
+
+                let userName = localStorage.getItem('chhanda_username');
+
+                let currentAttachments = [];
+                const fileInp = document.getElementById('file-inp');
+                const attachBtn = document.getElementById('attach-btn');
+                const previewArea = document.getElementById('preview-area');
+
+                attachBtn.onclick = () => fileInp.click();
+                fileInp.onchange = async (e) => {
+                    for (const f of e.target.files) {
+                        const reader = new FileReader();
+                        reader.onload = (re) => {
+                            currentAttachments.push({name: f.name, type: f.type, data: re.target.result});
+                            renderPreviews();
+                        };
+                        reader.readAsDataURL(f);
+                    }
+                    fileInp.value = '';
+                };
+
+                function renderPreviews() {
+                    if (currentAttachments.length === 0) { previewArea.style.display = 'none'; return; }
+                    previewArea.style.display = 'flex';
+                    previewArea.innerHTML = '';
+                    currentAttachments.forEach((att, idx) => {
+                        const d = document.createElement('div');
+                        d.style.cssText = 'background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 8px; font-size: 12px; border: 1px solid var(--border);';
+                        d.innerHTML = `<span>📎 ${'$'}{att.name}</span><button style="background:none;border:none;color:var(--muted);cursor:pointer" onclick="currentAttachments.splice(${'$'}{idx}, 1); renderPreviews()">×</button>`;
+                        previewArea.appendChild(d);
+                    });
+                }
+                if (!userName) {
+                    userName = prompt("Welcome to Chhanda! Please enter your name:");
+                    if (!userName) userName = "User";
+                    localStorage.setItem('chhanda_username', userName);
+                    fetch('/register', {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: userName})
+                    }).catch(e => console.log(e));
+                }
+
+                inp.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = (this.scrollHeight) + 'px';
+                    if(this.value.trim().length > 0 && ready) btn.disabled = false;
+                    else btn.disabled = true;
+                });
+
+                inp.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!btn.disabled) btn.click();
+                    }
+                });
+
                 async function pulse() {
                     try {
                         const r = await fetch('/status?key=' + apiKeyParam + '&t=' + Date.now());
                         const d = await r.json();
                         ready = d.modelLoaded;
-                        if(ready) { 
-                            badge.className='on'; bt.textContent='ONLINE'; inp.disabled=false; btn.disabled=false; inp.placeholder='Message Chhanda...'; 
-                        } else {
-                            badge.className='warm'; bt.textContent='AI LOADING';
+                        if (d.thinkingMode !== undefined) {
+                            isThinkingOn = d.thinkingMode;
                         }
-                    } catch(e) { badge.className='err'; bt.textContent='OFFLINE'; }
+                        if(ready) { 
+                            badge.className = 'on'; bt.textContent = 'ONLINE'; 
+                            inp.disabled = false; 
+                            const estMsg = document.getElementById('establishing-msg');
+                            if (estMsg) estMsg.style.display = 'none';
+                            if(inp.value.trim() === '') btn.disabled = true;
+                            inp.placeholder = 'Type a message...'; 
+                        } else {
+                            badge.className = 'warm'; bt.textContent = 'AI LOADING';
+                            inp.disabled = true; btn.disabled = true;
+                        }
+                    } catch(e) { 
+                        badge.className = 'err'; bt.textContent = 'OFFLINE'; 
+                        inp.disabled = true; btn.disabled = true;
+                    }
                 }
-                
+
                 setInterval(pulse, 3000); pulse();
-                
+
                 btn.onclick = async () => {
                     const txt = inp.value.trim(); if(!txt) return;
-                    inp.value = ''; addMsg(txt, 'u');
-                    const ai = addMsg('Thinking...', 'a');
-                    const res = await fetch('/chat?key=' + apiKeyParam, {
-                        method: 'POST', headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({text: txt, language: document.getElementById('lang-sel').value})
-                    });
-                    const reader = res.body.getReader(); const dec = new TextDecoder();
-                    ai.textContent = '';
-                    while(true) {
-                        const {done, value} = await reader.read(); if(done) break;
-                        const tok = dec.decode(value).replace('data: ', '').trim();
-                        if(tok === '[DONE]') break;
-                        ai.textContent += tok;
+                    inp.value = ''; 
+                    inp.style.height = 'auto';
+                    btn.disabled = true;
+
+                    addMsg(txt, 'u');
+                    const aiContainer = addMsg('<span style="color:var(--muted)">...</span>', 'a');
+
+                    try {
+                        const payload = {
+                            text: txt, 
+                            language: 'en',
+                            persona: 'Default',
+                            attachments: currentAttachments
+                        };
+
+                        currentAttachments = [];
+                        renderPreviews();
+
+                        const res = await fetch('/chat?key=' + apiKeyParam, {
+                            method: 'POST', headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(payload)
+                        });
+
+                        const reader = res.body.getReader(); 
+                        const dec = new TextDecoder();
+                        let rawMarkdown = '';
+
+                        while(true) {
+                            const {done, value} = await reader.read(); 
+                            if(done) break;
+                            const chunkText = dec.decode(value);
+                            const parts = chunkText.split('\n\n');
+
+                            for (const part of parts) {
+                                if (!part.trim()) continue;
+                                if (part.startsWith('data: ERR:')) {
+                                    rawMarkdown += '\n\n**Error:** ' + part.substring(10);
+                                    continue;
+                                }
+                                const tok = part.replace('data: ', '');
+                                if(tok === '[DONE]') break;
+
+                                rawMarkdown += tok.replace(/\\\\n/g, '\\n');
+
+                                let displayMarkdown = rawMarkdown;
+                                if (!isThinkingOn) {
+                                    displayMarkdown = displayMarkdown.replace(/<(?:thought|think)>[\s\S]*?(?:<\/(?:thought|think)>|$)/gi, '').trim();
+                                    displayMarkdown = displayMarkdown.replace(/^(?:Thinking\.\.\.|Thought:|Reasoning:)\s*/i, '');
+                                } else {
+
+                                    const thinkingRegex = /<(?:thought|think)>([\s\S]*?)(?:<\/(?:thought|think)>|$)/i;
+                                    const match = displayMarkdown.match(thinkingRegex);
+                                    if (match) {
+                                        const thought = match[1];
+                                        const rest = displayMarkdown.replace(thinkingRegex, '').trim();
+                                        displayMarkdown = `<details style="background:rgba(255,255,255,0.05); border-radius:8px; padding:8px; margin-bottom:12px; font-size:13px; border:1px solid var(--border)"><summary style="cursor:pointer; color:var(--primary); font-weight:600">Thinking Process</summary><div style="margin-top:8px; color:var(--muted)">${'$'}{thought}</div></details>${'$'}{rest}`;
+                                    }
+                                }
+
+                                if (displayMarkdown.trim() === '' && !isThinkingOn) {
+                                    aiContainer.innerHTML = '<span style="color:var(--muted)">AI is reasoning...</span>';
+                                } else if (typeof marked !== 'undefined') {
+                                    aiContainer.innerHTML = marked.parse(displayMarkdown);
+                                } else {
+                                    aiContainer.textContent = displayMarkdown;
+                                }
+                                msgs.scrollTop = msgs.scrollHeight;
+                            }
+                        }
+                    } catch(e) {
+                        aiContainer.innerHTML = `<span style="color:#f28b82">Connection error: ${'$'}{e.message}</span>`;
                     }
+                    if(inp.value.trim().length > 0 && ready) btn.disabled = false;
                 };
-                
+
                 function addMsg(t, c) {
                     const d = document.createElement('div'); d.className = 'msg-container ' + c;
-                    d.innerHTML = '<div class="msg ' + c + '">' + t + '</div>';
+                    const m = document.createElement('div'); m.className = 'msg ' + c;
+                    if (c === 'user') {
+                        m.textContent = t; 
+                    } else {
+                        m.innerHTML = t; 
+                    }
+                    d.appendChild(m);
                     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
-                    return d.querySelector('.msg');
+                    return m;
                 }
             </script>
         </body>

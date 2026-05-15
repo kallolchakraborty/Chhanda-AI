@@ -114,6 +114,7 @@ fun ActiveModelCard(
     isLoading: Boolean = false,
     temperature: Double,
     thermalStatus: String = "Normal",
+    ramUsage: String = "0 MB / 0 MB",
     vectorMemory: String = "0 MB / 1 GB",
     appLanguage: String = "English",
     ipAddress: String = "Detecting...",
@@ -233,11 +234,13 @@ fun ActiveModelCard(
                         Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                     
-                    // RAM / Vector Memory
+                    // RAM
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Psychology, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" $vectorMemory", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Memory, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                        Text(" $ramUsage", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
+
+
                 }
             }
             

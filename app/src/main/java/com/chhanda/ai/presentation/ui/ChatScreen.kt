@@ -2,15 +2,21 @@ package com.chhanda.ai.presentation.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.*
+import androidx.compose.animation.*
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +45,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Pause
@@ -52,6 +59,7 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -75,6 +83,7 @@ import com.chhanda.ai.presentation.viewmodel.ChatViewModel
 import com.chhanda.ai.presentation.ui.components.ChhandaLogo
 import com.chhanda.ai.util.Localization
 import androidx.navigation.NavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
@@ -85,11 +94,12 @@ fun ChatScreen(
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val appLanguage by viewModel.appLanguage.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val systemViewModel: SystemViewModel = hiltViewModel()
-    val selectedVoice by systemViewModel.selectedVoice.collectAsState()
+    val selectedVoice by systemViewModel.selectedVoice.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
 
@@ -113,71 +123,89 @@ fun ChatScreen(
         try {
             ttsInstance = TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
-                    ttsInstance?.language = ttsLocale
-                    ttsInstance?.setSpeechRate(0.9f)
-                    ttsInstance?.setPitch(1.0f)
-                    
-                    if (selectedVoice != "Default") {
-                        val isMale = selectedVoice.contains("Male")
-                        val voices = ttsInstance?.voices?.toList()
-                        val targetVoice = voices?.filter { it.locale.language == ttsLocale.language }
-                            ?.filter { v ->
-                                val name = v.name.lowercase()
-                                if (isMale) {
-                                    name.contains("male") || name.contains("-m-") || name.contains("_m_") || 
-                                    name.contains("ahp") || name.contains("hie") || name.contains("baq")
-                                } else {
-                                    name.contains("female") || name.contains("-f-") || name.contains("_f_") || 
-                                    name.contains("ahi") || name.contains("hif") || name.contains("ban")
+                    ttsInstance?.let { engine ->
+                        engine.language = ttsLocale
+                        engine.setSpeechRate(0.9f)
+                        engine.setPitch(1.0f)
+                        
+                        // Voice selection logic: Match by Persona Type (Male/Female) and Locale
+                        if (selectedVoice != "Default") {
+                            val isMale = selectedVoice.contains("Male")
+                            val systemVoices = engine.voices?.toList() ?: emptyList()
+                            
+                            val pool = systemVoices.filter { v -> v.locale.language == ttsLocale.language }
+                                .filter { v ->
+                                    val name = v.name.lowercase()
+                                    if (isMale) {
+                                        name.contains("male") || name.contains("-m-") || name.contains("_m_") || 
+                                        name.contains("ahp") || name.contains("hie") || name.contains("baq") ||
+                                        name.contains("guy") || name.contains("man") || name.contains("boy") ||
+                                        (v.locale.country == "IN" && (name.contains("en-in-x-ahp") || name.contains("hi-in-x-hie")))
+                                    } else {
+                                        name.contains("female") || name.contains("-f-") || name.contains("_f_") || 
+                                        name.contains("ahi") || name.contains("hif") || name.contains("ban") ||
+                                        name.contains("girl") || name.contains("woman") || name.contains("lady") ||
+                                        (v.locale.country == "IN" && (name.contains("en-in-x-ahi") || name.contains("hi-in-x-hif")))
+                                    }
+                                }
+                                .sortedByDescending { v ->
+                                    val name = v.name.lowercase()
+                                    var score = 0
+                                    if (!v.isNetworkConnectionRequired) score += 100
+                                    if (name.contains("network") || name.contains("neural")) score += 50
+                                    score
+                                }
+                            
+                            val targetVoice = pool.firstOrNull() ?: run {
+                                val localeVoices = systemVoices.filter { it.locale.language == ttsLocale.language }
+                                if (isMale && localeVoices.size > 1) localeVoices.getOrNull(1) else localeVoices.firstOrNull()
+                            }
+                            
+                            targetVoice?.let { engine.voice = it }
+                        }
+                        
+                        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                            override fun onStart(utteranceId: String?) {
+                                scope.launch { isTtsPlaying = true }
+                            }
+                            override fun onDone(utteranceId: String?) {
+                                scope.launch {
+                                    if (activeTtsMessageId == utteranceId) {
+                                        activeTtsMessageId = null
+                                        isTtsPlaying = false
+                                        ttsProgress = 0f
+                                        ttsOffset = 0
+                                    }
                                 }
                             }
-                            ?.sortedByDescending { v ->
-                                val name = v.name.lowercase()
-                                var score = 0
-                                if (name.contains("network")) score += 100
-                                if (name.contains("neural")) score += 80
-                                if (name.contains("high")) score += 50
-                                if (name.contains("local")) score += 20
-                                score
-                            }?.firstOrNull() ?: voices?.filter { it.locale.language == ttsLocale.language }?.firstOrNull()
-                            
-                        if (targetVoice != null) {
-                            ttsInstance?.voice = targetVoice
-                        }
+                            @Deprecated("Deprecated in Java")
+                            override fun onError(utteranceId: String?) {
+                                scope.launch { isTtsPlaying = false }
+                            }
+                            override fun onError(utteranceId: String?, errorCode: Int) {
+                                scope.launch { isTtsPlaying = false }
+                            }
+                            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                                scope.launch {
+                                    if (activeTtsText.isNotEmpty()) {
+                                        ttsProgress = (ttsOffset + start).toFloat() / activeTtsText.length.coerceAtLeast(1)
+                                    }
+                                }
+                            }
+                        })
+                        // Only set the state when successfully initialized
+                        tts = engine
                     }
-
-                    ttsInstance?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {
-                            isTtsPlaying = true
-                        }
-                        override fun onDone(utteranceId: String?) {
-                            if (activeTtsMessageId == utteranceId) {
-                                isTtsPlaying = false
-                                activeTtsMessageId = null
-                                activeTtsText = ""
-                                ttsProgress = 0f
-                                ttsOffset = 0
-                            }
-                        }
-                        override fun onError(utteranceId: String?) {
-                            isTtsPlaying = false
-                            activeTtsMessageId = null
-                        }
-                        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                            if (activeTtsText.isNotEmpty()) {
-                                ttsProgress = (ttsOffset + start).toFloat() / activeTtsText.length
-                            }
-                        }
-                    })
                 }
             }
-            tts = ttsInstance
         } catch (e: Exception) {
-            android.util.Log.e("ChatScreen", "Failed to initialize TTS", e)
+            android.util.Log.e("ChatScreen", "Failed to init TTS", e)
         }
+        
         onDispose {
             ttsInstance?.stop()
             ttsInstance?.shutdown()
+            tts = null
         }
     }
 
@@ -198,8 +226,6 @@ fun ChatScreen(
                             ChhandaLogo(
                                 size = 32,
                                 modifier = Modifier.sharedElement(
-                                    // KEY: Synchronized with DashboardScreen's ActiveModelCard. 
-                                    // This causes the logo to visually "fly" from the card into the header.
                                     sharedTransitionScope.rememberSharedContentState(key = "model_logo_${viewModel.modelName}"),
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )
@@ -212,7 +238,6 @@ fun ChatScreen(
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.sharedElement(
-                                    // KEY: Synchronized with model name in Dashboard.
                                     sharedTransitionScope.rememberSharedContentState(key = "model_name_${viewModel.modelName}"),
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )
@@ -306,31 +331,39 @@ fun ChatScreen(
                     }
                 }
 
-                items(
+                itemsIndexed(
                     items = uiState.messages,
-                    key = { it.id }
-                ) { message ->
+                    key = { index, item -> item.id }
+                ) { index, message ->
+                    val isLastMessage = index == uiState.messages.lastIndex
                     MessageBubble(
                         message, 
                         tts,
                         isActiveTts = activeTtsMessageId == message.id.toString(),
+                        isGenerating = isLastMessage && uiState.isGenerating,
                         onTtsToggle = {
                             val msgIdStr = message.id.toString()
                             if (activeTtsMessageId == msgIdStr) {
+                                // Stop if clicking the same message
                                 tts?.stop()
                                 activeTtsMessageId = null
-                                activeTtsText = ""
                                 isTtsPlaying = false
-                                ttsOffset = 0
                             } else {
                                 tts?.stop()
-                                val (thinking, response) = parseMessageContent(message.text)
-                                val cleanText = cleanTextForTts(response)
+                                // Prioritize the dedicated thinking field if present
+                                val textToSpeak = if (message.thinking != null) {
+                                    message.text // In the new format, 'text' is the clean response
+                                } else {
+                                    // Legacy support: parse from raw text
+                                    parseMessageContent(message.text).second
+                                }
+                                
+                                val cleanText = cleanTextForTts(textToSpeak)
                                 if (cleanText.isNotEmpty()) {
                                     activeTtsMessageId = msgIdStr
                                     activeTtsText = cleanText
-                                    ttsProgress = 0f
                                     ttsOffset = 0
+                                    ttsProgress = 0f
                                     tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, msgIdStr)
                                 }
                             }
@@ -359,26 +392,43 @@ fun ChatScreen(
                     onStop = {
                         tts?.stop()
                         activeTtsMessageId = null
-                        activeTtsText = ""
                         isTtsPlaying = false
                     },
-                    onSeek = { fraction ->
-                        val targetIndex = (fraction * activeTtsText.length).toInt()
+                    onTogglePlay = {
+                        if (isTtsPlaying) {
+                            tts?.stop()
+                            isTtsPlaying = false
+                        } else {
+                            val textToSpeak = activeTtsText.substring(ttsOffset)
+                            if (textToSpeak.isNotEmpty()) {
+                                tts?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                                isTtsPlaying = true
+                            }
+                        }
+                    },
+                    onSeek = { pos ->
+                        val targetIndex = (pos * activeTtsText.length).toInt().coerceIn(0, activeTtsText.length)
                         tts?.stop()
                         ttsOffset = targetIndex
-                        val remainingText = activeTtsText.substring(targetIndex)
-                        if (remainingText.isNotEmpty()) {
-                            tts?.speak(remainingText, TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                        val textToSpeak = activeTtsText.substring(targetIndex)
+                        if (textToSpeak.isNotEmpty()) {
+                            tts?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                            isTtsPlaying = true
                         } else {
-                            activeTtsMessageId = null
+                            isTtsPlaying = false
                         }
                     },
                     onForward = {
                         val currentIdx = (ttsProgress * activeTtsText.length).toInt()
-                        val targetIndex = (currentIdx + 100).coerceAtMost(activeTtsText.length - 1)
+                        val targetIndex = (currentIdx + 100).coerceAtMost(activeTtsText.length)
                         tts?.stop()
                         ttsOffset = targetIndex
-                        tts?.speak(activeTtsText.substring(targetIndex), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                        if (targetIndex < activeTtsText.length) {
+                            tts?.speak(activeTtsText.substring(targetIndex), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                            isTtsPlaying = true
+                        } else {
+                            isTtsPlaying = false
+                        }
                     },
                     onBackward = {
                         val currentIdx = (ttsProgress * activeTtsText.length).toInt()
@@ -386,12 +436,13 @@ fun ChatScreen(
                         tts?.stop()
                         ttsOffset = targetIndex
                         tts?.speak(activeTtsText.substring(targetIndex), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                        isTtsPlaying = true
                     }
                 )
             }
 
             // Attachment Preview
-            val selectedFiles by viewModel.selectedFiles.collectAsState()
+            val selectedFiles by viewModel.selectedFiles.collectAsStateWithLifecycle()
             if (selectedFiles.isNotEmpty()) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -625,6 +676,7 @@ fun GlobalTtsPlayer(
     progress: Float,
     isPlaying: Boolean,
     onStop: () -> Unit,
+    onTogglePlay: () -> Unit,
     onSeek: (Float) -> Unit,
     onForward: () -> Unit,
     onBackward: () -> Unit
@@ -686,6 +738,22 @@ fun GlobalTtsPlayer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
+                    onClick = onTogglePlay,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape)
+                ) {
+                    Icon(
+                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                
+                Spacer(Modifier.width(24.dp))
+                
+                IconButton(
                     onClick = onStop,
                     modifier = Modifier
                         .size(44.dp)
@@ -708,6 +776,7 @@ fun MessageBubble(
     message: MessageEntity, 
     tts: TextToSpeech?,
     isActiveTts: Boolean = false,
+    isGenerating: Boolean = false,
     onTtsToggle: () -> Unit = {}
 ) {
     val isUser = message.role == "user"
@@ -720,7 +789,13 @@ fun MessageBubble(
         RoundedCornerShape(24.dp, 24.dp, 24.dp, 4.dp)
     }
 
-    val (thinkingText, responseText) = parseMessageContent(message.text)
+    // Local state to track if thinking process is visible
+    var isThinkingExpanded by remember { mutableStateOf(false) }
+    
+    // Prioritize the dedicated thinking field from the database, fall back to parsing for legacy messages
+    val (parsedThinking, parsedResponse) = parseMessageContent(message.text)
+    val finalThinking = message.thinking ?: parsedThinking
+    val finalResponse = if (message.thinking != null) message.text else parsedResponse
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -732,43 +807,81 @@ fun MessageBubble(
             shadowElevation = 0.dp
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                if (thinkingText != null) {
-                    Box(
-                        modifier = Modifier
-                            .padding(bottom = 8.dp)
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                            .padding(8.dp)
+                if (!finalThinking.isNullOrBlank()) {
+                    // Show Thinking Toggle Button
+                    Surface(
+                        onClick = { isThinkingExpanded = !isThinkingExpanded },
+                        color = (if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.padding(bottom = 8.dp)
                     ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (isThinkingExpanded) Icons.Default.Visibility else Icons.Default.Lightbulb,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                if (isThinkingExpanded) "Hide Thinking" else "Show Thinking",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    // Thinking Content (Expandable)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = isThinkingExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(bottom = 12.dp)
+                                .background(
+                                    (if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.surface).copy(alpha = 0.1f), 
+                                    RoundedCornerShape(12.dp)
                                 )
-                                Spacer(Modifier.width(4.dp))
+                                .padding(12.dp)
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = (if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.7f)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Internal Reasoning",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = (if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.7f)
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
                                 Text(
-                                    "Thinking...",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                    text = finalThinking,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp,
+                                    color = (if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.8f),
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                                 )
                             }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = thinkingText,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                            )
                         }
                     }
                 }
                 
-                if (responseText.isNotEmpty()) {
+                if (finalResponse.isNotEmpty()) {
                     MarkdownText(
-                        text = responseText,
+                        text = finalResponse,
                         color = textColor
                     )
                 }
@@ -844,9 +957,9 @@ fun MessageBubble(
         }
         
         // Actions and Stats Footer (Model only)
-        if (!isUser && responseText.isNotEmpty()) {
-            val clipboardManager = LocalClipboardManager.current
-            val context = LocalContext.current
+        if (!isUser && finalResponse.isNotEmpty() && !isGenerating) {
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            val context = androidx.compose.ui.platform.LocalContext.current
             
             Row(
                 modifier = Modifier.padding(top = 4.dp, start = 4.dp),
@@ -854,7 +967,7 @@ fun MessageBubble(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 IconButton(
-                    onClick = { clipboardManager.setText(AnnotatedString(responseText)) },
+                    onClick = { clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(finalResponse)) },
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
@@ -869,7 +982,7 @@ fun MessageBubble(
                     onClick = {
                         val sendIntent = Intent().apply {
                             action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, responseText)
+                            putExtra(Intent.EXTRA_TEXT, finalResponse)
                             type = "text/plain"
                         }
                         val shareIntent = Intent.createChooser(sendIntent, null)
@@ -979,9 +1092,22 @@ fun MarkdownText(
     var genName = ""
 
     androidx.compose.foundation.layout.Column(modifier = modifier) {
+        var inTable = false
+        val tableBuffer = mutableListOf<String>()
+
         lines.forEach { line ->
             val trimmed = line.trim()
             
+            if (trimmed.startsWith("|") && trimmed.contains("|")) {
+                inTable = true
+                tableBuffer.add(line)
+                return@forEach
+            } else if (inTable) {
+                renderTable(tableBuffer, color, style)
+                tableBuffer.clear()
+                inTable = false
+            }
+
             if (trimmed.startsWith("[CREATE_FILE")) {
                 val pathMatch = """path="([^"]+)"""".toRegex().find(trimmed)
                 createPath = pathMatch?.groupValues?.get(1) ?: "file"
@@ -1116,6 +1242,35 @@ fun MarkdownText(
                         )
                     }
                 }
+                trimmedStart.startsWith("|") && trimmedStart.endsWith("|") && !trimmedStart.contains("---") -> {
+                    // Start of a table or table content
+                    // We need to look ahead or buffer, but for simplicity in this inline renderer,
+                    // we'll render each row. A better way is to buffer the whole table.
+                    // Let's implement a basic row-based table view.
+                    val cells = trimmedStart.split("|").filter { it.isNotBlank() }.map { it.trim() }
+                    if (cells.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            color = color.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, color.copy(alpha = 0.1f))
+                        ) {
+                            Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                cells.forEach { cell ->
+                                    Text(
+                                        text = buildInlineAnnotated(cell, color),
+                                        modifier = Modifier.weight(1f),
+                                        style = style.copy(fontSize = 12.sp, fontWeight = if (lines.getOrNull(lines.indexOf(line) + 1)?.contains("---") == true) FontWeight.Bold else FontWeight.Normal),
+                                        color = color
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                trimmedStart.startsWith("|") && trimmedStart.contains("---") -> {
+                    // Table separator, skip
+                }
                 line.isBlank() -> {
                     Spacer(Modifier.height(8.dp))
                 }
@@ -1130,6 +1285,11 @@ fun MarkdownText(
             }
         }
         
+        // Safety: if table was at the end
+        if (inTable && tableBuffer.isNotEmpty()) {
+            renderTable(tableBuffer, color, style)
+        }
+        
         // Safety: if blocks weren't closed
         if (inCodeBlock && codeBlockContent.isNotEmpty()) {
             CodeBlock(codeBlockContent.toString(), codeLanguage)
@@ -1139,6 +1299,51 @@ fun MarkdownText(
         }
         if (inGenerateBlock) {
             AttachmentDownload(genName, genType)
+        }
+    }
+}
+
+@Composable
+fun renderTable(rows: List<String>, color: Color, style: androidx.compose.ui.text.TextStyle) {
+    val tableData = rows.filter { !it.contains("---") }.map { row ->
+        row.split("|").filter { it.isNotBlank() }.map { it.trim() }
+    }
+    
+    if (tableData.isEmpty()) return
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        color = color.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.1f))
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            tableData.forEachIndexed { rowIndex, cells ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (rowIndex == 0) color.copy(alpha = 0.1f) else Color.Transparent)
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    cells.forEach { cell ->
+                        Text(
+                            text = buildInlineAnnotated(cell, color),
+                            modifier = Modifier.weight(1f),
+                            style = style.copy(
+                                fontSize = 12.sp, 
+                                fontWeight = if (rowIndex == 0) FontWeight.Bold else FontWeight.Normal
+                            ),
+                            color = color
+                        )
+                    }
+                }
+                if (rowIndex < tableData.size - 1) {
+                    HorizontalDivider(color = color.copy(alpha = 0.05f), thickness = 0.5.dp)
+                }
+            }
         }
     }
 }
@@ -1396,9 +1601,9 @@ fun ChatInput(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(32.dp)
+            shape = RoundedCornerShape(24.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -1440,7 +1645,7 @@ fun ChatInput(
                         unfocusedIndicatorColor = Color.Transparent,
                     ),
                     singleLine = false,
-                    maxLines = 4
+                    maxLines = 10
                 )
                 
                 if (text.isNotBlank() && !isGenerating) {

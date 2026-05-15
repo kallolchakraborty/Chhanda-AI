@@ -49,22 +49,10 @@ fun LocalModelItem(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                shape = CircleShape
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        if (model.name.contains("gemma", ignoreCase = true)) Icons.Default.AutoAwesome
-                        else if (model.name.contains("deepseek", ignoreCase = true)) Icons.Default.Science
-                        else Icons.Default.SmartToy,
-                        null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
+            ChhandaLogo(
+                size = 40,
+                modelName = model.name
+            )
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)

@@ -2,6 +2,7 @@ package com.chhanda.ai.presentation.ui
 import android.content.Intent
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.sp
 
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chhanda.ai.presentation.ui.components.ChhandaSectionHeader
 import com.chhanda.ai.presentation.ui.components.ChhandaCard
 import com.chhanda.ai.presentation.ui.components.ChhandaLogo
@@ -32,24 +34,29 @@ import com.chhanda.ai.util.Localization
 import androidx.compose.ui.platform.LocalContext
 
 
+import androidx.hilt.navigation.compose.hiltViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfigScreen(
     navController: NavController,
-    viewModel: SystemViewModel = viewModel()
+    viewModel: SystemViewModel = hiltViewModel(),
+    healthViewModel: com.chhanda.ai.presentation.viewmodel.SystemHealthViewModel = hiltViewModel()
 ) {
-    val isDark by viewModel.darkMode.collectAsState()
-    val port by viewModel.serverPort.collectAsState()
-    val ctxLength by viewModel.contextLength.collectAsState()
-    val hfToken by viewModel.hfToken.collectAsState()
-    val maxDevices by viewModel.maxDevices.collectAsState()
-    val appLanguage by viewModel.appLanguage.collectAsState()
-    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
-    val showRestart by viewModel.showRestartDialog.collectAsState()
-    val apiKey by viewModel.apiKey.collectAsState()
-    val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsState()
-    val ragEnabled by viewModel.ragEnabled.collectAsState()
-    val thinkingModeEnabled by viewModel.thinkingModeEnabled.collectAsState()
+    val isDark by viewModel.darkMode.collectAsStateWithLifecycle()
+    val port by viewModel.serverPort.collectAsStateWithLifecycle()
+    val ctxLength by viewModel.contextLength.collectAsStateWithLifecycle()
+    val hfToken by viewModel.hfToken.collectAsStateWithLifecycle()
+    val thinkingModeEnabled by viewModel.thinkingModeEnabled.collectAsStateWithLifecycle()
+    val isThinkingSupported by viewModel.isThinkingSupported.collectAsStateWithLifecycle()
+    val finalThinkingEnabled = thinkingModeEnabled && isThinkingSupported
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsStateWithLifecycle()
+    val showRestart by viewModel.showRestartDialog.collectAsStateWithLifecycle()
+    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
+    val maxDevices by viewModel.maxDevices.collectAsStateWithLifecycle()
+    val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsStateWithLifecycle()
+    val ragEnabled by viewModel.ragEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
@@ -109,10 +116,19 @@ fun ConfigScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(Localization.getString("thinking_mode", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text(Localization.getString("thinking_mode_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                Text(Localization.getString("thinking_mode", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    if (isThinkingSupported) Localization.getString("thinking_mode_desc", appLanguage)
+                                    else "This model does not support native reasoning steps.", 
+                                    fontSize = 11.sp, 
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
                             }
-                            Switch(checked = thinkingModeEnabled, onCheckedChange = { viewModel.setThinkingModeEnabled(it) })
+                            Switch(
+                                checked = finalThinkingEnabled, 
+                                onCheckedChange = { viewModel.setThinkingModeEnabled(it) },
+                                enabled = isThinkingSupported
+                            )
                         }
                         
                         Spacer(Modifier.height(24.dp))
@@ -157,8 +173,8 @@ fun ConfigScreen(
                         Text("TTS Voice", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(8.dp))
                         
-                        val availableVoices by viewModel.availableVoices.collectAsState()
-                        val selectedVoice by viewModel.selectedVoice.collectAsState()
+                        val availableVoices by viewModel.availableVoices.collectAsStateWithLifecycle()
+                        val selectedVoice by viewModel.selectedVoice.collectAsStateWithLifecycle()
                         var voiceExpanded by remember { mutableStateOf(false) }
                         
                         ExposedDropdownMenuBox(
@@ -191,17 +207,15 @@ fun ConfigScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 Text(voice)
-                                                IconButton(
-                                                    onClick = { 
-                                                        viewModel.playSample(voice, appLanguage)
-                                                    },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
+                                                // Use a Box to catch clicks and prevent propagation to DropdownMenuItem
+                                                Box(modifier = Modifier.size(32.dp).clickable(onClick = { 
+                                                    viewModel.playSample(voice, appLanguage)
+                                                }, indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() })) {
                                                     Icon(
                                                         imageVector = Icons.Default.PlayArrow,
                                                         contentDescription = "Play Sample",
                                                         tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(20.dp)
+                                                        modifier = Modifier.size(20.dp).align(Alignment.Center)
                                                     )
                                                 }
                                             }
@@ -453,7 +467,7 @@ fun ConfigScreen(
             )
         }
 
-        val showServerWarning by viewModel.showServerRunningWarning.collectAsState()
+        val showServerWarning by viewModel.showServerRunningWarning.collectAsStateWithLifecycle()
         if (showServerWarning) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissServerRunningWarning() },
@@ -470,8 +484,8 @@ fun ConfigScreen(
 
 @Composable
 fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel, appLanguage: String) {
-    val autoDeleteDays by viewModel.autoDeleteDays.collectAsState()
-    val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsState()
+    val autoDeleteDays by viewModel.autoDeleteDays.collectAsStateWithLifecycle()
+    val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
     
     ChhandaCard {
         Row(

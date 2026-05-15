@@ -23,7 +23,7 @@ class ChatViewModel @Inject constructor(
     private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao
 ) : ViewModel() {
     private val llmEngine get() = llmEngineLazy.get()
-    
+
     val modelName: String = savedStateHandle["modelName"] ?: "unknown"
     val sessionId: String = savedStateHandle["sessionId"] ?: java.util.UUID.randomUUID().toString()
 
@@ -60,7 +60,7 @@ class ChatViewModel @Inject constructor(
                     } else {
                         source
                     }
-                    
+
                     when (index % 3) {
                         0 -> "Can you provide a summary of $cleanSource?"
                         1 -> "What are the key topics discussed in $cleanSource?"
@@ -68,7 +68,7 @@ class ChatViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                // Ignore
+
             }
         }
     }
@@ -107,7 +107,6 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(text: String, isRefinement: Boolean = false) {
         if (text.isBlank() || _isGenerating.value) return
 
-        // Guard: model must be loaded before attempting inference
         if (!llmEngine.isModelLoaded()) {
             _error.value = "No model loaded. Go to Dashboard and activate a model first."
             return
@@ -125,8 +124,7 @@ class ChatViewModel @Inject constructor(
             var buffer = ""
             var lastUpdate = System.currentTimeMillis()
             val language = appLanguage.value
-            
-            // If it's a refinement, we use a specialized system prefix
+
             val promptToSend = if (isRefinement) {
                 """
                 ### TRANSCRIPT REFINEMENT TASK
@@ -136,7 +134,7 @@ class ChatViewModel @Inject constructor(
                 - Improve sentence flow and clarity.
                 - Keep the original tone and all key information.
                 - Respond ONLY with the polished text.
-                
+
                 RAW TRANSCRIPT:
                 "$text"
                 """.trimIndent()
@@ -172,11 +170,11 @@ class ChatViewModel @Inject constructor(
                             }
                         }
                         is TokenUpdate.Final -> {
-                            // Clear streaming bubble — message is now in the DB list
+
                             _currentRt.value = update.responseTimeMs
                             _currentPartialResponse.value = ""
                             _currentTps.value = 0.0
-                            // isGenerating will be set false by onCompletion
+
                         }
                         is TokenUpdate.Error -> {
                             _error.value = update.message
@@ -195,12 +193,12 @@ class ChatViewModel @Inject constructor(
         messageJob?.cancel()
         llmEngine.stopInference()
         _isGenerating.value = false
-        _currentPartialResponse.value = "" // Cleared because the DB will save and render the partial output via the use-case's finally block
+        _currentPartialResponse.value = "" 
         _currentTps.value = 0.0
     }
 
     fun clearHistory() {
-        viewModelScope.launch { chatDao.clearHistory() }
+        viewModelScope.launch { chatDao.deleteSession(sessionId) }
     }
 
     fun dismissError() { _error.value = null }
@@ -211,7 +209,6 @@ class ChatViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        // Ensure the engine is completely stopped when leaving the chat screen
-        stopInference()
+
     }
 }

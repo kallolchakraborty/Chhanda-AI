@@ -56,12 +56,15 @@ class ContextManager @Inject constructor(
             val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || 
                                  query.lowercase().contains("web") || query.lowercase().contains("search")
             
-            val threshold = if (isExplicitSearch) 0.60f else 0.80f 
+            // Senior Optimization: Lowering thresholds for the lightweight on-device embedding engine.
+            // 0.45 was too aggressive for hash-based projections. 
+            // 0.30 provides a better balance for on-device RAG.
+            val threshold = if (isExplicitSearch) 0.25f else 0.30f 
             var filtered = results.filter { it.score >= threshold } 
 
             if (filtered.isEmpty() && isFollowUp) {
                 val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db")
-                filtered = rawResults.filter { it.score >= 0.50f }
+                filtered = rawResults.filter { it.score >= 0.25f }
             }
 
             // Format results using XML-style tags for better LLM boundary detection.

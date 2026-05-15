@@ -67,13 +67,13 @@ fun ChhandaLogo(modifier: Modifier = Modifier, size: Int = 36, modelName: String
     val logoRes = remember(modelName) {
         val name = modelName.lowercase()
         when {
-            name.contains("gemma") -> R.drawable.logo_google
-            name.contains("llama") -> R.drawable.logo_meta
-            name.contains("mistral") -> R.drawable.logo_mistral
-            name.contains("phi") -> R.drawable.logo_microsoft
-            name.contains("qwen") -> R.drawable.logo_qwen
+            name.contains("gemma") || name.contains("google") -> R.drawable.logo_google
+            name.contains("llama") || name.contains("meta") -> R.drawable.logo_meta
+            name.contains("mistral") || name.contains("mixtral") -> R.drawable.logo_mistral
+            name.contains("phi") || name.contains("microsoft") -> R.drawable.logo_microsoft
+            name.contains("qwen") || name.contains("alibaba") -> R.drawable.logo_qwen
             name.contains("openai") || name.contains("gpt") -> R.drawable.logo_openai
-            name.contains("deepseek") -> R.drawable.logo_deepseek
+            name.contains("deepseek") || name.contains("deep seek") -> R.drawable.logo_deepseek
             else -> null
         }
     }

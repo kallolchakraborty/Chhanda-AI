@@ -108,9 +108,17 @@ class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWor
             } else {
                 val uri = Uri.parse(uriString)
                 val type = DocType.valueOf(typeString)
-                useCase(uri, type)
                 
                 val fileSize = applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
+                val existing = dao.findByNameAndSize(fileName, fileSize)
+                if (existing != null) {
+                    android.util.Log.i("IngestionWorker", "Duplicate file skipped in worker: $fileName")
+                    showCompletionNotification(fileName, true)
+                    return Result.success()
+                }
+
+                useCase(uri, type)
+                
                 dao.insertFile(UploadedFileEntity(
                     id = UUID.randomUUID().toString(),
                     name = fileName,

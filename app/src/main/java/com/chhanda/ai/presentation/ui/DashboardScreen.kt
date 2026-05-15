@@ -48,47 +48,48 @@ import com.chhanda.ai.Screen
 import androidx.navigation.NavController
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun DashboardScreen(
     navController: NavController,
-    viewModel: SystemViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    viewModel: SystemViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
+    healthViewModel: com.chhanda.ai.presentation.viewmodel.SystemHealthViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
     sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope
 ) {
-    val ramUsage by viewModel.ramUsage.collectAsState()
-    val appStorageUsage by viewModel.appStorageUsage.collectAsState()
-    val tps by viewModel.tokensPerSec.collectAsState()
-    val port by viewModel.serverPort.collectAsState()
-    val deviceTemperature by viewModel.deviceTemperature.collectAsState()
-    val ownedModels by viewModel.ownedModels.collectAsState()
-    val sharedModels by viewModel.sharedModels.collectAsState()
-    val downloadableModels by viewModel.downloadableModels.collectAsState()
-    val isServerRunning by viewModel.isServerRunning.collectAsState()
-    val actualPort by viewModel.serverActualPort.collectAsState()
-    val isVpnActive by viewModel.isVpnActive.collectAsState()
-    val networkIps by viewModel.networkIps.collectAsState()
-    val isTunnelActive by viewModel.isTunnelActive.collectAsState()
+    val ramUsage by healthViewModel.ramUsage.collectAsStateWithLifecycle()
+    val appStorageUsage by healthViewModel.appStorageUsage.collectAsStateWithLifecycle()
+    val tps by viewModel.tokensPerSec.collectAsStateWithLifecycle()
+    val port by viewModel.serverPort.collectAsStateWithLifecycle()
+    val deviceTemperature by healthViewModel.deviceTemperature.collectAsStateWithLifecycle()
+    val ownedModels by viewModel.ownedModels.collectAsStateWithLifecycle()
+    val sharedModels by viewModel.sharedModels.collectAsStateWithLifecycle()
+    val downloadableModels by viewModel.downloadableModels.collectAsStateWithLifecycle()
+    val isServerRunning by viewModel.isServerRunning.collectAsStateWithLifecycle()
+    val actualPort by viewModel.serverActualPort.collectAsStateWithLifecycle()
+    val isVpnActive by viewModel.isVpnActive.collectAsStateWithLifecycle()
+    val networkIps by viewModel.networkIps.collectAsStateWithLifecycle()
+    val isTunnelActive by viewModel.isTunnelActive.collectAsStateWithLifecycle()
 
-    val processorInfo by viewModel.processorInfo.collectAsState()
-    val thermalStatus by viewModel.thermalStatus.collectAsState()
-    val tunnelUrl by viewModel.tunnelUrl.collectAsState()
-    val publicUrl by viewModel.publicUrl.collectAsState()
+    val processorInfo by viewModel.processorInfo.collectAsStateWithLifecycle()
+    val thermalStatus by healthViewModel.thermalStatus.collectAsStateWithLifecycle()
+    val tunnelUrl by viewModel.tunnelUrl.collectAsStateWithLifecycle()
+    val publicUrl by viewModel.publicUrl.collectAsStateWithLifecycle()
     val displayPort = if (actualPort > 0) actualPort else 8888
-    val connectedDevices by viewModel.connectedDevices.collectAsState()
-    val activeDeviceCount by viewModel.activeDeviceCount.collectAsState()
-    val isScanning by viewModel.isScanning.collectAsState()
-    val downloadProgress by viewModel.downloadProgress.collectAsState()
-    val downloadPauseState by viewModel.downloadPauseFlow.collectAsState()
-    val downloadStatus by viewModel.downloadStatus.collectAsState()
-    val isModelLoading by viewModel.isModelLoading.collectAsState()
-    val appLanguage by viewModel.appLanguage.collectAsState()
-    val vectorDbUsage by viewModel.vectorDbUsage.collectAsState()
-    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
-    val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsState()
+    val connectedDevices by viewModel.connectedDevices.collectAsStateWithLifecycle()
+    val activeDeviceCount by viewModel.activeDeviceCount.collectAsStateWithLifecycle()
+    val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
+    val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
+    val downloadPauseState by viewModel.downloadPauseFlow.collectAsStateWithLifecycle()
+    val downloadStatus by viewModel.downloadStatus.collectAsStateWithLifecycle()
+    val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val vectorDbUsage by viewModel.vectorDbUsage.collectAsStateWithLifecycle()
+    val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsStateWithLifecycle()
+    val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showModelPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -98,7 +99,7 @@ fun DashboardScreen(
     var showClearHistoryConfirm by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
     var showHotspotPrompt by remember { mutableStateOf(false) }
-    val hasNetworkState by viewModel.hasNetwork.collectAsState()
+    val hasNetworkState by viewModel.hasNetwork.collectAsStateWithLifecycle()
     var expandedAssistant by remember { mutableStateOf<String?>(null) }
     var isApiKeyVisibleInQr by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
@@ -157,7 +158,7 @@ fun DashboardScreen(
         )
     }
 
-    val showVectorWarning by viewModel.showVectorStorageWarning.collectAsState()
+    val showVectorWarning by viewModel.showVectorStorageWarning.collectAsStateWithLifecycle()
     if (showVectorWarning) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissVectorStorageWarning() },
@@ -228,8 +229,8 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
-                    val isServerRunning by viewModel.isServerRunning.collectAsState()
-                    val ipAddress by viewModel.localIpAddress.collectAsState()
+                    val isServerRunning by viewModel.isServerRunning.collectAsStateWithLifecycle()
+                    val ipAddress by viewModel.localIpAddress.collectAsStateWithLifecycle()
                     val isQrEnabled = (isServerRunning || isModelLoading) && anyActiveModel
                     
                     var showPulse by remember { mutableStateOf(false) }
@@ -254,7 +255,7 @@ fun DashboardScreen(
                         label = "QrPulse"
                     )
 
-                    val networkIps by viewModel.networkIps.collectAsState()
+                    val networkIps by viewModel.networkIps.collectAsStateWithLifecycle()
                     val isHotspot = networkIps.any { it.startsWith("192.168.43.") || it.startsWith("192.168.44.") }
                     val hasNetwork = networkIps.isNotEmpty() && networkIps.first() != "127.0.0.1"
 
@@ -327,9 +328,10 @@ fun DashboardScreen(
                     isLoading = isModelLoading,
                     temperature = deviceTemperature,
                     thermalStatus = thermalStatus,
+                    ramUsage = ramUsage,
                     vectorMemory = vectorStorageMetrics,
                     appLanguage = appLanguage,
-                    ipAddress = viewModel.localIpAddress.collectAsState().value,
+                    ipAddress = viewModel.localIpAddress.collectAsStateWithLifecycle().value,
                     sharedTransitionScope = sharedTransitionScope,
                     animatedVisibilityScope = animatedVisibilityScope
                 )
@@ -643,7 +645,7 @@ fun DashboardScreen(
                 
                 Spacer(Modifier.height(16.dp))
                 
-                val ipAddress by viewModel.localIpAddress.collectAsState()
+                val ipAddress by viewModel.localIpAddress.collectAsStateWithLifecycle()
                 val anyActiveModel = (ownedModels + sharedModels).any { it.isActive }
                 val isQrEnabled = (isServerRunning || isModelLoading) && anyActiveModel
                 
@@ -922,7 +924,7 @@ fun DashboardScreen(
 
 
     if (showStorageManager) {
-        val storageSummary by viewModel.storageSummary.collectAsState()
+        val storageSummary by viewModel.storageSummary.collectAsStateWithLifecycle()
         ModalBottomSheet(
             onDismissRequest = { showStorageManager = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -993,7 +995,7 @@ fun StorageManagerSheet(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Storage, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
-            Text("History Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Chat Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
         
         Spacer(Modifier.height(24.dp))
@@ -1023,9 +1025,9 @@ fun StorageManagerSheet(
         
         Spacer(Modifier.height(24.dp))
         
-        val isIngesting by viewModel.isIngesting.collectAsState()
-        val progress by viewModel.ingestionProgress.collectAsState()
-        val message by viewModel.ingestionMessage.collectAsState()
+        val isIngesting by viewModel.isIngesting.collectAsStateWithLifecycle()
+        val progress by viewModel.ingestionProgress.collectAsStateWithLifecycle()
+        val message by viewModel.ingestionMessage.collectAsStateWithLifecycle()
         
         com.chhanda.ai.presentation.ui.components.IngestionProgressDialog(
             isIngesting = isIngesting,
@@ -1126,138 +1128,6 @@ fun StorageManagerSheet(
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                         Text("No chat history available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-        
-        Spacer(Modifier.height(24.dp))
-        
-        var selectedFiles by remember { mutableStateOf(setOf<String>()) }
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("RAG FILES", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            if (selectedFiles.isNotEmpty()) {
-                TextButton(onClick = {
-                    viewModel.deleteFiles(selectedFiles.toList())
-                    selectedFiles = emptySet()
-                }) {
-                    Text("Delete Selected (${selectedFiles.size})", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        
-        val showAllFiles by viewModel.showAllFiles.collectAsState()
-        val recentFiles by viewModel.recentFiles.collectAsState()
-        val allFiles by viewModel.allFiles.collectAsState()
-        
-        val filesToShow = if (showAllFiles) allFiles else recentFiles
-        
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 300.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filesToShow) { file ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (!file.isDeleted) {
-                        Checkbox(
-                            checked = selectedFiles.contains(file.id),
-                            onCheckedChange = { checked ->
-                                selectedFiles = if (checked) {
-                                    selectedFiles + file.id
-                                } else {
-                                    selectedFiles - file.id
-                                }
-                            }
-                        )
-                    } else {
-                        Spacer(Modifier.width(48.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            file.name, 
-                            fontWeight = FontWeight.Bold, 
-                            fontSize = 12.sp,
-                            color = if (file.isDeleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary,
-                            textDecoration = if (file.isDeleted) null else androidx.compose.ui.text.style.TextDecoration.Underline,
-                            modifier = Modifier.clickable(enabled = !file.isDeleted) {
-                                try {
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                        setDataAndType(android.net.Uri.parse(file.path), context.contentResolver.getType(android.net.Uri.parse(file.path)))
-                                        flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                    }
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "Cannot open file", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        )
-                        Text(
-                            "${file.format} · ${file.size / 1024} KB" + if (file.isDeleted) " · Deleted" else "", 
-                            fontSize = 10.sp, 
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                    if (!file.isDeleted && selectedFiles.isEmpty()) {
-                        var showMenu by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { showMenu = true }) {
-                                Icon(Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                            }
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Delete") },
-                                    onClick = { 
-                                        viewModel.deleteFiles(listOf(file.id))
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Open") },
-                                    onClick = { 
-                                        try {
-                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                                setDataAndType(android.net.Uri.parse(file.path), context.contentResolver.getType(android.net.Uri.parse(file.path)))
-                                                flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                            }
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            android.widget.Toast.makeText(context, "Cannot open file", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Launch, null, modifier = Modifier.size(16.dp)) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
-            if (filesToShow.isEmpty()) {
-                item {
-                    Text("No files uploaded for RAG.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                }
-            }
-            
-            if (!showAllFiles && allFiles.size > 10) {
-                item {
-                    TextButton(onClick = { viewModel.setShowAllFiles(true) }) {
-                        Text("See More Files", fontSize = 12.sp)
                     }
                 }
             }

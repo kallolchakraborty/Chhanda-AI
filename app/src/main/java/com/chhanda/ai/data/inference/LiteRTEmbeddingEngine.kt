@@ -33,10 +33,19 @@ class LiteRTEmbeddingEngine @Inject constructor(
             for (word in words) {
                 val seed = word.hashCode().toLong()
                 val random = java.util.Random(seed)
+                
+                // Senior Heuristic: Boost weight for longer words (more informational)
+                // and preserve some signal from the original word hash.
+                val importance = when {
+                    word.length > 8 -> 2.0f
+                    word.length > 5 -> 1.5f
+                    else -> 1.0f
+                }
+
                 for (i in 0 until 12) {
                     val rawIdx = random.nextInt()
                     val dim = (if (rawIdx == Int.MIN_VALUE) 0 else Math.abs(rawIdx)) % 384
-                    val weight = if (random.nextBoolean()) 1.2f else -0.8f
+                    val weight = (if (random.nextBoolean()) 1.2f else -0.8f) * importance
                     vector[dim] += weight
                 }
             }
