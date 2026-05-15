@@ -313,7 +313,9 @@ class ServerTemplateProvider @Inject constructor() {
 
                 async function pulse() {
                     try {
-                        const r = await fetch('/status?key=' + apiKeyParam + '&t=' + Date.now());
+                        const r = await fetch('/status', {
+                            headers: {'X-API-KEY': apiKeyParam}
+                        });
                         const d = await r.json();
                         ready = d.modelLoaded;
                         if (d.thinkingMode !== undefined) {
@@ -358,8 +360,12 @@ class ServerTemplateProvider @Inject constructor() {
                         currentAttachments = [];
                         renderPreviews();
 
-                        const res = await fetch('/chat?key=' + apiKeyParam, {
-                            method: 'POST', headers: {'Content-Type': 'application/json'},
+                        const res = await fetch('/chat', {
+                            method: 'POST', 
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-API-KEY': apiKeyParam
+                            },
                             body: JSON.stringify(payload)
                         });
 

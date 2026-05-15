@@ -114,7 +114,7 @@ class ChhandaServer @Inject constructor(
     companion object { private const val TAG = "ChhandaServer" }
 
     private val requestSemaphore = kotlinx.coroutines.sync.Semaphore(2)
-    private val clientRequestWindow = mutableMapOf<String, Long>()
+    private val clientRequestWindow = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val RATE_LIMIT_MS = 1000L
 
     @Volatile private var cachedIp: String = "127.0.0.1"
@@ -301,7 +301,7 @@ class ChhandaServer @Inject constructor(
                 get("/ping") { call.respondText("pong") }
 
                 val validateAuth: suspend (io.ktor.server.application.ApplicationCall) -> Boolean = { call ->
-                    val providedKey = call.request.queryParameters["key"] ?: call.request.headers["X-API-KEY"]
+                    val providedKey = call.request.headers["X-API-KEY"] ?: call.request.queryParameters["key"]
                     val actualKey = settingsRepository.apiKeyFlow.firstOrNull() ?: "000000000"
                     if (providedKey != actualKey) {
                         call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid API Key"))
@@ -331,56 +331,60 @@ class ChhandaServer @Inject constructor(
 
                 post("/v1/chat/completions") {
                     if (!validateAuth(call)) return@post
-                    requestSemaphore.withPermit {
-                        try {
-                            val req = call.receive<OpenAiChatRequest>()
-                            val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.content ?: ""
-                            val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
+                    try {
+                        val req = call.receive<OpenAiChatRequest>()
+                        val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.content ?: ""
+                        val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
 
-                            if (req.stream) {
-                                call.respondTextWriter(io.ktor.http.ContentType.Text.EventStream) {
-                                    requestSemaphore.withPermit {
-                                        try {
-                                            val currentModel = llmEngine.getCurrentModelName()
-                                            val msgId = "chatcmpl-${System.currentTimeMillis()}"
-                                            sendMessageUseCase(
-                                                userText = lastUserMsg,
-                                                deviceId = call.request.local.remoteHost,
-                                                modelName = currentModel,
-                                                sessionId = "openai_session",
-                                                source = "api",
-                                                includeThinking = thinkingMode
-                                            ).collect { upd ->
-                                                if (upd is TokenUpdate.Partial) {
-                                                    val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${upd.text.replace("\"", "\\\"").replace("\n", "\\n")}"},"finish_reason":null}]}"""
-                                                    write("data: $chunk\n\n"); flush()
-                                                } else if (upd is TokenUpdate.Final) {
-                                                    write("data: [DONE]\n\n"); flush()
-                                                }
+                        if (req.stream) {
+                            call.respondTextWriter(io.ktor.http.ContentType.Text.EventStream) {
+                                requestSemaphore.withPermit {
+                                    try {
+                                        val currentModel = llmEngine.getCurrentModelName()
+                                        val msgId = "chatcmpl-${System.currentTimeMillis()}"
+                                        sendMessageUseCase(
+                                            userText = lastUserMsg,
+                                            deviceId = call.request.local.remoteHost,
+                                            modelName = currentModel,
+                                            sessionId = "openai_session",
+                                            source = "api",
+                                            includeThinking = thinkingMode
+                                        ).collect { upd ->
+                                            if (upd is TokenUpdate.Partial) {
+                                                val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${upd.text.replace("\"", "\\\"").replace("\n", "\\n")}"},"finish_reason":null}]}"""
+                                                write("data: $chunk\n\n"); flush()
+                                            } else if (upd is TokenUpdate.Final) {
+                                                write("data: [DONE]\n\n"); flush()
                                             }
-                                        } catch (e: Exception) { write("data: [DONE]\n\n"); flush() }
-                                    }
+                                        }
+                                    } catch (e: Exception) { write("data: [DONE]\n\n"); flush() }
                                 }
-                            } else {
-                                var fullResponse = ""
-                                sendMessageUseCase(
-                                    userText = lastUserMsg,
-                                    deviceId = call.request.local.remoteHost,
-                                    modelName = llmEngine.getCurrentModelName(),
-                                    sessionId = "openai_session",
-                                    source = "api",
-                                    includeThinking = thinkingMode
-                                ).collect { upd ->
-                                    if (upd is TokenUpdate.Partial) fullResponse += upd.text
-                                }
-                                call.respond(mapOf(
-                                    "id" to "chatcmpl-${System.currentTimeMillis()}",
-                                    "choices" to listOf(mapOf("message" to mapOf("role" to "assistant", "content" to fullResponse), "finish_reason" to "stop"))
-                                ))
                             }
-                        } catch (e: Exception) {
-                            call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Error")))
+                        } else {
+                            var fullResponse = ""
+                            requestSemaphore.withPermit {
+                                try {
+                                    sendMessageUseCase(
+                                        userText = lastUserMsg,
+                                        deviceId = call.request.local.remoteHost,
+                                        modelName = llmEngine.getCurrentModelName(),
+                                        sessionId = "openai_session",
+                                        source = "api",
+                                        includeThinking = thinkingMode
+                                    ).collect { upd ->
+                                        if (upd is TokenUpdate.Partial) fullResponse += upd.text
+                                    }
+                                    call.respond(mapOf(
+                                        "id" to "chatcmpl-${System.currentTimeMillis()}",
+                                        "choices" to listOf(mapOf("message" to mapOf("role" to "assistant", "content" to fullResponse), "finish_reason" to "stop"))
+                                    ))
+                                } catch (e: Exception) {
+                                    call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Error")))
+                                }
+                            }
                         }
+                    } catch (e: Exception) {
+                        call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Error")))
                     }
                 }
 
@@ -439,7 +443,6 @@ class ChhandaServer @Inject constructor(
                 }
 
                 get("/") {
-                    val apiKey = settingsRepository.apiKeyFlow.firstOrNull() ?: "8961221281"
                     val sessions = try { chatDao.getSessionIdsForDevice(call.request.local.remoteHost).firstOrNull() ?: emptyList() } catch(e: Exception) { emptyList() }
                     call.respondText(templateProvider.buildChatHtml(capturedPort, call.request.host(), emptyList(), false, "", sessions), io.ktor.http.ContentType.Text.Html)
                 }

@@ -127,7 +127,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     "api", "qr" -> "Senior Technical Architect & Software Engineer"
                     else -> "Chhanda, a highly capable Senior AI Assistant"
                 }
-                append("IDENTITY: You are ${persona ?: role}. Respond in $preferredLanguage.\n")
+                val sanitizedPersona = persona?.replace(Regex("[^a-zA-Z0-9 ]"), "")?.take(50)
+                append("IDENTITY: You are ${sanitizedPersona ?: role}. Respond in $preferredLanguage.\n")
 
                 append("REASONING (CoVe): You MUST think step-by-step using a 'Chain of Verification' approach.\n")
                 append("1. Analyze the user intent and constraints.\n")
