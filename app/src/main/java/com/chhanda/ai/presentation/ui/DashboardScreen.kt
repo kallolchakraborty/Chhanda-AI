@@ -341,54 +341,7 @@ fun DashboardScreen(
                 }
             }
             
-            item {
-                ChhandaSectionHeader(
-                    icon = Icons.Default.HealthAndSafety, 
-                    title = "System Health", 
-                    badge = if (thermalStatus != "Normal") "Warning" else "Stable"
-                )
-            }
 
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Thermostat, 
-                                contentDescription = null, 
-                                tint = when(thermalStatus) {
-                                    "Normal" -> Color(0xFF4ADE80)
-                                    "Light", "Moderate" -> Color(0xFFFACC15)
-                                    else -> Color(0xFFF87171)
-                                }
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text("Thermal State:", fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(8.dp))
-                            Text(thermalStatus, color = when(thermalStatus) {
-                                "Normal" -> Color(0xFF4ADE80)
-                                "Light", "Moderate" -> Color(0xFFFACC15)
-                                else -> Color(0xFFF87171)
-                            }, fontWeight = FontWeight.ExtraBold)
-                        }
-                        
-                        Spacer(Modifier.height(12.dp))
-                        
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Vector Memory:", fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(8.dp))
-                            val usagePercent = if (vectorDbCapacityBytes > 0) (vectorDbUsage.toFloat() / vectorDbCapacityBytes * 100).toInt() else 0
-                            Text("$usagePercent% utilized", color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                }
-            }
             
 
             
@@ -1528,25 +1481,36 @@ fun ActiveModelCard(
                         Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
-                // Server Port
-                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" " + Localization.getString("server_port", appLanguage) + ": $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
-
-                // Thermal State
+                // Server Port & Temperature
                 val thermalColor = when (thermalStatus) {
                     "Normal" -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
                     "Fair", "Serious" -> Color(0xFFFACC15) // Yellow
                     "Critical", "Emergency", "Shutdown" -> Color(0xFFF87171) // Red
                     else -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
                 }
+
                 Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.HealthAndSafety, null, tint = thermalColor, modifier = Modifier.size(12.dp))
-                        Text(" Thermal: $thermalStatus", color = thermalColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                        Text(" " + Localization.getString("server_port", appLanguage) + ": $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        
+                        Spacer(Modifier.width(12.dp))
+                        
+                        Icon(
+                            Icons.Default.Thermostat, 
+                            null, 
+                            tint = thermalColor, 
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                // Vector Memory (Moved here for better density)
+                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
+                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Psychology, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                        Text(" RAM: $vectorMemory", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
 

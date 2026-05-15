@@ -16,7 +16,7 @@ The Dashboard is your primary hub for monitoring system health and managing AI m
 
 ### Key Functions:
 1.  **Hardware Telemetry**: Monitor your **RAM Usage**, **Thermal Status**, and **TPS** (Tokens Per Second).
-    *   **Health Icons**: Look for the **Shield** (Thermal) and **Brain** (Vector Memory) icons. They change color (Green -> Yellow -> Red) based on system load.
+    *   **Health Icons**: Real-time monitoring via the **Thermostat** (Thermal) and **Psychology** (Vector Memory) icons located directly on the Active Model card. They change color (Green -> Yellow -> Red) based on system load.
 2.  **Model Management**:
     *   **Scan**: Refresh to find GGUF model files on your device.
     *   **Activate**: Load a model into memory. (Takes 5-10s).
