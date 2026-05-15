@@ -3,6 +3,7 @@ package com.chhanda.ai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -136,6 +137,7 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
         )
     }
 
+    @OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -170,45 +172,60 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController, 
-            startDestination = "welcome", 
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable("welcome") { WelcomeScreen(navController) }
-            composable(Screen.Dashboard.route) { DashboardScreen(navController, systemViewModel) }
-            composable(Screen.Models.route) { 
-                val ragEnabled by systemViewModel.ragEnabled.collectAsState()
-                if (ragEnabled) {
-                    KnowledgeBaseScreen(navController, systemViewModel) 
-                } else {
-                    LaunchedEffect(Unit) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
+        androidx.compose.animation.SharedTransitionLayout {
+            NavHost(
+                navController = navController, 
+                startDestination = "welcome", 
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable("welcome") { WelcomeScreen(navController) }
+                composable(Screen.Dashboard.route) { 
+                    DashboardScreen(
+                        navController = navController, 
+                        viewModel = systemViewModel,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        animatedVisibilityScope = this@composable
+                    ) 
+                }
+                composable(Screen.Models.route) { 
+                    val ragEnabled by systemViewModel.ragEnabled.collectAsState()
+                    if (ragEnabled) {
+                        KnowledgeBaseScreen(navController, systemViewModel) 
+                    } else {
+                        LaunchedEffect(Unit) {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                            }
                         }
                     }
                 }
-            }
-            composable(Screen.Settings.route) { ConfigScreen(navController, systemViewModel) }
-            composable(Screen.Logs.route) { LogsScreen(navController, systemViewModel) }
-            composable(
-                "chat/{modelName}?sessionId={sessionId}&readOnly={readOnly}",
-                arguments = listOf(
-                    androidx.navigation.navArgument("modelName") { type = androidx.navigation.NavType.StringType },
-                    androidx.navigation.navArgument("sessionId") { 
-                        type = androidx.navigation.NavType.StringType
-                        nullable = true
-                        defaultValue = null
-                    },
-                    androidx.navigation.navArgument("readOnly") {
-                        type = androidx.navigation.NavType.BoolType
-                        defaultValue = false
-                    }
-                )
-            ) { backStackEntry ->
-                val readOnly = backStackEntry.arguments?.getBoolean("readOnly") ?: false
-                val viewModel: ChatViewModel = hiltViewModel()
-                ChatScreen(navController = navController, viewModel = viewModel, isReadOnly = readOnly)
+                composable(Screen.Settings.route) { ConfigScreen(navController, systemViewModel) }
+                composable(Screen.Logs.route) { LogsScreen(navController, systemViewModel) }
+                composable(
+                    "chat/{modelName}?sessionId={sessionId}&readOnly={readOnly}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("modelName") { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("sessionId") { 
+                            type = androidx.navigation.NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        },
+                        androidx.navigation.navArgument("readOnly") {
+                            type = androidx.navigation.NavType.BoolType
+                            defaultValue = false
+                        }
+                    )
+                ) { backStackEntry ->
+                    val readOnly = backStackEntry.arguments?.getBoolean("readOnly") ?: false
+                    val viewModel: ChatViewModel = hiltViewModel()
+                    ChatScreen(
+                        navController = navController, 
+                        viewModel = viewModel, 
+                        isReadOnly = readOnly,
+                        sharedTransitionScope = this@SharedTransitionLayout,
+                        animatedVisibilityScope = this@composable
+                    )
+                }
             }
         }
     }

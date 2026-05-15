@@ -17,6 +17,7 @@ class ChhandaApplication : Application() {
         
         Log.i("BOOT", "Chhanda Engine v18 initializing...")
         
-        Log.i("BOOT", "Chhanda Engine v18 initializing...")
+        // Senior Hardening: Init PDFBox for high-speed text extraction
+        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(this)
     }
 }

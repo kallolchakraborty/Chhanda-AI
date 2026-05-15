@@ -48,15 +48,27 @@ class LocalVectorStore @javax.inject.Inject constructor(
         val queryNorm = calculateNorm(queryVector)
         if (queryNorm < 1e-8) return@withContext emptyList()
 
-        // Use a Min-Heap to keep only top-K results efficiently
-        val topResults = java.util.PriorityQueue<SearchResult> { a, b -> a.score.compareTo(b.score) }
+        // Senior Optimization: Pre-allocate result buffer to avoid heap churn
+        val topResults = java.util.PriorityQueue<SearchResult>(topK + 1) { a, b -> a.score.compareTo(b.score) }
 
         for (entity in entities) {
             val vector = try { VectorChunkEntity.toFloatArray(entity.embeddingBlob) } catch (e: Exception) { continue }
             if (vector.size != queryVector.size) continue
             
-            val score = calculateFastCosine(queryVector, queryNorm, vector)
-            if (score < 0.15f) continue // Ignore very low relevance
+            // Fast Dot Product
+            var dotProduct = 0.0f
+            var vNormSq = 0.0f
+            for (i in queryVector.indices) {
+                val qi = queryVector[i]
+                val vi = vector[i]
+                dotProduct += qi * vi
+                vNormSq += vi * vi
+            }
+            
+            val vNorm = kotlin.math.sqrt(vNormSq.toDouble()).toFloat()
+            val score = if (vNorm > 1e-8) dotProduct / (queryNorm * vNorm) else 0.0f
+            
+            if (score < 0.20f) continue // Ignore very low relevance (Increased threshold)
 
             val result = SearchResult(
                 text = entity.text, 
@@ -77,20 +89,6 @@ class LocalVectorStore @javax.inject.Inject constructor(
         var norm = 0.0f
         for (x in v) norm += x * x
         return kotlin.math.sqrt(norm.toDouble()).toFloat()
-    }
-
-    private fun calculateFastCosine(q: FloatArray, qNorm: Float, v: FloatArray): Float {
-        var dotProduct = 0.0f
-        var vNormSq = 0.0f
-        for (i in q.indices) {
-            val qi = q[i]
-            val vi = v[i]
-            dotProduct += qi * vi
-            vNormSq += vi * vi
-        }
-        val vNorm = kotlin.math.sqrt(vNormSq.toDouble()).toFloat()
-        val denominator = qNorm * vNorm
-        return if (denominator < 1e-8) 0.0f else (dotProduct / denominator)
     }
 
     override suspend fun getStorageUsage(): StorageStats {

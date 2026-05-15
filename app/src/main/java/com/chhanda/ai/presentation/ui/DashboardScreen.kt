@@ -2,6 +2,9 @@ package com.chhanda.ai.presentation.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,11 +53,13 @@ import com.chhanda.ai.util.Localization
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun DashboardScreen(
     navController: NavController,
-    viewModel: SystemViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    viewModel: SystemViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope
 ) {
     val ramUsage by viewModel.ramUsage.collectAsState()
     val appStorageUsage by viewModel.appStorageUsage.collectAsState()
@@ -325,7 +330,9 @@ fun DashboardScreen(
                     thermalStatus = thermalStatus,
                     vectorMemory = vectorStorageMetrics,
                     appLanguage = appLanguage,
-                    ipAddress = viewModel.localIpAddress.collectAsState().value
+                    ipAddress = viewModel.localIpAddress.collectAsState().value,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope
                 )
             }
             
@@ -1390,7 +1397,7 @@ fun DeviceHistoryItem(
 }
 
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun ActiveModelCard(
     modelName: String, 
@@ -1405,7 +1412,9 @@ fun ActiveModelCard(
     thermalStatus: String = "Normal",
     vectorMemory: String = "0 MB / 1 GB",
     appLanguage: String = "English",
-    ipAddress: String = "Detecting..."
+    ipAddress: String = "Detecting...",
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope
 ) {
     Box(
         modifier = Modifier
@@ -1448,7 +1457,16 @@ fun ActiveModelCard(
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ChhandaLogo(size = 32, modelName = modelName)
+                with(sharedTransitionScope) {
+                    ChhandaLogo(
+                        size = 32, 
+                        modelName = modelName,
+                        modifier = Modifier.sharedElement(
+                            sharedTransitionScope.rememberSharedContentState(key = "model_logo_$modelName"),
+                            animatedVisibilityScope = animatedVisibilityScope
+                        )
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -1457,14 +1475,20 @@ fun ActiveModelCard(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else modelName, 
-                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
-                        fontSize = 20.sp, 
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
+                    with(sharedTransitionScope) {
+                        Text(
+                            if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else modelName, 
+                            color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
+                            fontSize = 20.sp, 
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.sharedElement(
+                                sharedTransitionScope.rememberSharedContentState(key = "model_name_$modelName"),
+                                animatedVisibilityScope = animatedVisibilityScope
+                            )
+                        )
+                    }
                 }
             }
             

@@ -60,9 +60,8 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
     implementation 'androidx.activity:activity-compose:1.9.3'
 
-    // BOM 2024.02.00 is verified stable for Kotlin 1.9.22 + compiler 1.5.10
-    // Maps to: ui:1.6.2, material3:1.2.0
-    implementation platform('androidx.compose:compose-bom:2024.02.00')
+    // BOM 2024.09.03 is verified stable for Kotlin 2.0+
+    implementation platform('androidx.compose:compose-bom:2024.09.03')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
@@ -112,6 +111,15 @@ dependencies {
     implementation "org.apache.poi:poi:5.2.5" 
     implementation "org.apache.poi:poi-ooxml:5.2.5"
     implementation "org.apache.poi:poi-scratchpad:5.2.5"
+
+    // PDF Extraction (Native layer)
+    implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
+
+    // Secure Storage
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+
+    // Memory Leak Detection (Debug only)
+    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.14'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'io.mockk:mockk:1.13.5'

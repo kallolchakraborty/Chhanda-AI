@@ -2,6 +2,9 @@ package com.chhanda.ai.presentation.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
@@ -73,9 +76,15 @@ import com.chhanda.ai.presentation.ui.components.ChhandaLogo
 import com.chhanda.ai.util.Localization
 import androidx.navigation.NavController
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
-fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnly: Boolean = false) {
+fun ChatScreen(
+    navController: NavController, 
+    viewModel: ChatViewModel, 
+    isReadOnly: Boolean = false,
+    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
+    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope
+) {
     val uiState by viewModel.uiState.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
     val systemViewModel: SystemViewModel = hiltViewModel()
@@ -185,15 +194,27 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
             CenterAlignedTopAppBar(
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { showCloseConfirm = true }) {
-                            ChhandaLogo(size = 32)
+                        with(sharedTransitionScope) {
+                            ChhandaLogo(
+                                size = 32,
+                                modifier = Modifier.sharedElement(
+                                    sharedTransitionScope.rememberSharedContentState(key = "model_logo_${viewModel.modelName}"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                )
+                            )
                         }
                         Spacer(Modifier.width(12.dp))
-                        Text(
-                            "Chhanda AI", 
-                            fontWeight = FontWeight.ExtraBold,
-                            style = MaterialTheme.typography.titleLarge
-                        ) 
+                        with(sharedTransitionScope) {
+                            Text(
+                                viewModel.modelName, 
+                                fontWeight = FontWeight.ExtraBold,
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.sharedElement(
+                                    sharedTransitionScope.rememberSharedContentState(key = "model_name_${viewModel.modelName}"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                )
+                            ) 
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

@@ -32,27 +32,56 @@ class AndroidMultimodalIngestor @Inject constructor(
     override suspend fun ingestPdf(uri: Uri): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val chunks = mutableListOf<String>()
         try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { fileDescriptor ->
-                val pdfRenderer = android.graphics.pdf.PdfRenderer(fileDescriptor)
-                val pageCount = pdfRenderer.pageCount
-                for (i in 0 until pageCount) {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val document = com.tom_roush.pdfbox.pdmodel.PDDocument.load(inputStream)
+                try {
+                    val stripper = com.tom_roush.pdfbox.text.PDFTextStripper()
+                    val text = stripper.getText(document)
+                    
+                    if (text.isNotBlank() && text.trim().length > 50) {
+                        // High-speed native extraction success
+                        android.util.Log.i("Ingestor", "PDF native extraction successful (${text.length} chars)")
+                        chunks.addAll(text.chunked(1000))
+                    } else {
+                        // Fallback to OCR if native text is too short (likely a scanned image)
+                        android.util.Log.w("Ingestor", "PDF native text sparse, falling back to OCR...")
+                        val ocrChunks = performOcrOnPdf(uri)
+                        chunks.addAll(ocrChunks)
+                    }
+                } finally {
+                    document.close()
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "PDFBox failed, final fallback to OCR: ${e.message}")
+            try {
+                chunks.addAll(performOcrOnPdf(uri))
+            } catch (inner: Exception) {
+                throw Exception("Failed to extract text from PDF: ${inner.message}")
+            }
+        }
+        chunks
+    }
+
+    private suspend fun performOcrOnPdf(uri: Uri): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val ocrChunks = mutableListOf<String>()
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { fileDescriptor ->
+            val pdfRenderer = android.graphics.pdf.PdfRenderer(fileDescriptor)
+            try {
+                for (i in 0 until pdfRenderer.pageCount) {
                     pdfRenderer.openPage(i).use { page ->
                         val bitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
                         page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        
                         val text = extractTextFromBitmap(bitmap)
-                        if (text.isNotBlank()) {
-                            chunks.add(text)
-                        }
-                        bitmap.recycle() // Senior Fix: Prevent OOM on large PDFs
+                        if (text.isNotBlank()) ocrChunks.add(text)
+                        bitmap.recycle()
                     }
                 }
+            } finally {
                 pdfRenderer.close()
             }
-        } catch (e: Exception) {
-            throw Exception("Failed to extract text from PDF: ${e.message}")
         }
-        chunks
+        ocrChunks
     }
 
     private suspend fun extractTextFromBitmap(bitmap: Bitmap): String = suspendCancellableCoroutine { continuation ->
