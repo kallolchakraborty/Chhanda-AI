@@ -472,7 +472,7 @@ Chhanda is built for global utility with a deep focus on the Indian subcontinent
 *   **Cross-Language RAG**: The system can ingest documents in any language and provide semantic search results in the user's preferred language.
 *   **Localized TTS (Text-to-Speech)**: Features human-like voices for each supported language. 
     *   **Bengali & Hindi Support**: Optimized for Indian accents and clear pronunciation.
-    *   **Virtual Personalities**: Choice between different voice profiles (e.g., Kallol, Adrit, Chhanda, Ivanshika) that map to the highest quality system voices available on the device.
+    *   **Virtual Personalities**: Choice between different voice profiles (e.g., Kallol, Chhanda) that map to the highest quality system voices available on the device.
 *   **Language Safety Gate**: Switching app languages triggers a safety protocol that shuts down active server instances and cleans the inference cache to ensure all components (including the Web Gateway) restart with the correct locale.
  
 ---
