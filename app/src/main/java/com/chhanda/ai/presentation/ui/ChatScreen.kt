@@ -198,6 +198,8 @@ fun ChatScreen(
                             ChhandaLogo(
                                 size = 32,
                                 modifier = Modifier.sharedElement(
+                                    // KEY: Synchronized with DashboardScreen's ActiveModelCard. 
+                                    // This causes the logo to visually "fly" from the card into the header.
                                     sharedTransitionScope.rememberSharedContentState(key = "model_logo_${viewModel.modelName}"),
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )
@@ -210,6 +212,7 @@ fun ChatScreen(
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.sharedElement(
+                                    // KEY: Synchronized with model name in Dashboard.
                                     sharedTransitionScope.rememberSharedContentState(key = "model_name_${viewModel.modelName}"),
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )

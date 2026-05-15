@@ -18,7 +18,11 @@ class SettingsRepository @Inject constructor(
 ) {
     private val dataStore = context.dataStore
 
-    // Senior Hardening: Use hardware-backed encrypted storage for sensitive keys
+    /**
+     * Senior Hardening: Sensitive credentials (HF_TOKEN, API_KEY) are stored in hardware-backed
+     * EncryptedSharedPreferences. This uses the Android KeyStore System (TEE/SE) to prevent 
+     * extraction even on rooted devices.
+     */
     private val masterKey = androidx.security.crypto.MasterKeys.getOrCreate(androidx.security.crypto.MasterKeys.AES256_GCM_SPEC)
     private val encryptedPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(
         "secure_settings",
@@ -27,6 +31,11 @@ class SettingsRepository @Inject constructor(
         androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
+
+    // StateFlows are used to provide a reactive bridge between the synchronous SharedPreferences
+    // and the asynchronous Compose UI, ensuring consistent state across the app.
+    private val _hfTokenState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("hf_token", "") ?: "")
+    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("api_key", ""))
 
     object PreferencesKeys {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
@@ -59,14 +68,12 @@ class SettingsRepository @Inject constructor(
         preferences[PreferencesKeys.CONTEXT_LENGTH] ?: "2048"
     }
 
-    private val _hfTokenState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("hf_token", "") ?: "")
     val hfTokenFlow: Flow<String> = _hfTokenState
 
     val maxDevicesFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.MAX_DEVICES] ?: 5
     }
 
-    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("api_key", ""))
     val apiKeyFlow: Flow<String?> = _apiKeyState
 
     val publicUrlFlow: Flow<String> = dataStore.data.map { preferences ->

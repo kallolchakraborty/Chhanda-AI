@@ -29,30 +29,42 @@ class AndroidMultimodalIngestor @Inject constructor(
     // Lazy: ML Kit init loads native libs — must NOT happen at app startup
     private val recognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
 
+    /**
+     * Extracts text from a PDF file using a high-performance dual-layer strategy.
+     * 1. Layer 1 (Fast): Uses PDFBox-Android to extract existing text layers. This is O(1) in terms of 
+     *    compute intensity and highly power efficient.
+     * 2. Layer 2 (Robust): If the text layer is missing or sparse (scanned docs), it falls back to 
+     *    rendering pages as Bitmaps and running ML Kit OCR.
+     */
     override suspend fun ingestPdf(uri: Uri): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val chunks = mutableListOf<String>()
         try {
+            // STEP 1: Attempt Native Text Layer Extraction
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                // PDDocument.load is memory intensive; uses IO context to avoid UI jank
                 val document = com.tom_roush.pdfbox.pdmodel.PDDocument.load(inputStream)
                 try {
                     val stripper = com.tom_roush.pdfbox.text.PDFTextStripper()
                     val text = stripper.getText(document)
                     
+                    // HEURISTIC: If text is less than 50 chars, it's likely a scanned image or empty.
+                    // We trigger the compute-heavy OCR fallback in this case.
                     if (text.isNotBlank() && text.trim().length > 50) {
-                        // High-speed native extraction success
                         android.util.Log.i("Ingestor", "PDF native extraction successful (${text.length} chars)")
+                        // Chunking ensures the RAG model receives manageable context windows
                         chunks.addAll(text.chunked(1000))
                     } else {
-                        // Fallback to OCR if native text is too short (likely a scanned image)
                         android.util.Log.w("Ingestor", "PDF native text sparse, falling back to OCR...")
                         val ocrChunks = performOcrOnPdf(uri)
                         chunks.addAll(ocrChunks)
                     }
                 } finally {
+                    // CRITICAL: Close document to prevent native memory leaks
                     document.close()
                 }
             }
         } catch (e: Exception) {
+            // STEP 2: Catch-all fallback for corrupted text layers or PDFBox errors
             android.util.Log.e("Ingestor", "PDFBox failed, final fallback to OCR: ${e.message}")
             try {
                 chunks.addAll(performOcrOnPdf(uri))

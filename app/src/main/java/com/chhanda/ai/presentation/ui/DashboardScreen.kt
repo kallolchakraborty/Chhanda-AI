@@ -1397,6 +1397,12 @@ fun DeviceHistoryItem(
 }
 
 
+/**
+ * High-Density Control Card for the Active Model.
+ * Implementation Details:
+ * - Uses Shared Element Transitions to connect the model's identity to the Chat screen.
+ * - Integration requires [sharedTransitionScope] and [animatedVisibilityScope] from the NavHost.
+ */
 @OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun ActiveModelCard(
@@ -1462,6 +1468,7 @@ fun ActiveModelCard(
                         size = 32, 
                         modelName = modelName,
                         modifier = Modifier.sharedElement(
+                            // KEY: Must match exactly in the destination screen (ChatScreen) to trigger the transition.
                             sharedTransitionScope.rememberSharedContentState(key = "model_logo_$modelName"),
                             animatedVisibilityScope = animatedVisibilityScope
                         )

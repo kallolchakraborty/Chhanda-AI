@@ -45,17 +45,25 @@ class LocalVectorStore @javax.inject.Inject constructor(
         if (entities.isEmpty()) return@withContext emptyList()
 
         val queryVector = query.vector
+        // PRE-COMPUTE: Normalization of query vector outside the loop to avoid O(N) redundant sqrt calls
         val queryNorm = calculateNorm(queryVector)
         if (queryNorm < 1e-8) return@withContext emptyList()
 
-        // Senior Optimization: Pre-allocate result buffer to avoid heap churn
+        /** 
+         * Senior Optimization: PriorityQueue (Min-Heap) used to track top results.
+         * Size is capped at topK + 1 to ensure complexity of O(N log K) where N is number of chunks.
+         * This avoids sorting the entire database.
+         */
         val topResults = java.util.PriorityQueue<SearchResult>(topK + 1) { a, b -> a.score.compareTo(b.score) }
 
         for (entity in entities) {
+            // STEP 1: De-serialize blob to float array. 
+            // NOTE: In future versions, consider memory-mapping the DB for faster access.
             val vector = try { VectorChunkEntity.toFloatArray(entity.embeddingBlob) } catch (e: Exception) { continue }
             if (vector.size != queryVector.size) continue
             
-            // Fast Dot Product
+            // STEP 2: Fast Inlined Dot Product Calculation
+            // We inline this to avoid function-call overhead in the tightest loop of the app.
             var dotProduct = 0.0f
             var vNormSq = 0.0f
             for (i in queryVector.indices) {
@@ -65,10 +73,12 @@ class LocalVectorStore @javax.inject.Inject constructor(
                 vNormSq += vi * vi
             }
             
+            // STEP 3: Cosine Similarity normalization
             val vNorm = kotlin.math.sqrt(vNormSq.toDouble()).toFloat()
             val score = if (vNorm > 1e-8) dotProduct / (queryNorm * vNorm) else 0.0f
             
-            if (score < 0.20f) continue // Ignore very low relevance (Increased threshold)
+            // HEURISTIC: Reject noise. 0.20 is a safe floor for semantic relevance.
+            if (score < 0.20f) continue 
 
             val result = SearchResult(
                 text = entity.text, 
@@ -76,9 +86,10 @@ class LocalVectorStore @javax.inject.Inject constructor(
                 metadata = mapOf("source" to entity.source, "type" to entity.type)
             )
             
+            // Maintain heap property
             topResults.add(result)
             if (topResults.size > topK) {
-                topResults.poll()
+                topResults.poll() // Remove lowest score to keep only top-K
             }
         }
         
