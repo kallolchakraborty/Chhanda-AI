@@ -22,19 +22,26 @@ data class VectorChunkEntity(
     val embeddingBlob: ByteArray
 ) {
     companion object {
+        /**
+         * SENIOR OPTIMIZATION: Int8 Quantization for embeddings.
+         * Reduces disk and RAM footprint by 75% (4 bytes -> 1 byte per dimension).
+         * For normalized embeddings (-1 to 1), we scale by 127.
+         */
         fun fromFloatArray(array: FloatArray): ByteArray {
-            val buffer = ByteBuffer.allocate(array.size * 4).order(ByteOrder.LITTLE_ENDIAN)
-            for (f in array) {
-                buffer.putFloat(f)
+            val bytes = ByteArray(array.size)
+            for (i in array.indices) {
+                // Linear quantization: map [-1.0, 1.0] to [-128, 127]
+                val clamped = array[i].coerceIn(-1f, 1f)
+                bytes[i] = (clamped * 127f).toInt().toByte()
             }
-            return buffer.array()
+            return bytes
         }
 
         fun toFloatArray(bytes: ByteArray): FloatArray {
-            val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            val array = FloatArray(bytes.size / 4)
-            for (i in array.indices) {
-                array[i] = buffer.float
+            val array = FloatArray(bytes.size)
+            for (i in bytes.indices) {
+                // De-quantization: map [-128, 127] back to [-1.0, 1.0]
+                array[i] = bytes[i].toFloat() / 127f
             }
             return array
         }

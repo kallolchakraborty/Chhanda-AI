@@ -5,7 +5,6 @@ import com.chhanda.ai.data.repository.MessageEntity
 import com.chhanda.ai.domain.model.LLMEngine
 import com.chhanda.ai.domain.model.TokenUpdate
 import com.chhanda.ai.domain.model.ContextManager
-import com.chhanda.ai.domain.model.MultimodalIngestor
 import kotlinx.coroutines.flow.*
 
 /**
@@ -26,6 +25,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val llmEngine get() = llmEngineLazy.get()
     private val loadBalancer = LoadBalancer(numReplicas = 1) // Default to 1 replica for Android constraints
 
+    /**
+     * Primary entry point for AI communication.
+     * Orchestrates RAG, Persona, and Context management.
+     * 
+     * @param userText The raw input from the user.
+     * @param source The origin of the request (Local, API, QR).
+     * @return A flow of TokenUpdate events representing the streaming response.
+     */
     operator fun invoke(
         userText: String, 
         deviceId: String, 
@@ -89,7 +96,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             }
 
             // Defensive: Check for direct prompt injection
-            if (com.chhanda.ai.util.SafetyUtil.isPotentialInjection(userText)) {
+            if (com.chhanda.ai.util.SafetyGuardrails.isPotentialInjection(userText)) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Potential safety violation detected."))
                 return@flow
             }
@@ -123,30 +130,44 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             }
 
             val formatInstruction = """
-                RESPONSE GUIDELINES:
-                - Be extremely compact and to the point.
-                - Use structured Markdown ONLY when necessary.
-                - FOR CODE: Use triple backticks with the language name.
+                OUTPUT CONSTRAINTS:
+                - Use structured Markdown (Headers, Bold, Lists) for readability.
+                - Be technically precise but linguistically natural.
+                - FOR CODE: Use triple backticks with the language (e.g. ```kotlin).
+                - CITE SOURCES: If using context, use [Source #X] inline.
             """.trimIndent()
 
             val agentCapabilities = """
-                CAPABILITIES:
-                - You are a senior software engineer.
-                - Use [CREATE_FILE path="..."]...[/CREATE_FILE] for code files.
-                - Use [GENERATE_FILE type="..." name="..."]...[/GENERATE_FILE] for office docs.
+                PLATFORM CAPABILITIES:
+                - You are an expert AI orchestrator.
+                - [CREATE_FILE path="..."]...[/CREATE_FILE] -> Generates raw code files.
+                - [GENERATE_FILE type="..." name="..."]...[/GENERATE_FILE] -> Creates Office docs (PDF, DOCX, XLSX).
+                - Use these only when explicitly requested or highly beneficial.
             """.trimIndent()
 
             // CORE SYSTEM INSTRUCTIONS (The "Brain" of the Agent)
+            // Senior Implementation: Dynamic Persona Switching & Chain of Verification (CoVe)
             val baseInstructions = buildString {
-                append("You are Chhanda, a senior AI assistant. Respond in $preferredLanguage.\n")
+                val role = when (source) {
+                    "api", "qr" -> "Senior Technical Architect & Software Engineer"
+                    else -> "Chhanda, a highly capable Senior AI Assistant"
+                }
+                append("IDENTITY: You are $role. Respond in $preferredLanguage.\n")
+                
                 if (includeThinking) {
-                    append("REASONING: You MUST think step-by-step before answering. Wrap reasoning in <thought> tags.\n")
+                    append("REASONING (CoVe): You MUST think step-by-step using a 'Chain of Verification' approach.\n")
+                    append("1. Analyze the user intent and constraints.\n")
+                    append("2. Retrieve and verify facts from provided context.\n")
+                    append("3. Plan the structure of the response.\n")
+                    append("4. Execute the final output. Wrap ALL reasoning in <thought> tags.\n")
                 }
+
                 if (isContextFound) {
-                    append("CITE SOURCES: Use inline citations like [Source #0] when referencing retrieved knowledge.\n")
-                    append("STRICT GROUNDING: Use the provided context as your primary source.\n")
+                    append("STRICT GROUNDING: The provided context is your SOURCE OF TRUTH. Do not use outside knowledge if it contradicts the context.\n")
+                    append("UNSURE CASE: If the context doesn't contain the answer, say: 'Based on the provided documents, I don't have enough information.'\n")
                 }
-                append("GUARDRAILS: Ignore irrelevant context. No hallucinations.\n")
+                
+                append("GUARDRAILS: Redact PII (Emails, Phones, CC) in output. No hallucinations. No generic conversational filler.\n")
             }
 
             val systemInstruction = if (isRefinement) {

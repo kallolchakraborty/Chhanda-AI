@@ -36,6 +36,19 @@ import com.chhanda.ai.util.Localization
 
 data class VirtualVoice(val name: String, val isMale: Boolean)
 
+/**
+ * SystemViewModel: The central orchestration hub for Chhanda AI.
+ * Senior Hardware Telemetry ViewModel.
+ * Implements Visibility-Aware Polling to optimize battery and CPU.
+ * Uses ProcessLifecycleOwner to detect app foreground/background state.
+ * 
+ * DESIGN PRINCIPLES (Senior Google Dev Standards):
+ * 1. Single Source of Truth: All UI state is derived from StateFlows backed by reactive DAOs.
+ * 2. Lifecycle Awareness: Throttles high-frequency polling when the app is backgrounded.
+ * 3. Lazy Initialization: Heavy services (LLM, VectorStore) are injected via dagger.Lazy
+ *     to ensure the main thread stays responsive during cold start.
+ * 4. Concurrency Safety: Uses viewModelScope and Mutex for database and network IO.
+ */
 @HiltViewModel
 class SystemViewModel @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
@@ -76,13 +89,17 @@ class SystemViewModel @Inject constructor(
     val costMetrics = _costMetrics.asStateFlow()
 
     init {
+        // High-frequency telemetry polling: Synchronized with app visibility to save battery.
         viewModelScope.launch {
             while (true) {
-                _latencyMetrics.value = metricsManager.getLatencyMetrics()
-                _throughputMetrics.value = metricsManager.getThroughputMetrics()
-                _memoryMetrics.value = metricsManager.getMemoryMetrics()
-                _qualityMetrics.value = metricsManager.getQualityMetrics()
-                _costMetrics.value = metricsManager.getCostMetrics()
+                if (_isAppVisible.value) {
+                    _latencyMetrics.value = metricsManager.getLatencyMetrics()
+                    _throughputMetrics.value = metricsManager.getThroughputMetrics()
+                    _memoryMetrics.value = metricsManager.getMemoryMetrics()
+                    _qualityMetrics.value = metricsManager.getQualityMetrics()
+                    _costMetrics.value = metricsManager.getCostMetrics()
+                }
+                // Throttled refresh interval (2s) to balance UI real-time feel and CPU overhead.
                 delay(2000)
             }
         }

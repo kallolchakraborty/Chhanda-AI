@@ -193,7 +193,6 @@ class ChhandaForegroundService : Service() {
     private fun shutdown() {
         unregisterMdns()
         try { chhandaServer.stop() } catch (e: Exception) { Log.w(TAG, "Server stop: ${e.message}") }
-        com.chhanda.ai.util.GlobalState.setHotspotActive(false)
         releaseLocks()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)

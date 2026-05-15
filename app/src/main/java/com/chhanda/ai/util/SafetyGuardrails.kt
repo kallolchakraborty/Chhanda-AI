@@ -23,6 +23,39 @@ object SafetyGuardrails {
         Regex("""(?i)\b(instruction|ignore|previous|override|bypass)\b.*\b(all|everything|rules|safety)\b""") // Injection
     )
 
+    // Specific Prompt Injection Patterns (From Senior Security Research)
+    private val INJECTION_PATTERNS = listOf(
+        "ignore previous instructions",
+        "ignore all previous",
+        "system prompt",
+        "new instructions",
+        "reveal your prompt",
+        "output the system instruction",
+        "reveal the context",
+        "forget everything",
+        "jailbreak",
+        "dan mode",
+        "do anything now",
+        "bypass constraints",
+        "override safety",
+        "ignore rules",
+        "print the system instruction"
+    )
+
+    // Senior Regex for detecting complex injection attempts
+    private val HEURISTIC_INJECTION_REGEX = Regex(
+        """(?i).*(ignore|bypass|override|forget|reveal|reveal|output).*(instruction|rule|constraint|safety|prompt|context|history).*"""
+    )
+
+    /**
+     * Detects potential prompt injection attempts.
+     */
+    fun isPotentialInjection(input: String): Boolean {
+        val lowercaseInput = input.lowercase()
+        return INJECTION_PATTERNS.any { pattern -> lowercaseInput.contains(pattern) } || 
+               HEURISTIC_INJECTION_REGEX.matches(input)
+    }
+
     /**
      * Cleans and validates the user input before it reaches the LLM.
      * Returns a pair of (CleanedText, IsViolation)
@@ -80,5 +113,20 @@ object SafetyGuardrails {
         } else {
             "$baseSafety\n\nUser specified context:\n$original"
         }
+    }
+
+    /**
+     * Sanitizes user input by wrapping it in defensive delimiters.
+     */
+    fun sanitizeInput(input: String): String {
+        return "[USER_INPUT_START]\n$input\n[USER_INPUT_END]"
+    }
+
+    /**
+     * Sanitizes retrieved context to prevent indirect prompt injection.
+     */
+    fun sanitizeContext(context: String): String {
+        if (context.isBlank()) return ""
+        return "[EXTERNAL_CONTEXT_START]\n$context\n[EXTERNAL_CONTEXT_END]"
     }
 }

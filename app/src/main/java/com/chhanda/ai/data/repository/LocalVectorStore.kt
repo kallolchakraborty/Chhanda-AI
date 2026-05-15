@@ -36,6 +36,10 @@ class LocalVectorStore @javax.inject.Inject constructor(
         vectorChunkDao.insertAll(entities)
     }
 
+    /**
+     * Searches the vector store for the top-K most similar chunks to the query embedding.
+     * Uses a Min-Heap (PriorityQueue) to ensure O(N log K) complexity.
+     */
     override suspend fun search(query: Embedding, topK: Int, modelId: String): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         val entities = try { vectorChunkDao.getAllForModel(modelId) } catch (e: Exception) { 
             android.util.Log.e("LocalVectorStore", "Search failed: ${e.message}")
@@ -57,27 +61,30 @@ class LocalVectorStore @javax.inject.Inject constructor(
         val topResults = java.util.PriorityQueue<SearchResult>(topK + 1) { a, b -> a.score.compareTo(b.score) }
 
         for (entity in entities) {
-            // STEP 1: De-serialize blob to float array. 
-            // NOTE: In future versions, consider memory-mapping the DB for faster access.
-            val vector = try { VectorChunkEntity.toFloatArray(entity.embeddingBlob) } catch (e: Exception) { continue }
-            if (vector.size != queryVector.size) continue
+            val vectorBytes = entity.embeddingBlob
+            if (vectorBytes.size != queryVector.size) continue
             
-            // STEP 2: Fast Inlined Dot Product Calculation
-            // We inline this to avoid function-call overhead in the tightest loop of the app.
-            var dotProduct = 0.0f
-            var vNormSq = 0.0f
+            // STEP 2: Fast Quantized Dot Product Calculation
+            // Senior Optimization: We work directly with bytes to avoid de-quantization overhead.
+            // Result is scaled back to float at the end of the loop.
+            var dotProductInt = 0
+            var vNormSqInt = 0
             for (i in queryVector.indices) {
-                val qi = queryVector[i]
-                val vi = vector[i]
-                dotProduct += qi * vi
-                vNormSq += vi * vi
+                val qi = (queryVector[i] * 127f).toInt()
+                val vi = vectorBytes[i].toInt()
+                dotProductInt += qi * vi
+                vNormSqInt += vi * vi
             }
             
-            // STEP 3: Cosine Similarity normalization
-            val vNorm = kotlin.math.sqrt(vNormSq.toDouble()).toFloat()
-            val score = if (vNorm > 1e-8) dotProduct / (queryNorm * vNorm) else 0.0f
+            // STEP 3: Scale back and compute Cosine Similarity
+            // Normalize: (A·B) / (||A|| * ||B||)
+            // Since we scaled by 127, the product was scaled by 127*127.
+            // However, the division (dotProductInt / sqrt(vNormSqInt)) cancels out one 127.
+            // We then divide by queryNorm (which is in float space).
+            val vNorm = kotlin.math.sqrt(vNormSqInt.toDouble()).toFloat()
+            val score = if (vNorm > 1e-8) (dotProductInt.toFloat() / (queryNorm * 127f * vNorm)) else 0.0f
             
-            // HEURISTIC: Reject noise. 0.20 is a safe floor for semantic relevance.
+            // HEURISTIC: Reject noise.
             if (score < 0.20f) continue 
 
             val result = SearchResult(

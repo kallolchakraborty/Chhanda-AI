@@ -55,11 +55,6 @@ class MainActivity : ComponentActivity() {
                 permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
             
-            // Critical: Hotspot (LocalOnlyHotspot) needs location on all Android versions
-            permissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                permissions.add("android.permission.NEARBY_WIFI_DEVICES")
-            }
             
             val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()

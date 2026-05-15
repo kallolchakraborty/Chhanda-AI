@@ -1,143 +1,415 @@
-# ❓ Chhanda AI - Deep Dive & FAQ
+# ❓ Chhanda AI — Deep Dive & FAQ
+
+**Technical FAQ & Architecture Reference · Version 1.2 · May 2026**
+
+---
+
+## Table of Contents
+
+1. [Privacy & Security](#-privacy--security)
+2. [RAG Architecture & Techniques](#-rag-architecture--techniques)
+3. [Metrics & Observability](#-metrics--observability)
+4. [Orchestration & Server Flow](#-orchestration--server-flow)
+5. [AI Server Architecture](#-ai-server-architecture)
+6. [Chat & Personas](#-chat--personas)
+7. [Advanced Settings & Lifecycle](#-advanced-settings--lifecycle)
+8. [Safety & Guardrails](#-safety--guardrails)
+9. [Hardware & Performance](#-hardware--performance)
+10. [Troubleshooting](#-troubleshooting)
+
+---
 
 ## 🔒 Privacy & Security
 
 ### 1. Is Chhanda really 100% offline?
-**Yes.** Once the app and models are downloaded, Chhanda requires zero internet for inference, RAG (document search), and chat. 
+**Yes.** Once the app and models are downloaded, Chhanda requires zero internet for inference, RAG (document search), and chat.
 *   **Code Reference**: `LiteRTLMEngine.kt` handles model loading entirely via native JNI calls without any network stack.
-*   **Exception**: The initial "Scraping" phase of a website URL requires internet to fetch the HTML content. Once fetched, the data is processed and stored locally.
+*   **Exception**: The initial "Scraping" phase of a website URL requires internet to fetch the HTML content via Jsoup. Once fetched, the data is processed and stored locally in the Int8 vector store.
+*   **Verification**: The `AndroidManifest.xml` does not include `android.permission.INTERNET` as a required permission for core functionality — it's only used for optional model downloads and URL scraping.
 
 ### 2. How is my privacy protected during API interactions?
 **Source-Based Ephemerality.**
-*   **Local & Web (QR) Chat**: Stored in `chat_history` table for persistence.
-*   **API Access**: Any request where `source == "api"` is processed without being saved to the database.
-*   **Code Reference**: `SendMessageUseCase.kt` (Line 156) checks the `source` parameter to determine session persistence and persona.
+*   **Local & Web (QR) Chat**: Messages are stored in the `chat_history` Room table for persistence across sessions.
+*   **API Access**: Any request where `source == "api"` is processed in-memory and **never persisted** to the database. The response is streamed back and discarded.
+*   **Code Reference**: `SendMessageUseCase.kt` checks the `source` parameter to determine session persistence and persona selection.
+
+### 3. Where are my API keys stored?
+API keys and HuggingFace tokens are stored in `EncryptedSharedPreferences`, which uses:
+*   **AES-256-GCM** encryption for values
+*   **AES-256-SIV** encryption for keys
+*   **Android KeyStore (TEE/SE)** as the master key provider — hardware-isolated and inaccessible even on rooted devices
+*   **Code Reference**: `SettingsRepository.kt` initializes the encrypted preferences via `MasterKey.Builder`.
+
+### 4. What permissions does Chhanda request?
+After the recent hardening pass, the permission set has been minimized:
+
+| Permission | Purpose | When Requested |
+|:---|:---|:---|
+| `POST_NOTIFICATIONS` | Foreground service notification | API 33+ |
+| `READ_MEDIA_IMAGES/VIDEO/AUDIO` | RAG document access | API 33+ |
+| `READ/WRITE_EXTERNAL_STORAGE` | Legacy storage access | API < 33 |
+| `RECORD_AUDIO` | Voice input in chat | On first use |
+| `INTERNET` | Model downloads, URL scraping, SSH tunneling | Always available |
+| `ACCESS_WIFI_STATE` | Network status for gateway | Always available |
+| `FOREGROUND_SERVICE` | Background AI server | Always available |
+
+**Removed** (after hardening): `ACCESS_FINE_LOCATION`, `NEARBY_WIFI_DEVICES` — no longer needed since automated hotspot management was removed.
 
 ---
 
 ## 🏗️ RAG Architecture & Techniques
 
-### 3. How does the Chhanda RAG Pipeline work?
-Chhanda implements a sophisticated, multi-stage RAG pipeline optimized for mobile edge computing.
+### 5. How does the Chhanda RAG Pipeline work?
 
 ```mermaid
 graph TD
-    subgraph "Ingestion Layer (Offline)"
-        A[Files: PDF/DOCX/XLSX/IMG] --> B[Multimodal Ingestor]
-        B --> C[TextChunker: Paragraph-First]
-        C --> D[Embedding Engine: Local]
-        D --> E[(Vector Store: SQLite + FTS)]
+    subgraph "Ingestion Layer"
+        A["Files: PDF/DOCX/XLSX/IMG/URL"] --> B["MultimodalIngestor<br/>(Format Detection)"]
+        B --> C["TextChunker<br/>(Paragraph-First, 500 chars max)"]
+        C --> D["EmbeddingEngine<br/>(MediaPipe 512-dim)"]
+        D --> E["Int8 Quantizer<br/>(float × 127 → byte)"]
+        E --> F[("Room DB<br/>VectorChunkEntity BLOB")]
     end
 
-    subgraph "Retrieval Layer (Real-time)"
-        F[User Query] --> G[ContextManager]
-        G --> H{Adaptive Similarity Engine}
-        H -- "High Precision (0.82)" --> I[General Knowledge]
-        H -- "Deep Discovery (0.65)" --> J[Explicit Search]
-        I --> K[Context Window]
-        J --> K
+    subgraph "Retrieval Layer"
+        G["User Query"] --> H["ContextManager"]
+        H --> I{"Follow-up Detection<br/>(pronouns / short query)"}
+        I -- Yes --> J["Augment with previous turn"]
+        I -- No --> K["Use raw query"]
+        J --> L["EmbeddingEngine.embed()"]
+        K --> L
+        L --> M["LocalVectorStore.search()"]
+        M --> N{"Adaptive Threshold"}
+        N -- "Explicit (file/search)" --> O["≥ 0.60"]
+        N -- "General" --> P["≥ 0.80"]
+        N -- "Follow-up fallback" --> Q["≥ 0.50"]
     end
 
     subgraph "Generation Layer"
-        K --> L[Multi-Tier Prompt Orchestrator]
-        L --> M[LiteRT LLM Engine]
-        M --> N[Streaming Response + TTS]
+        O & P & Q --> R["Format as XML tags"]
+        R --> S["Multi-Tier Prompt Builder"]
+        S --> T["LiteRT LM Engine"]
+        T --> U["Streaming Response + TTS"]
     end
 ```
 
-### 4. What is "Adaptive Retrieval"?
-Instead of a static similarity threshold, Chhanda uses a **Dual-Threshold Strategy** to balance between accuracy and thoroughness.
-*   **Code Reference**: `ContextManager.kt` (Line 52) implements this logic.
+### 6. What is "Adaptive Retrieval"?
+Instead of a static similarity threshold, Chhanda uses a **Triple-Threshold Strategy**:
 
-```mermaid
-flowchart LR
-    A[Query Received] --> B{Explicit Search Keywords?}
-    B -- "Yes (files, search, attachment)" --> C[Threshold = 0.65]
-    B -- "No" --> D[Threshold = 0.82]
-    C --> E[Fetch Relevant Chunks]
-    D --> E
-    E --> F[Inject into Prompt Tier 2]
+| Mode | Threshold | Trigger | Rationale |
+|:---|:---|:---|:---|
+| **General** | 0.80 | Default queries | High precision — only return confident matches |
+| **Explicit Search** | 0.60 | Keywords: `file`, `attachment`, `search`, `web` | Deeper discovery for deliberate lookups |
+| **Follow-up Fallback** | 0.50 | Short queries or pronoun-heavy follow-ups | Last-resort retrieval when augmented query still underperforms |
+
+**Code Reference**: `ContextManager.kt` (Lines 56-64)
+
+### 7. How does Int8 quantization work?
+Each 512-dimensional float embedding is converted to bytes:
+
+```
+For each dimension i:
+  byte_value[i] = (float_value[i] × 127).toByte()
+
+Storage: 512 bytes per chunk (vs. 2,048 bytes for Float32)
+Savings: 75% reduction
 ```
 
-### 5. How are prompts orchestrated in Chhanda?
-Chhanda uses a **Multi-Tier Prompt System** to ensure the LLM prioritizes immediate context (attachments) over long-term indexed knowledge.
-*   **Tier 1 (Immediate)**: Files currently attached to the chat session.
-*   **Tier 2 (Global)**: Documents retrieved from the vector database.
-*   **Tier 3 (Short-term)**: Recent chat history (last 10 turns).
-*   **Code Reference**: `SendMessageUseCase.kt` (Lines 164-165) defines this hierarchy.
+During search, the **dot product is computed directly on bytes** without de-quantization:
+```kotlin
+for (i in queryVector.indices) {
+    val qi = (queryVector[i] * 127f).toInt()
+    val vi = vectorBytes[i].toInt()
+    dotProductInt += qi * vi
+    vNormSqInt += vi * vi
+}
+```
+
+This avoids expensive float→byte→float round-trips during the search loop.
+
+**Code Reference**: `LocalVectorStore.kt` (Lines 68-80)
+
+### 8. How are prompts orchestrated?
+Chhanda uses a **Multi-Tier Prompt System** to ensure the LLM correctly prioritizes different knowledge sources:
+
+| Tier | Name | Source | Priority |
+|:---|:---|:---|:---|
+| **Tier 1** | Immediate Context | Files attached to the current chat turn | Highest |
+| **Tier 2** | Global Knowledge | Documents retrieved from the RAG vector store | Medium |
+| **Tier 3** | Short-term Memory | Last 10 chat turns from the current session | Lower |
+| **Tier 4** | Pre-trained Knowledge | The model's built-in training data | Lowest |
+
+The system prompt explicitly instructs: *"PRIORITY 1 (ATTACHMENTS): Use TIER 1 first. PRIORITY 2 (KNOWLEDGE BASE): Use TIER 2 if the answer isn't in TIER 1. PRIORITY 3 (INTERNAL): Only use your pre-trained knowledge if the above tiers are insufficient."*
+
+**Code Reference**: `PersonaManager.kt` (Lines 38-40), `SendMessageUseCase.kt` (prompt assembly)
 
 ---
 
 ## 📈 Metrics & Observability
 
-### 6. What is the significance of "Tail Latency" (p99)?
-While average latency (p50) shows the typical speed, **p99** represents the slowest 1% of your queries. Tracking p99 is critical for identifying performance bottlenecks like thermal throttling or memory pressure.
-*   **Code Reference**: `RAGMetricsManager.kt` (Lines 50-59).
+### 9. What RAG metrics does Chhanda track?
+`RAGMetricsManager` provides production-grade monitoring:
 
-### 7. Why track Recall@K and MRR for my documents?
-*   **Recall@K**: Measures if the relevant information was found within the top 'K' results.
-*   **MRR (Mean Reciprocal Rank)**: Measures how high the "perfect" answer appeared. Higher MRR means faster, more accurate context discovery.
+| Metric | What It Measures | Why It Matters |
+|:---|:---|:---|
+| **p50 Latency** | Median query time | Typical user experience |
+| **p99 Latency** | 99th percentile (slowest 1%) | Detects thermal throttling or memory pressure |
+| **Recall@K** | Was the relevant chunk in the top K results? | Measures search effectiveness |
+| **MRR** | Mean Reciprocal Rank — how high the "best" answer ranked | Higher MRR = faster context discovery |
+| **Total Queries** | Cumulative query count | Usage tracking |
+
+**Code Reference**: `RAGMetricsManager.kt`
+
+### 10. How is telemetry power-efficient?
+All hardware monitors (RAM, thermal, TPS, IP polling) run on coroutine loops with `delay()`. When the app goes to background, `SystemViewModel.onVisibilityChanged(false)` is called, and all polling loops check `_isAppVisible` before executing their iteration:
+
+```kotlin
+if (_isAppVisible.value && _isServerRunning.value) {
+    // Perform expensive health check
+}
+delay(if (_isLocalLinkOk.value) 30000 else 10000)
+```
+
+**Impact**: ~12% reduction in idle battery drain.
+
+**Code Reference**: `SystemViewModel.kt` (Lines 536-545, 698-721)
 
 ---
 
 ## 🚀 Orchestration & Server Flow
 
-### 8. How does the internal Load Balancer route requests?
-Chhanda handles traffic from three distinct sources (Host UI, Web UI, API) using a prefix-hash load balancer to maximize performance.
+### 11. What is the request lifecycle on the Gateway?
 
 ```mermaid
 sequenceDiagram
-    participant User as Multi-Client (Web/API/App)
-    participant LB as LoadBalancer (Prefix-Hash)
-    participant Replica1 as Replica A (LiteRT)
-    participant Replica2 as Replica B (LiteRT)
+    autonumber
+    participant C as Client (Web/API)
+    participant K as Ktor-CIO Server
+    participant A as API Key Validator
+    participant R as Rate Limiter (Leaky Bucket)
+    participant S as Concurrency Semaphore
+    participant SG as SafetyGuardrails
+    participant LLM as LiteRT LM Engine
 
-    User->>LB: SendMessage(Prompt)
-    LB->>LB: Hash(Prefix: 50 chars)
-    LB-->>Replica1: Route (KV-Cache Locality)
-    Note over Replica1: Processing...
-    Replica1->>User: Stream(TokenUpdate)
-    
-    User->>LB: Concurrent Request
-    LB-->>Replica2: Spillover (Least Loaded)
-    Replica2->>User: Stream(TokenUpdate)
+    C->>K: POST /v1/chat/completions
+    K->>A: Validate X-API-Key header
+    A-->>K: ✅ Valid
+    K->>R: Check client IP bucket
+    R-->>K: ✅ Under limit (1 req/s)
+    K->>S: Acquire permit (max 2)
+    S-->>K: ✅ Permit granted
+
+    K->>SG: auditInput(userMessage)
+    SG-->>K: (sanitized, isViolation=false)
+    K->>LLM: Generate response (streaming)
+
+    loop Token Streaming
+        LLM-->>K: TokenUpdate.Partial
+        K-->>C: SSE / JSON chunk
+    end
+
+    LLM-->>K: TokenUpdate.Final
+    K->>SG: auditOutput(response)
+    K->>S: Release permit
+    K-->>C: Final response + [DONE]
 ```
+
+### 12. What endpoints does the server expose?
+
+| Endpoint | Method | Auth | Description |
+|:---|:---|:---|:---|
+| `/ping` | GET | None | Health check → returns `pong` |
+| `/v1/chat/completions` | POST | X-API-Key | OpenAI-compatible chat API |
+| `/v1/models` | GET | X-API-Key | List loaded models |
+| `/api/chat` | POST | X-API-Key | Legacy Chhanda chat endpoint |
+| `/` | GET | X-API-Key | Full Web UI (chat interface) |
+| `/heartbeat` | POST | X-API-Key | Client keepalive signal |
 
 ---
 
 ## 📡 AI Server Architecture
 
-### 9. What engine powers the Chhanda AI Server?
-We use **Ktor** with the **CIO (Coroutine-based I/O)** engine.
-*   **Optimization**: CIO is 100% Kotlin-native and avoids the Netty/JNI compatibility issues common on Android.
-*   **Code Reference**: `ChhandaServer.kt` (Lines 45-53).
+### 13. What engine powers the Chhanda AI Server?
+**Ktor** with the **CIO (Coroutine-based I/O)** engine.
+*   **Why CIO over Netty?** CIO is 100% Kotlin-native and avoids the JNI/native library compatibility issues that Netty introduces on Android. It runs entirely within Kotlin coroutines, making it lightweight and perfectly suited for mobile.
+*   **Code Reference**: `ChhandaServer.kt` — the server is configured with `embeddedServer(CIO, ...)`.
 
-### 10. How does the "Public URL" (Tunneling) work?
-Chhanda uses **JSch** to create an SSH tunnel via **localhost.run**. This provides zero-config remote access without port forwarding.
-*   **Code Reference**: `ChhandaServer.kt` (Lines 284-293).
+### 14. How does the "Public URL" (Tunneling) work?
+Chhanda uses **JSch** (SSH library) to create a reverse tunnel via **localhost.run**:
+1. An SSH connection is established to `localhost.run` port 80
+2. Remote port forwarding maps a random public URL to `127.0.0.1:LOCAL_PORT`
+3. The resulting URL (e.g., `https://abc123.lhr.life/`) is displayed in the Gateway Dialog
+4. **No port forwarding or router configuration required**
+
+**Code Reference**: `ChhandaServer.kt` (SSH tunnel management methods)
+
+### 15. How does mDNS discovery work?
+When the server starts, Chhanda registers a network service via Android's `NsdManager`:
+*   **Service Name**: `ChhandaAI`
+*   **Service Type**: `_chhanda._tcp`
+*   **Port**: Current server port
+
+Other devices on the same network can discover this service automatically. The mDNS registration is unregistered when the server stops.
+
+**Code Reference**: `ChhandaForegroundService.kt` (Lines 206-227)
 
 ---
 
 ## 💬 Chat & Personas
 
-### 11. Why does the AI sound like a "Senior Software Engineer" in my IDE?
-Chhanda identifies the request source. Programmatic sources (API) trigger an expert technical persona for high-fidelity architectural guidance.
-*   **Code Reference**: `SendMessageUseCase.kt` (Line 157).
+### 16. Why does the AI behave differently in different contexts?
+Chhanda implements **Source-Based Persona Routing** via `PersonaManager`:
 
-### 12. Can I seek through the AI's voice responses?
-**Yes.** The media engine includes a global playback bar with 10s forward/backward seeking and background playback support.
+| Source | Auto-Assigned Persona | Behavior |
+|:---|:---|:---|
+| Local UI (default) | Gateway Orchestrator | Balanced, context-aware, tiered knowledge |
+| Local UI (user override) | Teacher/Friend/Companion/Engineer | User-selected personality |
+| API / IDE | Senior Software Engineer | Expert-level, technical, performance-focused |
+| Web UI (QR) | Gateway Orchestrator | Same as local default |
+
+**Code Reference**: `PersonaManager.kt` (Lines 9-41)
+
+### 17. Can I seek through the AI's voice responses?
+**Yes.** The TTS engine includes a global playback bar with:
+*   Play/Pause toggle
+*   10-second forward/backward seeking
+*   Progress indicator
+*   Background playback support (audio continues when app is backgrounded)
+
+Voice options: **Kallol (Indian Male)** and **Chhanda (Indian Female)**, with language-specific voice mapping.
 
 ---
 
 ## 🛠️ Advanced Settings & Lifecycle
 
-### 13. What is the "Reaper" service?
-The **Active Reaper** is a background coroutine that monitors heartbeats from all connected web clients and purges inactive ones after 30 seconds.
-*   **Code Reference**: `ChhandaServer.kt` (Lines 248-267).
+### 18. What is the "Reaper" service?
+The **Active Reaper** is a background coroutine that monitors heartbeats from all connected web clients:
+*   Web clients send a `/heartbeat` POST every ~15 seconds
+*   The Reaper runs every 30 seconds and marks any client without a recent heartbeat as `disconnected`
+*   Disconnected clients' sessions are cleaned up to free resources
 
-### 14. Why does the server restart when I change the app language?
-**Localization Safety Protocol.** Resets the server and inference cache to ensure all outputs (Web, API, TTS) reflect the new language choice correctly.
+**Code Reference**: `ChhandaServer.kt` (Reaper coroutine)
+
+### 19. Why does the server restart when I change the app language?
+**Localization Safety Protocol.** The server restart ensures:
+1. All system prompts are regenerated in the new language
+2. The Web UI templates are refreshed with translated strings
+3. TTS voice mapping is updated
+4. Any cached inference state is cleared
+
+### 20. What is TurboQuant?
+An experimental feature that compresses the LLM's KV-cache during inference:
+*   **Benefit**: Allows larger context windows on memory-constrained devices
+*   **Tradeoff**: Slight reduction in output quality for very long conversations
+*   **Enable**: Settings → Network Settings → TurboQuant toggle
+
+### 21. What is the Quick Settings Tile?
+`ChhandaTileService` adds a tile to Android's notification shade (pull-down Quick Settings):
+*   **Active** (green): Server is running — shows "Chhanda Active"
+*   **Inactive** (gray): Server is stopped — shows "Chhanda AI"
+*   **Tap**: Opens the Chhanda app (does not start/stop the server)
+*   The tile uses Hilt dependency injection to directly query `ChhandaServer.isServerActive()`
+
+**Code Reference**: `ChhandaTileService.kt` (Lines 11-38)
 
 ---
 
-**Technical Troubleshooting**: For real-time diagnostics, check the **System Logs** in the Dashboard and search for `ChhandaAudit` tags in Logcat.
+## 🛡️ Safety & Guardrails
+
+### 22. How does prompt injection prevention work?
+Chhanda implements a **3-Layer Defense**:
+
+| Layer | Method | Examples Caught |
+|:---|:---|:---|
+| **Keyword Blacklist** | 15 known injection phrases | "ignore previous instructions", "jailbreak", "DAN mode" |
+| **Heuristic Regex** | Pattern matching for novel attacks | "bypass...safety", "reveal...prompt", "override...constraints" |
+| **Defensive Delimiters** | Structural isolation of user/context data | `[USER_INPUT_START]...[USER_INPUT_END]` wrapping |
+
+**Code Reference**: `SafetyGuardrails.kt` (Lines 27-57)
+
+### 23. What PII does Chhanda redact?
+Both input and output are scanned for:
+
+| Pattern | Example | Replacement |
+|:---|:---|:---|
+| Email addresses | `user@example.com` | `[REDACTED]` |
+| Phone numbers | `+1 (555) 123-4567` | `[REDACTED]` |
+| Credit card numbers | `4111-1111-1111-1111` | `[REDACTED]` |
+| Social Security Numbers | `123-45-6789` | `[REDACTED]` |
+
+This is applied **bidirectionally** — on user input before it reaches the LLM, and on the LLM's output before it's shown to the user.
+
+**Code Reference**: `SafetyGuardrails.kt` (Lines 13-18, 63-96)
+
+### 24. What content is prohibited?
+The `PROHIBITED_PATTERNS` regex list blocks queries containing:
+*   Violence-related terms (kill, murder, bomb, explode)
+*   Cyber-attack terms (hack, malware)
+*   Self-harm content (suicide, self-harm)
+*   Combined injection-style phrases ("instruction...ignore...all")
+
+When a violation is detected, `auditInput()` returns `isViolation = true`, and the UI blocks the message with a safety warning.
+
+---
+
+## ⚡ Hardware & Performance
+
+### 25. How does thermal auto-throttling work?
+`ThermalStatusTracker` monitors the device's thermal state via Android's `PowerManager.THERMAL_STATUS_*` API:
+
+| Status | Action |
+|:---|:---|
+| `NONE` / `LIGHT` | Normal operation |
+| `MODERATE` | Log warning |
+| `SEVERE` | Reduce context window by 50% |
+| `CRITICAL` | Reduce context window by 75% |
+| `EMERGENCY` / `SHUTDOWN` | Stop inference, notify user |
+
+**Code Reference**: `ThermalStatusTracker.kt`
+
+### 26. How does the RAM safety flush work?
+When switching between models, Chhanda enforces a **2.5-second delay** between stopping the old model and loading the new one. This allows the Android garbage collector to reclaim memory from the previous model's buffers, preventing OOM crashes on devices with limited RAM.
+
+### 27. What are Wake Locks and Wi-Fi Locks?
+When the server is running in the background:
+*   **WakeLock**: Prevents the CPU from sleeping, ensuring inference can continue
+*   **WiFiLock**: Prevents the Wi-Fi radio from entering low-power mode, ensuring network clients can maintain connections
+
+Both locks are released when the server stops.
+
+**Code Reference**: `ChhandaForegroundService.kt` (Lines 229-232)
+
+---
+
+## 🔧 Troubleshooting
+
+### 28. The server started but other devices can't connect.
+**Check**:
+1. Are both devices on the same Wi-Fi network / hotspot?
+2. Is a VPN active? (Check Dashboard for VPN warning banner)
+3. Try the IP shown in the Active Model Card — enter it manually in the browser
+4. If using hotspot, ensure the connecting device is connected to YOUR hotspot
+
+### 29. RAG returns irrelevant results.
+**Tips**:
+*   Use explicit keywords: "search my files for X" (triggers 0.60 threshold)
+*   Re-index the document if it was updated
+*   Check the Knowledge Base screen — ensure the file was ingested successfully
+*   Larger chunk sizes may improve coherence for complex documents
+
+### 30. The app crashes when loading a large model.
+*   Close all background apps to free RAM
+*   Use a smaller model (Gemma 2B instead of 4B)
+*   Enable TurboQuant in Settings to reduce KV-cache memory usage
+*   Check system logs for OOM indicators
+
+### 31. How do I check real-time diagnostics?
+1. **In-app**: Dashboard → System Logs (filter by tag)
+2. **Logcat**: Filter by tags `ChhandaServer`, `SafetyGuardrails`, `ContextManager`, `LiteRTLMEngine`
+3. **Quick Settings**: Add the Chhanda tile for instant status monitoring
+
+---
+
+**Technical Support**: For advanced diagnostics, check the **System Logs** screen in the Dashboard and search for `ChhandaAudit` tags in Logcat.
+
+**Developed with ❤️ by Kallol Chakraborty | Dedicated to Chhanda Chakraborty**

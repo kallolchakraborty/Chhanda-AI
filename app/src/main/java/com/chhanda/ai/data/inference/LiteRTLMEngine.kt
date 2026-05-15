@@ -81,6 +81,11 @@ class LiteRTLMEngine @Inject constructor(
 
     // ── Model Init ─────────────────────────────────────────────────────────────
 
+    /**
+     * Initializes the LLM engine with the specified model file path.
+     * This is a heavy operation that handles RAM management and thermal safety.
+     * @param path Absolute path to the .litertlm model file.
+     */
     override suspend fun initModel(path: String) {
         Log.d(TAG, "initModel: $path")
         if (currentModelPath == path && llmInference != null) {
@@ -227,10 +232,15 @@ class LiteRTLMEngine @Inject constructor(
         }
     }
 
+    /**
+     * Checks if a conversation session is currently active in the engine.
+     */
     override fun isSessionActive(): Boolean = persistentSession != null
 
-    // ── Inference ──────────────────────────────────────────────────────────────
-
+    /**
+     * Core Inference Method: Generates a streaming response using LiteRT.
+     * Implements concurrency control and stop-token filtering.
+     */
     override fun generateResponse(
         prompt: String,
         history: List<Pair<String, String>>,
