@@ -18,6 +18,9 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         const val KEY_FILENAME = "filename"
         const val KEY_TOKEN = "token"
         const val KEY_PROGRESS = "progress"
+        const val KEY_SPEED = "speed"
+        const val KEY_BYTES_DOWNLOADED = "bytes_downloaded"
+        const val KEY_BYTES_TOTAL = "bytes_total"
         const val KEY_STATUS = "status"
         const val NOTIFICATION_ID = 8008
         const val CHANNEL_ID = "download_channel"
@@ -113,6 +116,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         var bytesRead: Int
         var totalRead = if (responseCode == 206) tempFile.length() else 0L
         var lastUpdate = 0L
+        var lastTotalRead = totalRead
+        var speedBytesPerSec = 0L
 
         try {
             inputStream.use { input ->
@@ -124,9 +129,25 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                         val now = System.currentTimeMillis()
                         if (now - lastUpdate > 1000) {
                             val progress = if (actualTotal > 0) (totalRead.toFloat() / actualTotal * 100).toInt().coerceIn(0, 99) else -1
-                            setProgress(workDataOf(KEY_PROGRESS to progress))
-                            setForeground(createForegroundInfo(progress))
+                            
+                            val timeDiff = (now - lastUpdate) / 1000.0
+                            speedBytesPerSec = if (timeDiff > 0) ((totalRead - lastTotalRead) / timeDiff).toLong() else 0L
+                            
+                            setProgress(workDataOf(
+                                KEY_PROGRESS to progress,
+                                KEY_SPEED to speedBytesPerSec,
+                                KEY_BYTES_DOWNLOADED to totalRead,
+                                KEY_BYTES_TOTAL to actualTotal
+                            ))
+                            
+                            val speedStr = android.text.format.Formatter.formatFileSize(applicationContext, speedBytesPerSec) + "/s"
+                            val downloadedStr = android.text.format.Formatter.formatFileSize(applicationContext, totalRead)
+                            val totalStr = android.text.format.Formatter.formatFileSize(applicationContext, actualTotal)
+                            
+                            setForeground(createForegroundInfo(progress, "$downloadedStr / $totalStr ($speedStr)"))
+                            
                             lastUpdate = now
+                            lastTotalRead = totalRead
                         }
                     }
                 }

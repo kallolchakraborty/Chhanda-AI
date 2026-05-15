@@ -69,7 +69,7 @@ fun LocalModelItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text(
-                    model.size + " · " + Localization.getString("ready", appLanguage), 
+                    model.details + " · " + Localization.getString("ready", appLanguage), 
                     fontSize = 11.sp, 
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -105,12 +105,19 @@ fun DownloadableModelItem(
     model: DownloadModelInfo, 
     progress: Float?,
     isPaused: Boolean,
+    status: com.chhanda.ai.presentation.viewmodel.DownloadStatus? = null,
     onDownload: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
     appLanguage: String = "English"
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress ?: 0f,
+        animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
+        label = "DownloadProgress"
+    )
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -182,31 +189,88 @@ fun DownloadableModelItem(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                         modifier = Modifier.height(32.dp)
                     ) {
-                        Text(Localization.getString("downloadable_models", appLanguage).take(8), fontSize = 11.sp)
+                        Text(Localization.getString("download", appLanguage), fontSize = 11.sp)
                     }
                 }
             }
             
             if (progress != null) {
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(16.dp))
+                
+                // Progress Bar with smooth animation and pulse effect
+                Box(modifier = Modifier.fillMaxWidth()) {
                     LinearProgressIndicator(
-                        progress = progress,
+                        progress = { animatedProgress },
                         modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp)),
                         color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        if (isPaused) Localization.getString("paused", appLanguage) 
-                        else "${(progress * 100).toInt()}%", 
-                        fontSize = 11.sp, 
-                        fontWeight = FontWeight.Bold,
-                        color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
-                    )
+                }
+                
+                Spacer(Modifier.height(12.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Status Badge
+                    Surface(
+                        color = (if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            if (isPaused) Localization.getString("paused", appLanguage).uppercase()
+                            else "${(progress * 100).toInt()}% " + Localization.getString("downloading", appLanguage).uppercase(),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Telemetry Row (Speed and Size)
+                    if (!isPaused) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            val speedStr = if (status != null && status.speedBytesPerSec > 0) {
+                                android.text.format.Formatter.formatFileSize(context, status.speedBytesPerSec) + "/s"
+                            } else {
+                                "-- B/s"
+                            }
+                            
+                            val downloadedStr = if (status != null) {
+                                android.text.format.Formatter.formatFileSize(context, status.downloadedBytes)
+                            } else {
+                                "0 B"
+                            }
+                            
+                            val totalStr = if (status != null && status.totalBytes > 0) {
+                                android.text.format.Formatter.formatFileSize(context, status.totalBytes)
+                            } else {
+                                model.size
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    speedStr,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "$downloadedStr / $totalStr",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

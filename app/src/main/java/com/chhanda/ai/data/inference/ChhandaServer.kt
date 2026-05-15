@@ -17,6 +17,7 @@ import io.ktor.server.request.*
 import io.ktor.http.content.*
 import io.ktor.utils.io.streams.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,8 +35,14 @@ import androidx.work.*
 data class WebAttachment(val name: String, val type: String, val data: String)
 
 @Serializable
-data class WebMessage(val text: String, val role: String = "user", val attachments: List<WebAttachment> = emptyList(), val language: String = "en", val sessionId: String? = null, val isRefinement: Boolean = false)
-
+data class WebMessage(
+    val text: String, 
+    val role: String = "user", 
+    val attachments: List<WebAttachment> = emptyList(), 
+    val language: String = "en", 
+    val sessionId: String? = null, 
+    val isRefinement: Boolean = false
+)
 @Serializable
 data class RegisterRequest(val name: String)
 
@@ -63,7 +70,8 @@ class ChhandaServer @Inject constructor(
     private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
     private val sendMessageUseCaseLazy: dagger.Lazy<SendMessageUseCase>,
     private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao,
-    private val templateProvider: ServerTemplateProvider
+    private val templateProvider: ServerTemplateProvider,
+    private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker
 ) {
     private val llmEngine get() = llmEngineLazy.get()
     private val sendMessageUseCase get() = sendMessageUseCaseLazy.get()
@@ -71,7 +79,9 @@ class ChhandaServer @Inject constructor(
     @Volatile private var boundPort: Int = -1
     private var reaperJob: Job? = null
     private val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var startTime = System.currentTimeMillis()
+    @Volatile private var startTime = System.currentTimeMillis()
+    
+    companion object { private const val TAG = "ChhandaServer" }
 
     // SENIOR SECURITY: Leaky Bucket Rate Limiter
     // Prevents the device from being DOS'ed by external clients spamming inference requests.
@@ -105,8 +115,6 @@ class ChhandaServer @Inject constructor(
 
     private var tunnelSession: com.jcraft.jsch.Session? = null
     private val IP_TTL_MS = 10_000L
-
-    companion object { private const val TAG = "ChhandaServer" }
 
     val boundIp: String get() = cachedIp
     val allIps: List<String> get() = cachedAllIps
@@ -212,6 +220,20 @@ class ChhandaServer @Inject constructor(
             Log.i(TAG, "-----------------------------")
         } catch (_: Exception) {}
 
+        if (ip == "127.0.0.1") {
+            Log.w(TAG, "No WiFi/Hotspot detected; server will be loopback-only.")
+        }
+
+        _serverErrorFlow.value = null
+        for (port in requestedPort..requestedPort + 10) {
+            Log.i(TAG, "Binding Chhanda Node to 0.0.0.0:$port (Best IP: $ip)")
+            try {
+                val engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
+                    configureEngine(this, port)
+                }
+                engine.start(wait = false)
+
+                // SENIOR PROBE: Verify cross-interface reachability
                 var ok = false
                 val probeIps = mutableListOf("127.0.0.1")
                 if (ip != "127.0.0.1") probeIps.add(0, ip)
@@ -631,6 +653,14 @@ class ChhandaServer @Inject constructor(
 
                     val remoteIp = call.request.local.remoteHost
                     
+                    // THERMAL PROTECTION: Block external requests if the device is overheating
+                    val thermal = thermalStatusTracker.thermalStatus.value
+                    if (thermal == "Severe" || thermal == "Critical" || thermal == "Emergency" || thermal == "Shutdown") {
+                        Log.w(TAG, "Thermal Crisis ($thermal): Rejecting external request from $remoteIp")
+                        call.respondText("Device is overheating. Please try again later.", status = io.ktor.http.HttpStatusCode.ServiceUnavailable)
+                        return@post
+                    }
+
                     // Apply Rate Limiting
                     val lastRequest = clientRequestWindow[remoteIp] ?: 0L
                     val now = System.currentTimeMillis()
@@ -767,6 +797,7 @@ class ChhandaServer @Inject constructor(
                         } catch (e: Exception) {
                             try { write("data: ERR:${e.message}\n\n"); flush() } catch (_: Exception) {}
                         }
+                    }
                     }
                 }
             }

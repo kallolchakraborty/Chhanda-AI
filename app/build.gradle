@@ -17,6 +17,7 @@ android {
         versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary true }
+        multiDexEnabled true
     }
 
     buildTypes {
@@ -79,9 +80,8 @@ dependencies {
     implementation "androidx.room:room-ktx:2.6.1"
     ksp "androidx.room:room-compiler:2.6.1"
 
-    // MediaPipe LiteRT LM (Newer API with abort capability)
+    // LiteRT LM (Modern API with abort capability)
     implementation 'com.google.ai.edge.litertlm:litertlm-android:0.11.0'
-    implementation 'com.google.mediapipe:tasks-text:0.10.14'
 
     // DataStore
     implementation "androidx.datastore:datastore-preferences:1.1.1"
@@ -119,7 +119,6 @@ dependencies {
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
 
     // Memory Leak Detection (Debug only)
-    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.14'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'io.mockk:mockk:1.13.5'

@@ -48,7 +48,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Favorite
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -1649,7 +1649,7 @@ fun PersonaSelectionGrid(
 ) {
     val personas = listOf(
         Triple("Senior Teacher", Icons.Default.School, Color(0xFF6366F1)),
-        Triple("Senior Software Engineer", Icons.Default.Terminal, Color(0xFF10B981)),
+        Triple("Senior Software Engineer", Icons.Default.Code, Color(0xFF10B981)),
         Triple("General Companion", Icons.Default.Face, Color(0xFFF59E0B)),
         Triple("Friend", Icons.Default.Favorite, Color(0xFFEC4899))
     )

@@ -92,12 +92,16 @@ class SystemViewModel @Inject constructor(
         // High-frequency telemetry polling: Synchronized with app visibility to save battery.
         viewModelScope.launch {
             while (true) {
-                if (_isAppVisible.value) {
-                    _latencyMetrics.value = metricsManager.getLatencyMetrics()
-                    _throughputMetrics.value = metricsManager.getThroughputMetrics()
-                    _memoryMetrics.value = metricsManager.getMemoryMetrics()
-                    _qualityMetrics.value = metricsManager.getQualityMetrics()
-                    _costMetrics.value = metricsManager.getCostMetrics()
+                try {
+                    if (_isAppVisible.value) {
+                        _latencyMetrics.value = metricsManager.getLatencyMetrics()
+                        _throughputMetrics.value = metricsManager.getThroughputMetrics()
+                        _memoryMetrics.value = metricsManager.getMemoryMetrics()
+                        _qualityMetrics.value = metricsManager.getQualityMetrics()
+                        _costMetrics.value = metricsManager.getCostMetrics()
+                    }
+                } catch (e: Exception) {
+                    Log.e("SystemViewModel", "Telemetry polling failed", e)
                 }
                 // Throttled refresh interval (2s) to balance UI real-time feel and CPU overhead.
                 delay(2000)
@@ -258,6 +262,28 @@ class SystemViewModel @Inject constructor(
                     Log.e("SystemViewModel", "Error in device monitor: ${e.message}")
                 }
                 delay(10000) // Check every 10 seconds for better responsiveness
+            }
+        }
+        
+        reAttachDownloads()
+    }
+
+    private fun reAttachDownloads() {
+        viewModelScope.launch {
+            // Only re-attach if we have downloadable models defined or if we know the names
+            val potentialModels = listOf("Gemma-4-E2B-IT", "Gemma-4-E4B-IT", "Gemma-3-E4B-IT", "Qwen-2.5-1.5B", "DeepSeek-R1-1.5B")
+            potentialModels.forEach { modelName ->
+                try {
+                    val workInfos = workManager.getWorkInfosForUniqueWork("download_$modelName").get()
+                    val activeWork = workInfos.find { !it.state.isFinished }
+                    if (activeWork != null) {
+                        _downloadIds.update { it + (modelName to activeWork.id) }
+                        observeDownloadProgress(modelName, activeWork.id)
+                        addLog("SYSTEM", "Re-attached to background download: $modelName", "INFO")
+                    }
+                } catch (e: Exception) {
+                    // Ignore re-attachment errors
+                }
             }
         }
     }
@@ -575,8 +601,13 @@ class SystemViewModel @Inject constructor(
     private val _isConfigEnabled = MutableStateFlow(false)
     val isConfigEnabled: StateFlow<Boolean> = _isConfigEnabled
 
-    private val _downloadProgress = MutableStateFlow<Map<String, Float>>(emptyMap())
-    val downloadProgress: StateFlow<Map<String, Float>> = _downloadProgress
+    private val _downloadStatus = MutableStateFlow<Map<String, DownloadStatus>>(emptyMap())
+    val downloadStatus: StateFlow<Map<String, DownloadStatus>> = _downloadStatus.asStateFlow()
+
+    // Simplified: progress map is now redundant as it's inside DownloadStatus
+    val downloadProgress: StateFlow<Map<String, Float>> = _downloadStatus.map { map ->
+        map.mapValues { it.value.progress }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
 
     private val _downloadPauseState = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val downloadPauseFlow: StateFlow<Map<String, Boolean>> = _downloadPauseState
@@ -1059,13 +1090,20 @@ class SystemViewModel @Inject constructor(
                         missing.add(com.chhanda.ai.presentation.ui.DownloadModelInfo(
                             name = name,
                             description = "Mobile-optimized $name for on-device inference.",
-                            size = when {
-                                name.contains("1.5b", ignoreCase = true) || name.contains("1b", ignoreCase = true) -> "1.1 GB"
-                                name.contains("2b", ignoreCase = true) -> "1.5 GB"
-                                name.contains("4b", ignoreCase = true) -> "2.7 GB"
-                                name.contains("3b", ignoreCase = true) -> "2.1 GB"
-                                name.contains("mini", ignoreCase = true) -> "1.9 GB"
-                                else -> "2.5 GB"
+                            size = when (name) {
+                                "Gemma-4-E2B-IT" -> "2.6 GB"
+                                "Gemma-4-E4B-IT" -> "3.7 GB"
+                                "Gemma-3-E4B-IT" -> "3.7 GB"
+                                "Qwen-2.5-1.5B" -> "1.6 GB"
+                                "DeepSeek-R1-1.5B" -> "1.8 GB"
+                                else -> when {
+                                    name.contains("1.5b", ignoreCase = true) || name.contains("1b", ignoreCase = true) -> "1.6 GB"
+                                    name.contains("2b", ignoreCase = true) -> "2.6 GB"
+                                    name.contains("4b", ignoreCase = true) -> "3.7 GB"
+                                    name.contains("3b", ignoreCase = true) -> "2.1 GB"
+                                    name.contains("mini", ignoreCase = true) -> "1.9 GB"
+                                    else -> "2.5 GB"
+                                }
                             },
                             isRecommended = name == recommendedName
                         ))
@@ -1472,6 +1510,8 @@ class SystemViewModel @Inject constructor(
         }
     }
 
+
+
     private fun observeDownloadProgress(modelName: String, workId: java.util.UUID) {
         viewModelScope.launch {
             workManager.getWorkInfoByIdFlow(workId).collect { info ->
@@ -1479,17 +1519,26 @@ class SystemViewModel @Inject constructor(
                     when (info.state) {
                         androidx.work.WorkInfo.State.RUNNING -> {
                             val progress = info.progress.getInt(com.chhanda.ai.service.DownloadWorker.KEY_PROGRESS, 0)
-                            _downloadProgress.value = _downloadProgress.value + (modelName to progress.toFloat() / 100f)
+                            val speed = info.progress.getLong(com.chhanda.ai.service.DownloadWorker.KEY_SPEED, 0L)
+                            val downloaded = info.progress.getLong(com.chhanda.ai.service.DownloadWorker.KEY_BYTES_DOWNLOADED, 0L)
+                            val total = info.progress.getLong(com.chhanda.ai.service.DownloadWorker.KEY_BYTES_TOTAL, 0L)
+                            
+                            _downloadStatus.update { current ->
+                                current + (modelName to DownloadStatus(progress.toFloat() / 100f, speed, downloaded, total))
+                            }
                         }
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
-                            _downloadProgress.value = _downloadProgress.value - modelName
+                            _downloadStatus.update { it - modelName }
                             addLog("DOWNLOAD", "Download successful: $modelName", "SUCCESS")
                             scanForModels()
                         }
                         androidx.work.WorkInfo.State.FAILED -> {
                             val error = info.outputData.getString(com.chhanda.ai.service.DownloadWorker.KEY_STATUS) ?: "Unknown failure"
-                            _downloadProgress.value = _downloadProgress.value - modelName
+                            _downloadStatus.update { it - modelName }
                             addLog("DOWNLOAD", "Download failed: $modelName - $error", "ERROR")
+                        }
+                        androidx.work.WorkInfo.State.CANCELLED -> {
+                            _downloadStatus.update { it - modelName }
                         }
                         else -> {}
                     }
@@ -1788,7 +1837,7 @@ class SystemViewModel @Inject constructor(
 
     fun cancelDownload(modelName: String) {
         workManager.cancelUniqueWork("download_$modelName")
-        _downloadProgress.value = _downloadProgress.value - modelName
+        _downloadStatus.update { it - modelName }
         addLog("DOWNLOAD", "Download cancelled: $modelName", "WARNING")
     }
 
@@ -2002,6 +2051,13 @@ class SystemViewModel @Inject constructor(
         manager?.notify(7008, notification)
     }
 }
+
+data class DownloadStatus(
+    val progress: Float,
+    val speedBytesPerSec: Long,
+    val downloadedBytes: Long,
+    val totalBytes: Long
+)
 
 @kotlinx.serialization.Serializable
 data class LogEntry(val id: String, val timestamp: String, val tag: String, val message: String, val status: String)

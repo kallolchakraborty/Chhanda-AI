@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
-import com.chhanda.ai.util.QRCodeGenerator
+import com.chhanda.ai.domain.model.QRCodeGenerator
 
 /**
  * GatewayDialog: The connectivity portal for external devices.

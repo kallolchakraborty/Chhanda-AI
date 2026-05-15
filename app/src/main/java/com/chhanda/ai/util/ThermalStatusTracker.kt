@@ -32,7 +32,7 @@ class ThermalStatusTracker @Inject constructor(
 
     init {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            powerManager.addThermalStatusListener(listener)
+            powerManager.addThermalStatusListener(context.mainExecutor, listener)
         }
     }
 }

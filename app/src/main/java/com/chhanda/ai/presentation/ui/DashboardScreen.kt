@@ -83,6 +83,7 @@ fun DashboardScreen(
     val isScanning by viewModel.isScanning.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val downloadPauseState by viewModel.downloadPauseFlow.collectAsState()
+    val downloadStatus by viewModel.downloadStatus.collectAsState()
     val isModelLoading by viewModel.isModelLoading.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
     val vectorDbUsage by viewModel.vectorDbUsage.collectAsState()
@@ -289,7 +290,7 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
 
@@ -419,6 +420,7 @@ fun DashboardScreen(
                 ChhandaSectionHeader(icon = Icons.Default.CloudDownload, title = Localization.getString("downloadable_models", appLanguage), badge = "")
             }
             
+            
             items(
                 items = downloadableModels,
                 key = { "dl_${it.name}" }
@@ -427,6 +429,7 @@ fun DashboardScreen(
                     model = model, 
                     progress = downloadProgress[model.name],
                     isPaused = downloadPauseState[model.name] == true,
+                    status = downloadStatus[model.name],
                     onDownload = { 
                         val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                              Manifest.permission.READ_MEDIA_VIDEO
@@ -1079,7 +1082,7 @@ fun StorageManagerSheet(
             },
             shape = RoundedCornerShape(16.dp),
             singleLine = true,
-            colors = TextFieldDefaults.outlinedTextFieldColors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
             )
@@ -1474,4 +1477,11 @@ private fun ConnectionDetailCard(
             }
         }
     }
+}
+
+/**
+ * Sort order options for the device history list.
+ */
+enum class HistorySortOrder {
+    LATEST, MESSAGES, NAME
 }

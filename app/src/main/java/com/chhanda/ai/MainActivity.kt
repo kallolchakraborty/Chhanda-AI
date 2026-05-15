@@ -34,6 +34,18 @@ class MainActivity : ComponentActivity() {
         
 
         setContent {
+            // PRO HARDENING: Delay PDFBox and other heavy native inits until UI is ready
+            val context = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) {
+                try {
+                    android.util.Log.i("BOOT", "Initializing PDFBox in UI context...")
+                    com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(context.applicationContext)
+                    android.util.Log.i("BOOT", "PDFBox SUCCESS")
+                } catch (e: Throwable) {
+                    android.util.Log.e("BOOT", "Deferred init FAILED", e)
+                }
+            }
+
             val vm: SystemViewModel = hiltViewModel()
             systemViewModel = vm
             val isDark by vm.darkMode.collectAsState()
@@ -82,6 +94,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun ChhandaApp(systemViewModel: SystemViewModel) {
     val navController = rememberNavController()
@@ -228,7 +241,7 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
 
 sealed class Screen(val route: String, val translationKey: String, val icon: ImageVector) {
     object Dashboard : Screen("dashboard", "dashboard", Icons.Default.Home)
-    object Models : Screen("models", "models", Icons.Default.LibraryBooks)
+    object Models : Screen("models", "models", Icons.Default.List)
     object Settings : Screen("settings", "settings", Icons.Default.Settings)
-    object Logs : Screen("logs", "logs", Icons.Default.Terminal)
+    object Logs : Screen("logs", "logs", Icons.Default.Code)
 }

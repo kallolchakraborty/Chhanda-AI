@@ -480,8 +480,8 @@ fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.Syst
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Auto Delete", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text("Automatically clear old vector data", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text("Auto Delete", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text("Automatically clear old vector data", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
             Switch(
                 checked = autoDeleteEnabled,
@@ -490,14 +490,40 @@ fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.Syst
         }
         
         if (autoDeleteEnabled) {
-            Spacer(Modifier.height(24.dp))
-            Text("Delete files older than $autoDeleteDays days", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Retention Period", 
+                    fontSize = 12.sp, 
+                    fontWeight = FontWeight.Bold, 
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer, 
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "$autoDeleteDays days", 
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), 
+                        color = MaterialTheme.colorScheme.onPrimaryContainer, 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 11.sp
+                    )
+                }
+            }
+            Text(
+                "Delete files older than the specified number of days", 
+                fontSize = 11.sp, 
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Spacer(Modifier.height(4.dp))
             Slider(
-                value = autoDeleteDays.toFloat(),
-                onValueChange = { viewModel.setAutoDeleteDays(it.toInt()) },
-                valueRange = 1f..30f,
-                steps = 29
+                value = (autoDeleteDays.toFloat() / 30f).coerceIn(0f, 1f),
+                onValueChange = { viewModel.setAutoDeleteDays((it * 30).toInt().coerceAtLeast(1)) }
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("1 day", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))

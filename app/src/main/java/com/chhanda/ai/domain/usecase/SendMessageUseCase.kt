@@ -101,7 +101,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 return@flow
             }
             
-            val sanitizedUserText = com.chhanda.ai.util.SafetyUtil.sanitizeInput(userText)
+            val sanitizedUserText = com.chhanda.ai.util.SafetyGuardrails.sanitizeInput(userText)
             val attachmentContext = turnContextIngestor.processTurnContext(userText, attachments)
             if (attachmentContext.isNotBlank()) {
                 hasAttachmentKnowledge = true

@@ -151,23 +151,41 @@ class LiteRTLMEngine @Inject constructor(
             var loaded = false
             var attempts = 0
             
+            // SENIOR HARDENING: Detect if GPU initialization crashed the process last time
+            val gpuFailureMarker = java.io.File(context.filesDir, "gpu_init_ongoing.marker")
+            val forceCpu = gpuFailureMarker.exists()
+            if (forceCpu) {
+                Log.w(TAG, "Detected previous GPU crash! Forcing CPU fallback for this session.")
+                try { gpuFailureMarker.delete() } catch(e: Exception) {}
+            }
+
             while (!loaded && attempts < 3) {
                 try {
-                    Log.d(TAG, "Attempting GPU initialization with context: $currentContextLength")
-                    val gpuConfig = EngineConfig(
-                        modelPath = path,
-                        backend = Backend.GPU(),
-                        maxNumTokens = currentContextLength,
-                        cacheDir = context.cacheDir.absolutePath
-                    )
-                    val engine = Engine(gpuConfig)
-                    engine.initialize()
-                    llmInference = engine
-                    loaded = true
-                    Log.i(TAG, "Model loaded successfully on GPU")
+                    if (!forceCpu && attempts == 0) {
+                        Log.d(TAG, "Attempting GPU initialization with context: $currentContextLength")
+                        try { gpuFailureMarker.createNewFile() } catch(e: Exception) {}
+                        
+                        val gpuConfig = EngineConfig(
+                            modelPath = path,
+                            backend = Backend.GPU(),
+                            maxNumTokens = currentContextLength,
+                            cacheDir = context.cacheDir.absolutePath
+                        )
+                        val engine = Engine(gpuConfig)
+                        engine.initialize()
+                        
+                        // If we reached here, GPU init succeeded
+                        try { gpuFailureMarker.delete() } catch(e: Exception) {}
+                        llmInference = engine
+                        loaded = true
+                        Log.i(TAG, "Model loaded successfully on GPU")
+                    } else {
+                        throw Exception("Forcing CPU fallback")
+                    }
                 } catch (gpuError: Throwable) {
+                    try { gpuFailureMarker.delete() } catch(e: Exception) {}
                     val gpuMsg = gpuError.localizedMessage ?: gpuError.javaClass.simpleName
-                    Log.w(TAG, "GPU failed: $gpuMsg, trying CPU fallback...")
+                    Log.w(TAG, "GPU failed or bypassed: $gpuMsg, trying CPU fallback...")
                     try {
                         val cpuConfig = EngineConfig(
                             modelPath = path,
@@ -348,6 +366,15 @@ class LiteRTLMEngine @Inject constructor(
                                 val chunk = message.toString()
                                 accumulated.append(chunk)
                                 val currentCount = tokenCount.incrementAndGet()
+                                
+                                // THERMAL PROTECTION: If device is heating up, inject small delays 
+                                // into the native callback thread to slow down the generation loop.
+                                val thermal = thermalStatusTracker.thermalStatus.value
+                                when (thermal) {
+                                    "Severe" -> Thread.sleep(30)
+                                    "Critical" -> Thread.sleep(80)
+                                    "Emergency" -> Thread.sleep(200)
+                                }
                                 
                                 // Real-time TPS update (update more frequently for smoother UI)
                                 val elapsed = (System.currentTimeMillis() - startTime) / 1000.0

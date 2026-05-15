@@ -24,13 +24,18 @@ class SettingsRepository @Inject constructor(
      * extraction even on rooted devices.
      */
     private val masterKey = androidx.security.crypto.MasterKeys.getOrCreate(androidx.security.crypto.MasterKeys.AES256_GCM_SPEC)
-    private val encryptedPrefs = androidx.security.crypto.EncryptedSharedPreferences.create(
-        "secure_settings",
-        masterKey,
-        context,
-        androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val encryptedPrefs = try {
+        androidx.security.crypto.EncryptedSharedPreferences.create(
+            "secure_settings",
+            masterKey,
+            context,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    } catch (e: Exception) {
+        android.util.Log.e("SettingsRepository", "EncryptedSharedPreferences failed, falling back to standard", e)
+        context.getSharedPreferences("secure_settings_fallback", Context.MODE_PRIVATE)
+    }
 
     // StateFlows are used to provide a reactive bridge between the synchronous SharedPreferences
     // and the asynchronous Compose UI, ensuring consistent state across the app.
@@ -97,7 +102,7 @@ class SettingsRepository @Inject constructor(
     }
 
     val turboQuantEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.TURBOQUANT_ENABLED] ?: false
+        preferences[PreferencesKeys.TURBOQUANT_ENABLED] ?: true
     }
 
     val selectedVoiceFlow: Flow<String> = dataStore.data.map { preferences ->

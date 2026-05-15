@@ -20,7 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chhanda.ai.util.Localization
-import com.chhanda.ai.presentation.ui.ChhandaLogo
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * ChhandaSectionHeader: A unified header component for dashboard sections.
@@ -33,7 +33,7 @@ fun ChhandaSectionHeader(
     badge: String = "",
     badgeColor: Color = MaterialTheme.colorScheme.primary
 ) {
-    Column(modifier = Modifier.padding(top = 24.dp, bottom = 12.dp)) {
+    Column(modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
@@ -95,7 +95,6 @@ fun StatCard(
     }
 }
 
-import kotlinx.coroutines.flow.StateFlow
 
 /**
  * ActiveModelCard: The primary control surface for the local AI engine.
@@ -130,7 +129,7 @@ fun ActiveModelCard(
                 else listOf(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
             ))
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             // Status Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
@@ -157,7 +156,7 @@ fun ActiveModelCard(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             
             // Model Info
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -196,52 +195,53 @@ fun ActiveModelCard(
                 }
             }
             
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
             
-            // Telemetry Chips
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Unified Telemetry Chip
+            val thermalColor = when (thermalStatus) {
+                "Normal" -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                "Fair", "Serious" -> Color(0xFFFACC15)
+                "Critical", "Emergency", "Shutdown" -> Color(0xFFF87171)
+                else -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+            }
+
+            Surface(
+                color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), 
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // IP Address Chip
-                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    // IP Address
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Link, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
-                }
-                
-                // Port & Temperature Unified Chip
-                val thermalColor = when (thermalStatus) {
-                    "Normal" -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                    "Fair", "Serious" -> Color(0xFFFACC15)
-                    "Critical", "Emergency", "Shutdown" -> Color(0xFFF87171)
-                    else -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                }
-
-                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    
+                    // Port
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                        
-                        Spacer(Modifier.width(12.dp))
-                        
-                        Icon(Icons.Default.Thermostat, null, tint = thermalColor, modifier = Modifier.size(12.dp))
-                        Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(" $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
-                }
-
-                // RAM Usage Chip
-                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    
+                    // Temperature
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Thermostat, null, tint = thermalColor, modifier = Modifier.size(12.dp))
+                        Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    // RAM / Vector Memory
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Psychology, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" RAM: $vectorMemory", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        Text(" $vectorMemory", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
             
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
             
             // Action Buttons
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
