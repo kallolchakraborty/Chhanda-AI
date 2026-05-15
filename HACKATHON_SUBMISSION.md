@@ -42,6 +42,7 @@ I leveraged **Google's Gemma 4 (2B & 4B 4-bit Quantized)** models to create a ro
 *   **Production RAG Observability**: A built-in monitoring suite that tracks **Tail Latency (p99)**, **Recall@K**, and **MRR** in real-time.
 *   **Offline Document Generation**: Empowering users to generate professional **.pdf**, **.docx**, and **.xlsx** files directly from AI responses, all while remaining 100% offline.
 *   **Context-Aware Personalities**: An intelligent role-switching system that identifies the request source (e.g., switches to **Senior Software Engineer** for API/IDE access).
+*   **On-Device Safety Guardrails**: A production-grade security layer implementing real-time **PII Redaction** (Emails, Cards, Phones) and **Prohibited Content Filtering** to ensure ethical AI usage without cloud oversight.
 *   **Localized TTS & UI**: Deep integration with Bengali and Hindi, featuring localized personalities and human-like accents.
 
 ## 🏗️ Development Process

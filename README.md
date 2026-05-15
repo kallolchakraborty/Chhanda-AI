@@ -72,8 +72,9 @@ Chhanda is not just a chat app; it is a full-fledged local AI server and gateway
     *   **System-Synced Storage**: All file and model sizes are reported using system-standard formatting (consistent with Android OS file managers).
     *   Real-time tracking of TPS (Tokens Per Second), RT (Response Time), and Battery Temperature.
 9.  **Context-Aware Personalities**: 
-    *   **Expert Mode (API)**: When accessed via the API (e.g., from an IDE), Chhanda adopts the persona of a **Senior Software Engineer**, providing optimized, technical, and architectural guidance.
-    *   **Assistant Mode (Local/Web)**: For on-device or QR-based chat, it acts as a **General Purpose Assistant**, optimized for helpful, clear, and multi-lingual communication.
+    *   An intelligent role-switching system that identifies the request source (e.g., switches to **Senior Software Engineer** for API/IDE access).
+    *   **On-Device Safety Guardrails**: A production-grade security layer implementing real-time **PII Redaction** (Emails, Cards, Phones) and **Prohibited Content Filtering** to ensure ethical AI usage without cloud oversight.
+    *   **Localized TTS & UI**: Deep integration with Bengali and Hindi, featuring localized personalities and human-like accents.
 
 ---
 
@@ -267,7 +268,8 @@ While Google's AI Edge Gallery is an excellent tool for local AI experimentation
 | **Personality** | General Assistant | **Reasoning Mode**: Thinking traces + Expert Role switching |
 | **Multimedia** | Audio/Vision Demos | **Playback Engine**: Global seek, background TTS |
 | **Data Generation** | None | **Document Creator**: Generate .docx, .xlsx, .pdf locally |
-| **Localization** | Broad (Google Default) | **Deep Local**: Specialized Bengali/Hindi personalities |
+| **Localization** | Broad (Google Default) | **Deep**: **Localized TTS & UI**: Deep integration with Bengali and Hindi, featuring localized personalities and human-like accents. |
+| **Safety** | Basic | **On-Device Safety Guardrails**: A production-grade security layer implementing real-time **PII Redaction** (Emails, Cards, Phones) and **Prohibited Content Filtering** to ensure ethical AI usage without cloud oversight. |
 | **Connectivity** | On-Device Only | **Multi-Client**: Connect laptops/IDEs via local network |
 
 ### 🏆 Why Choose Chhanda?

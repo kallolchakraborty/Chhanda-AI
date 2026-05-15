@@ -255,8 +255,19 @@ class LiteRTLMEngine @Inject constructor(
 
         val startTime = System.currentTimeMillis()
 
+        // ── Guardrails ────────────────────────────────────────────────────────
+        val (auditedPrompt, isViolation) = com.chhanda.ai.util.SafetyGuardrails.auditInput(prompt)
+        if (isViolation) {
+            trySend(TokenUpdate.Error("Safety Guardrail: This prompt contains prohibited or sensitive content and cannot be processed."))
+            isGenerating.set(false)
+            this@callbackFlow.close()
+            return@callbackFlow
+        }
+        
+        val hardenedSystemPrompt = com.chhanda.ai.util.SafetyGuardrails.getHardenedSystemPrompt(systemInstruction)
+
         // ── Build user content (plain text, NO Gemma tags — session adds them) ─
-        val sanitized = if (prompt.length > 4000) prompt.takeLast(4000) else prompt
+        val sanitized = if (auditedPrompt.length > 4000) auditedPrompt.takeLast(4000) else auditedPrompt
         Log.d(TAG, "Inference start. Prompt length=${sanitized.length} chars")
 
         // ── Robust Initialization with Retry ───────────────────
@@ -302,7 +313,7 @@ class LiteRTLMEngine @Inject constructor(
                     val session = llmInference!!.createConversation(
                         ConversationConfig(
                             samplerConfig = SamplerConfig(temperature = 0.8, topK = 40, topP = 0.95),
-                            systemInstruction = systemInstruction?.let { Contents.of(it) },
+                            systemInstruction = com.google.ai.edge.litertlm.Contents.of(hardenedSystemPrompt),
                             initialMessages = initialMessages,
                             extraContext = extraContext
                         )
