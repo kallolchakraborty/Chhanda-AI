@@ -179,7 +179,7 @@ class SystemViewModel @Inject constructor(
             filesToDelete.forEach { file ->
                 try {
                     val path = file.path
-                    if (path.startsWith("content:
+                    if (path.startsWith("content://")) {
                         context.contentResolver.delete(android.net.Uri.parse(path), null, null)
                     } else {
 
@@ -706,7 +706,7 @@ class SystemViewModel @Inject constructor(
                     if (port > 0) {
                         val isOk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             try {
-                                val client = java.net.URL("http:
+                                val client = java.net.URL("http://127.0.0.1:$port/ping").openConnection() as java.net.HttpURLConnection
                                 client.connectTimeout = 1000
                                 client.readTimeout = 1000
                                 client.inputStream.bufferedReader().readText() == "pong"
@@ -1419,12 +1419,12 @@ class SystemViewModel @Inject constructor(
             }
 
             val url = when {
-                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https:
-                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https:
-                model.name.contains("Gemma-3", ignoreCase = true) -> "https:
-                model.name.contains("Qwen", ignoreCase = true) -> "https:
-                model.name.contains("DeepSeek", ignoreCase = true) -> "https:
-                else -> "https:
+                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+                model.name.contains("Gemma-3", ignoreCase = true) -> "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4.litertlm"
+                model.name.contains("Qwen", ignoreCase = true) -> "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
+                model.name.contains("DeepSeek", ignoreCase = true) -> "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm"
+                else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
             }
 
             val inputData = androidx.work.Data.Builder()
@@ -1569,9 +1569,9 @@ class SystemViewModel @Inject constructor(
 
     private fun getUrlForModel(name: String): String {
         return when {
-            name.contains("Gemma-4-E2B", ignoreCase = true) -> "https:
-            name.contains("Gemma-4-E4B", ignoreCase = true) -> "https:
-            else -> "https:
+            name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
+            name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
+            else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
         }
     }
 
@@ -1796,10 +1796,10 @@ class SystemViewModel @Inject constructor(
             filesToDelete.forEach { file ->
                 try {
                     val path = file.path
-                    if (path.startsWith("content:
+                    if (path.startsWith("content://")) {
                         context.contentResolver.delete(android.net.Uri.parse(path), null, null)
-                    } else if (path.startsWith("file:
-                        val physicalFile = java.io.File(path.removePrefix("file:
+                    } else if (path.startsWith("file://")) {
+                        val physicalFile = java.io.File(path.removePrefix("file://"))
                         if (physicalFile.exists()) physicalFile.delete()
                     } else {
                         val physicalFile = java.io.File(path)

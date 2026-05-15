@@ -262,7 +262,7 @@ class ChhandaServer @Inject constructor(
                 for (i in 0..100) {
                     val line = reader.readLine() ?: break
                     if (line.contains("lhr.life") || line.contains("localhost.run")) {
-                        val regex = "https:
+                        val regex = """https://[^\s]+""".toRegex()
                         val match = regex.find(line)
                         if (match != null) {
                             cachedPublicUrl = match.value

@@ -52,21 +52,24 @@ fun GatewayDialog(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth().wrapContentHeight()
+            modifier = Modifier.widthIn(max = 380.dp).fillMaxWidth().wrapContentHeight()
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(24.dp)) {
                 // Unified Title
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.QrCode, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.QrCode, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        if (showSetup) "Network Setup" else "Connection Details", 
-                        style = MaterialTheme.typography.titleLarge,
+                        if (showSetup) "Network Setup" else "Node Connectivity", 
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = { onDismiss() }) {
+                        Icon(Icons.Default.Close, null, modifier = Modifier.size(20.dp))
+                    }
                 }
                 
                 Spacer(Modifier.height(16.dp))
@@ -89,7 +92,7 @@ fun GatewayDialog(
                             }
                         }
                         
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(24.dp))
                         
                         Button(
                             onClick = {
@@ -111,7 +114,7 @@ fun GatewayDialog(
                             Text("Open Hotspot Settings")
                         }
                         
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                         
                         TextButton(
                             onClick = { 
@@ -160,53 +163,28 @@ fun GatewayDialog(
                         (lowerName.contains("e2b") || lowerName.contains("e4b"))
 
                     val continueConfig = """
-                    |name: Local Config
-                    |version: 1.0.0
-                    |schema: v1
-                    |
-                    |models:
-                    |  - name: "Chhanda: $activeModelName"
-                    |    provider: "openai"
-                    |    model: "$modelId"
-                    |    apiBase: "$baseServerUrl/v1"
-                    |    apiKey: "$apiKey"
-                    |    template: "$template"
-                    |    useToolCalling: $useToolCalling
-                    |
-                    |tabAutocompleteModel:
-                    |  name: "Chhanda Autocomplete"
-                    |  provider: "openai"
-                    |  model: "$modelId"
-                    |  apiBase: "$baseServerUrl/v1"
-                    |  apiKey: "$apiKey"
-                    |
-                    |contextProviders:
-                    |  - name: "code"
-                    |  - name: "docs"
-                    |  - name: "diff"
-                    |  - name: "terminal"
-                    |
-                    |slashCommands:
-                    |  - name: "edit"
-                    |    description: "Edit selected code"
-                    |  - name: "explain"
-                    |    description: "Explain selected code"
-                    |  - name: "comment"
-                    |    description: "Write comments for selected code"
+                    |{
+                    |  "name": "Chhanda: $activeModelName",
+                    |  "provider": "openai",
+                    |  "model": "$modelId",
+                    |  "apiBase": "$baseServerUrl/v1",
+                    |  "apiKey": "$apiKey",
+                    |  "template": "$template"
+                    |}
                     """.trimMargin("|")
 
                     Column(
                         modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // QR Code
+                        // QR Code Section
                         Surface(
-                            modifier = Modifier.size(160.dp),
+                            modifier = Modifier.size(180.dp),
                             color = Color.White,
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(20.dp),
                             border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                         ) {
-                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(12.dp)) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(16.dp)) {
                                 val qrIp = when {
                                     networkIps.any { it.startsWith("192.168.43.") || it.startsWith("192.168.44.") } -> {
                                         networkIps.find { it.endsWith(".1") } ?: networkIps.find { it.startsWith("192.168.43.") } ?: networkIps.first()
@@ -221,137 +199,144 @@ fun GatewayDialog(
                             }
                         }
                         
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(24.dp))
                         
-                        // API Credentials — with visible vertical color bar
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
-                        ) {
-                            // Visible vertical bar
-                            Box(
-                                modifier = Modifier
-                                    .width(4.dp)
-                                    .fillMaxHeight()
-                                    .background(
-                                        color = Color(0xFF4CAF50),
-                                        shape = RoundedCornerShape(2.dp)
-                                    )
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    // API URL row
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("API URL", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                            Text(apiUrl, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                                        }
-                                        IconButton(onClick = {
-                                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API URL", apiUrl))
-                                        }, modifier = Modifier.size(28.dp)) {
-                                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                    }
-                                    
-                                    Spacer(Modifier.height(12.dp))
-                                    
-                                    // API KEY row
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("API KEY", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                                Spacer(Modifier.width(4.dp))
-                                                IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }, modifier = Modifier.size(18.dp)) {
-                                                    Icon(if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, modifier = Modifier.size(12.dp))
-                                                }
-                                            }
-                                            Text(
-                                                if (isApiKeyMasked) "••••••••••••••••" else apiKey, 
-                                                fontSize = 11.sp, 
-                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                                modifier = Modifier.clickable { isApiKeyMasked = !isApiKeyMasked }
-                                            )
-                                        }
-                                        IconButton(onClick = {
-                                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API Key", apiKey))
-                                        }, modifier = Modifier.size(28.dp)) {
-                                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                    }
-                                }
+                        // API Credentials — Symmetrical Layout
+                        CredentialSection(
+                            title = "API URL",
+                            value = apiUrl,
+                            verticalBarColor = Color(0xFF4CAF50),
+                            onCopy = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API URL", apiUrl))
                             }
-                        }
+                        )
                         
                         Spacer(Modifier.height(16.dp))
                         
-                        // Continue Config — with visible vertical color bar
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Continue Config", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            Spacer(Modifier.weight(1f))
-                            IconButton(
-                                onClick = {
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Config", continueConfig))
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        CredentialSection(
+                            title = "API KEY",
+                            value = apiKey,
+                            verticalBarColor = Color(0xFFFFC107),
+                            isMaskable = true,
+                            isMasked = isApiKeyMasked,
+                            onToggleMask = { isApiKeyMasked = !isApiKeyMasked },
+                            onCopy = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API Key", apiKey))
                             }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .width(4.dp)
-                                    .fillMaxHeight()
-                                    .background(
-                                        color = Color(0xFF2196F3),
-                                        shape = RoundedCornerShape(2.dp)
-                                    )
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Surface(
-                                color = Color.Black.copy(alpha = 0.05f),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f).heightIn(max = 140.dp)
-                            ) {
-                                Text(
-                                    continueConfig,
-                                    modifier = Modifier.verticalScroll(rememberScrollState()).padding(8.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 10.sp,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                                )
+                        )
+                        
+                        Spacer(Modifier.height(16.dp))
+                        
+                        CredentialSection(
+                            title = "CONTINUE.DEV JSON",
+                            value = continueConfig,
+                            verticalBarColor = Color(0xFF2196F3),
+                            isCode = true,
+                            onCopy = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Config", continueConfig))
                             }
-                        }
+                        )
                     }
                     
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(24.dp))
                     
-                    TextButton(
-                        onClick = { 
-                            isSetupConfirmed = false
-                            onDismiss() 
-                        },
-                        modifier = Modifier.align(Alignment.End)
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
                     ) {
-                        Text("Close")
+                        Text("Done")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun CredentialSection(
+    title: String,
+    value: String,
+    verticalBarColor: Color,
+    onCopy: () -> Unit,
+    isMaskable: Boolean = false,
+    isMasked: Boolean = false,
+    isCode: Boolean = false,
+    onToggleMask: () -> Unit = {}
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                title, 
+                fontSize = 10.sp, 
+                fontWeight = FontWeight.Black, 
+                letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+            )
+            if (isMaskable) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    if (isMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                    null,
+                    modifier = Modifier.size(12.dp).clickable { onToggleMask() },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+        
+        Spacer(Modifier.height(6.dp))
+        
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // High-visibility vertical bar for symmetry
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(color = verticalBarColor, shape = RoundedCornerShape(2.dp))
+            )
+            
+            Spacer(Modifier.width(12.dp))
+            
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 44.dp)
+            ) {
+                Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Text(
+                        if (isMasked) "••••••••••••••••" else value,
+                        fontSize = 12.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        lineHeight = 16.sp,
+                        maxLines = if (isCode) 5 else 2,
+                        modifier = if (isCode) Modifier.verticalScroll(rememberScrollState()) else Modifier
+                    )
+                }
+            }
+            
+            Spacer(Modifier.width(8.dp))
+            
+            // Vertically aligned copy icon
+            IconButton(
+                onClick = onCopy,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    Icons.Default.ContentCopy, 
+                    null, 
+                    modifier = Modifier.size(18.dp), 
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
