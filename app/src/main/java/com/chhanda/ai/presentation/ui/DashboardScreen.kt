@@ -71,6 +71,7 @@ fun DashboardScreen(
     val isTunnelActive by viewModel.isTunnelActive.collectAsState()
 
     val processorInfo by viewModel.processorInfo.collectAsState()
+    val thermalStatus by viewModel.thermalStatus.collectAsState()
     val tunnelUrl by viewModel.tunnelUrl.collectAsState()
     val publicUrl by viewModel.publicUrl.collectAsState()
     val displayPort = if (actualPort > 0) actualPort else 8888
@@ -83,6 +84,7 @@ fun DashboardScreen(
     val appLanguage by viewModel.appLanguage.collectAsState()
     val vectorDbUsage by viewModel.vectorDbUsage.collectAsState()
     val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsState()
+    val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsState()
     val context = LocalContext.current
     var showModelPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -320,6 +322,8 @@ fun DashboardScreen(
                     },
                     isLoading = isModelLoading,
                     temperature = deviceTemperature,
+                    thermalStatus = thermalStatus,
+                    vectorMemory = vectorStorageMetrics,
                     appLanguage = appLanguage,
                     ipAddress = viewModel.localIpAddress.collectAsState().value
                 )
@@ -334,6 +338,55 @@ fun DashboardScreen(
                         processorInfo, 
                         Icons.Default.DeveloperBoard
                     )
+                }
+            }
+            
+            item {
+                ChhandaSectionHeader(
+                    icon = Icons.Default.HealthAndSafety, 
+                    title = "System Health", 
+                    badge = if (thermalStatus != "Normal") "Warning" else "Stable"
+                )
+            }
+
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Thermostat, 
+                                contentDescription = null, 
+                                tint = when(thermalStatus) {
+                                    "Normal" -> Color(0xFF4ADE80)
+                                    "Light", "Moderate" -> Color(0xFFFACC15)
+                                    else -> Color(0xFFF87171)
+                                }
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("Thermal State:", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            Text(thermalStatus, color = when(thermalStatus) {
+                                "Normal" -> Color(0xFF4ADE80)
+                                "Light", "Moderate" -> Color(0xFFFACC15)
+                                else -> Color(0xFFF87171)
+                            }, fontWeight = FontWeight.ExtraBold)
+                        }
+                        
+                        Spacer(Modifier.height(12.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Vector Memory:", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            val usagePercent = if (vectorDbCapacityBytes > 0) (vectorDbUsage.toFloat() / vectorDbCapacityBytes * 100).toInt() else 0
+                            Text("$usagePercent% utilized", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                 }
             }
             
@@ -1396,6 +1449,8 @@ fun ActiveModelCard(
     onTryIt: () -> Unit,
     isLoading: Boolean = false,
     temperature: Double,
+    thermalStatus: String = "Normal",
+    vectorMemory: String = "0 MB / 1 GB",
     appLanguage: String = "English",
     ipAddress: String = "Detecting..."
 ) {
@@ -1466,12 +1521,14 @@ fun ActiveModelCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // IP Address
                 Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Link, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
                         Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
+                // Server Port
                 Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
@@ -1479,6 +1536,29 @@ fun ActiveModelCard(
                     }
                 }
 
+                // Thermal State
+                val thermalColor = when (thermalStatus) {
+                    "Normal" -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                    "Fair", "Serious" -> Color(0xFFFACC15) // Yellow
+                    "Critical", "Emergency", "Shutdown" -> Color(0xFFF87171) // Red
+                    else -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                }
+                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
+                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.HealthAndSafety, null, tint = thermalColor, modifier = Modifier.size(12.dp))
+                        Text(" Thermal: $thermalStatus", color = thermalColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                // Vector Memory
+                Surface(color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp)) {
+                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Psychology, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                        Text(" Memory: $vectorMemory", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                // Temperature
                 val isTempAlert = temperature >= 40.0
                 val infiniteTransition = rememberInfiniteTransition(label = "TempAlert")
                 val tempAlpha by infiniteTransition.animateFloat(

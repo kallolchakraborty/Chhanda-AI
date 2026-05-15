@@ -14,80 +14,55 @@ When you first launch Chhanda, you will be greeted by the **Welcome Screen**.
 ## 📊 2. Dashboard: The Command Center
 The Dashboard is your primary hub for monitoring system health and managing AI models.
 
-
 ### Key Functions:
-1.  **Hardware Telemetry**: Monitor your **RAM Usage**, **CPU Temperature**, and **TPS** (Tokens Per Second) in real-time. This helps you understand how the model is performing on your hardware.
+1.  **Hardware Telemetry**: Monitor your **RAM Usage**, **Thermal Status**, and **TPS** (Tokens Per Second).
+    *   **Health Icons**: Look for the **Shield** (Thermal) and **Brain** (Vector Memory) icons. They change color (Green -> Yellow -> Red) based on system load.
 2.  **Model Management**:
-    *   **Scan**: Click the refresh icon to search your phone's internal storage for GGUF model files.
-    *   **Activate**: Tap "Activate" on a model to load it into memory. *Note: Loading a large model may take 5-10 seconds depending on your RAM speed.*
-    *   **Download**: Access the "Downloadable Models" section to fetch verified Gemma models directly.
+    *   **Scan**: Refresh to find GGUF model files on your device.
+    *   **Activate**: Load a model into memory. (Takes 5-10s).
 3.  **Server Controls**:
-    *   **Start/Stop Server**: Once a model is active, you can start the Ktor server to enable the Web Gateway.
-    *   **QR Sharing**: Click the QR icon to generate a unique link. Scan this with any other device on your Wi-Fi or Hotspot to open the **Chhanda Web UI**.
+    *   **Start/Stop Server**: Enable the Web Gateway.
+    *   **QR Sharing**: Scan to open the **Chhanda Web UI** on any device in your local network.
 
 ---
 
 ## 💬 3. Chat: Interactive Intelligence
 The Chat screen is where you communicate with the loaded LLM.
 
-
 ### Key Functions:
-1.  **Tiered Context (RAG)**: Chhanda doesn't just chat; it remembers. It automatically pulls context from your **Knowledge Base** and **Current Attachments**.
-2.  **Multimodal Attachments**:
-    *   Click the **Clip Icon** to attach PDF, Word, Excel, or Image files.
-    *   Images are processed via **OCR** to extract text.
-    *   Documents are parsed and indexed into temporary memory for the duration of the chat.
-3.  **Code & Tables**: The AI provides beautifully formatted Markdown code blocks with syntax highlighting and structured tables.
-4.  **File Generation**: You can ask Chhanda to "Generate an Excel report" or "Write a Word document". The generated file will appear inline for immediate download.
-5.  **Advanced Voice Interaction**: 
-    *   Use the microphone to speak your prompts. 
-    *   Listen to responses with natural voices. 
-    *   **Playback Bar**: Use the dedicated player below the chat to seek (forward/backward 10s) and control playback even while the app is in the background.
-6.  **Website Scraping**: Attach a URL to index web content. *Note: Chhanda requires an active internet connection to fetch the website data before it can be processed offline.*
+1.  **Thinking Mode**: Enable reasoning traces to see how the AI "thinks" before it answers.
+2.  **Multimodal RAG**:
+    *   **Attachments**: Click the clip icon to add PDF, Word, Excel, Images, JSON, or CSV files.
+    *   **Datasets**: Drop a Kaggle CSV directly into the chat for instant analysis.
+    *   **Audio**: Support for MP3 and M4A indexing.
+3.  **File Generation**: Ask the AI to create Excel, Word, or PDF files, then download them locally.
+4.  **Voice Interaction**: High-quality Bengali, Hindi, and English TTS with a background playback bar.
+5.  **Web Scraping**: Paste a URL to index website content instantly.
 
 ---
 
 ## 🧠 4. Knowledge Base: Long-Term Memory
-The "Memory" or Knowledge Base screen manages your persistent data.
-
+Manage your persistent knowledge and monitor RAG performance.
 
 ### Key Functions:
-1.  **Document Ingestion**: View all files that have been vectorized and stored in your local database.
-2.  **Performance & Quality Dashboard**:
-    *   **Latency**: Monitor p50/p95/p99 response times.
-    *   **Throughput**: Track real-time Queries Per Second (QPS).
-    *   **RAG Quality**: View Recall@K and MRR metrics to ensure your documents are being retrieved accurately.
-3.  **Search & Filter**: Quickly find specific documents or information within your indexed knowledge.
-4.  **Storage Status**: Track space usage for the vector database and the overall app, reported in standard system units (GB/MB). 
-5.  **Management**: Delete specific files or purge the entire database to free up memory.
+1.  **Document Ingestion**: View and manage all vectorized files.
+2.  **Performance Dashboard**: Track p99 Latency, Throughput, and Recall@K quality.
+3.  **Optimized Search**: Uses a high-speed Min-Heap search for near-instant retrieval.
 
 ---
 
 ## ⚙️ 5. Settings: Customization & Optimization
-Tailor Chhanda to your device and personal preferences.
-
-
-### Key Functions:
-1.  **Vector Database (RAG) Toggle**: 
-    *   **ON**: Full long-term memory experience.
-    *   **OFF (Memory Saving Mode)**: Disables persistent vector storage to save RAM. The AI will only rely on direct attachments or its pre-trained knowledge. *Recommended for devices with < 6GB RAM.*
-2.  **Voice Selection**: Choose between different natural-sounding voice profiles (e.g., Kallol, Chhanda).
-3.  **Appearance**: Switch between Light, Dark, and System modes.
-4.  **Auto-Delete**: Set a schedule (e.g., 30 days) to automatically clear old chat histories and free up storage.
-5.  **API Management**: Configure your local API keys for programmatic access.
-
----
-
-## 📝 6. System Logs
-For power users and developers, the Logs screen provides a real-time feed of system events, server connections, and inference diagnostics. If you encounter an issue, check here first for error codes.
+1.  **TurboQuant**: Hardware-level KV-cache compression for faster, longer chats.
+2.  **Vector Database (RAG)**: Toggle long-term memory.
+3.  **Hardware Resilience**: Automatic thermal-aware throttling to protect your phone.
+4.  **Expert Persona**: Automatically switches to a **Senior Software Engineer** when accessed via API/IDE.
 
 ---
 
 ## 💡 Pro Tips:
-*   **Privacy**: Remember, everything stays on your phone. Disconnecting from Wi-Fi will not stop Chhanda from working!
-*   **Performance**: If the AI feels slow, try disabling the "Vector Database" in Settings or using a smaller 2B model.
-*   **Web UI**: You can connect your laptop to your phone's Hotspot and use your laptop's keyboard to chat with Chhanda via the QR link!
-*   **Expert Mode**: When you access Chhanda via the API (e.g., from a code editor), it automatically switches to an **Expert Senior Engineer** persona to provide better technical guidance.
+*   **Privacy**: 100% Offline. Your data never leaves the phone.
+*   **Performance**: If the phone gets hot, Chhanda will auto-throttle to keep things safe.
+*   **Productivity**: Connect your laptop to your phone's hotspot to use the Web UI on a big screen!
 
 ---
 **Developed with ❤️ by Kallol Chakraborty**

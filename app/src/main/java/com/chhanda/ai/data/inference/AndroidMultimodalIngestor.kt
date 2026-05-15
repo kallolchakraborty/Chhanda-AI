@@ -164,4 +164,165 @@ class AndroidMultimodalIngestor @Inject constructor(
         }
         stringBuilder.toString().trim()
     }
+
+    override suspend fun ingestJson(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val stringBuilder = StringBuilder()
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val reader = android.util.JsonReader(inputStream.bufferedReader())
+                try {
+                    parseJsonStreaming(reader, stringBuilder)
+                } catch (e: Exception) {
+                    // Fallback to raw text if streaming parse fails
+                    android.util.Log.w("Ingestor", "Streaming parse failed, falling back: ${e.message}")
+                    context.contentResolver.openInputStream(uri)?.use { fallbackStream ->
+                        stringBuilder.append(fallbackStream.bufferedReader().readText())
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "Total failure in ingestJson: ${e.message}")
+        }
+        stringBuilder.toString().trim()
+    }
+
+    private fun parseJsonStreaming(reader: android.util.JsonReader, out: StringBuilder) {
+        if (reader.peek() == android.util.JsonToken.BEGIN_ARRAY) {
+            reader.beginArray()
+            while (reader.hasNext()) {
+                parseConversationObject(reader, out)
+            }
+            reader.endArray()
+        } else if (reader.peek() == android.util.JsonToken.BEGIN_OBJECT) {
+            reader.beginObject()
+            while (reader.hasNext()) {
+                val name = reader.nextName()
+                if (name == "messages" && reader.peek() == android.util.JsonToken.BEGIN_ARRAY) {
+                    // Simple "messages" array format export
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        parseMessageSimple(reader, out)
+                    }
+                    reader.endArray()
+                } else {
+                    reader.skipValue()
+                }
+            }
+            reader.endObject()
+        }
+    }
+
+    private fun parseConversationObject(reader: android.util.JsonReader, out: StringBuilder) {
+        reader.beginObject()
+        var title = "Untitled Chat"
+        while (reader.hasNext()) {
+            val name = reader.nextName()
+            when (name) {
+                "title" -> title = reader.nextString()
+                "mapping" -> {
+                    out.append("\n=== CONVERSATION: $title ===\n")
+                    parseMapping(reader, out)
+                }
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+        out.append("\n")
+    }
+
+    private fun parseMapping(reader: android.util.JsonReader, out: StringBuilder) {
+        reader.beginObject()
+        while (reader.hasNext()) {
+            reader.nextName() // skip node ID
+            parseMappingNode(reader, out)
+        }
+        reader.endObject()
+    }
+
+    private fun parseMappingNode(reader: android.util.JsonReader, out: StringBuilder) {
+        reader.beginObject()
+        while (reader.hasNext()) {
+            val name = reader.nextName()
+            if (name == "message" && reader.peek() == android.util.JsonToken.BEGIN_OBJECT) {
+                parseMessageBody(reader, out)
+            } else {
+                reader.skipValue()
+            }
+        }
+        reader.endObject()
+    }
+
+    private fun parseMessageBody(reader: android.util.JsonReader, out: StringBuilder) {
+        reader.beginObject()
+        var role = "unknown"
+        while (reader.hasNext()) {
+            val name = reader.nextName()
+            when (name) {
+                "author" -> {
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        if (reader.nextName() == "role") role = reader.nextString()
+                        else reader.skipValue()
+                    }
+                    reader.endObject()
+                }
+                "content" -> {
+                    reader.beginObject()
+                    var isText = false
+                    while (reader.hasNext()) {
+                        val contentName = reader.nextName()
+                        if (contentName == "content_type" && reader.nextString() == "text") isText = true
+                        else if (contentName == "parts" && isText && reader.peek() == android.util.JsonToken.BEGIN_ARRAY) {
+                            reader.beginArray()
+                            while (reader.hasNext()) {
+                                val part = reader.nextString()
+                                if (part.isNotBlank()) out.append("[$role]: $part\n")
+                            }
+                            reader.endArray()
+                        } else reader.skipValue()
+                    }
+                    reader.endObject()
+                }
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+    }
+
+    private fun parseMessageSimple(reader: android.util.JsonReader, out: StringBuilder) {
+        reader.beginObject()
+        var role = ""
+        var text = ""
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "role" -> role = reader.nextString()
+                "text", "content" -> text = reader.nextString()
+                else -> reader.skipValue()
+            }
+        }
+        if (text.isNotBlank()) out.append("[$role]: $text\n")
+        reader.endObject()
+    }
+
+    override suspend fun ingestCsv(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val stringBuilder = StringBuilder()
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                inputStream.bufferedReader().use { reader ->
+                    var lineCount = 0
+                    reader.forEachLine { line ->
+                        if (lineCount < 5000) { // Safety cap for mobile
+                            val cells = line.split(",").joinToString(" | ")
+                            stringBuilder.append(cells).append("\n")
+                        }
+                        lineCount++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "CSV extraction failed: ${e.message}")
+            throw Exception("Failed to extract text from CSV file: ${e.message}")
+        }
+        stringBuilder.toString().trim()
+    }
 }

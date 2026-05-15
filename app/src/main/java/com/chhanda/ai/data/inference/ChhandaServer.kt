@@ -689,7 +689,8 @@ class ChhandaServer @Inject constructor(
 
                             var clearedInitialThinking = false
 
-                            sendMessageUseCase(promptToSend, remoteIp, llmEngine.getCurrentModelName(), sessionIdToUse, uris, languageName, isRefinement = msg.isRefinement, source = sourceToUse).collect { upd ->
+                            val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
+                            sendMessageUseCase(promptToSend, remoteIp, llmEngine.getCurrentModelName(), sessionIdToUse, uris, languageName, isRefinement = msg.isRefinement, source = sourceToUse, includeThinking = thinkingMode).collect { upd ->
                                 when (upd) {
                                     is TokenUpdate.Partial -> {
                                         if (!clearedInitialThinking) {

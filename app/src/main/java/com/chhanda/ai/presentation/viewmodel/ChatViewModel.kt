@@ -9,6 +9,7 @@ import com.chhanda.ai.domain.usecase.SendMessageUseCase
 import com.chhanda.ai.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,6 +32,7 @@ class ChatViewModel @Inject constructor(
     private val _currentTps = MutableStateFlow(0.0)
     private val _currentRt = MutableStateFlow(0L)
     private val _error = MutableStateFlow<String?>(null)
+    private val _selectedPersona = MutableStateFlow<String?>(null)
     private var messageJob: kotlinx.coroutines.Job? = null
 
     private val _selectedFiles = MutableStateFlow<List<android.net.Uri>>(emptyList())
@@ -76,7 +78,7 @@ class ChatViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val uiState: StateFlow<ChatUiState> = combine(
-        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error
+        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error, _selectedPersona
     ) { args: Array<Any?> ->
         ChatUiState(
             messages = args[0] as List<com.chhanda.ai.data.repository.MessageEntity>,
@@ -85,6 +87,7 @@ class ChatViewModel @Inject constructor(
             currentTps = args[3] as Double,
             currentRt = args[4] as Long,
             error = args[5] as String?,
+            selectedPersona = args[6] as String?,
             isModelLoaded = llmEngine.isModelLoaded(),
             isModelLoading = llmEngine.isModelLoading()
         )
@@ -141,7 +144,20 @@ class ChatViewModel @Inject constructor(
                 text
             }
 
-            sendMessageUseCase.get()(promptToSend, "local", modelName, sessionId, attachments, preferredLanguage = language, isRefinement = isRefinement, source = "device")
+            val thinkingMode = settingsRepository.thinkingModeEnabledFlow.first()
+
+            sendMessageUseCase.get()(
+                userText = promptToSend, 
+                deviceId = "local", 
+                modelName = modelName, 
+                sessionId = sessionId, 
+                attachments = attachments, 
+                preferredLanguage = language, 
+                isRefinement = isRefinement, 
+                source = "device",
+                persona = _selectedPersona.value,
+                includeThinking = thinkingMode
+            )
                 .onCompletion { _isGenerating.value = false }
                 .collect { update ->
                     when (update) {
@@ -188,6 +204,10 @@ class ChatViewModel @Inject constructor(
     }
 
     fun dismissError() { _error.value = null }
+
+    fun setPersona(persona: String?) {
+        _selectedPersona.value = persona
+    }
 
     override fun onCleared() {
         super.onCleared()

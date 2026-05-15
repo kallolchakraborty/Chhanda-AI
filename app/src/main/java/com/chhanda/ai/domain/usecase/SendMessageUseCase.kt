@@ -18,9 +18,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val llmEngineLazy: dagger.Lazy<com.chhanda.ai.domain.model.LLMEngine>,
     private val chatDao: com.chhanda.ai.data.repository.ChatDao,
     private val contextManager: com.chhanda.ai.domain.model.ContextManager,
-    private val ingestor: com.chhanda.ai.domain.model.MultimodalIngestor,
-    private val persistentIngestor: com.chhanda.ai.domain.usecase.IngestDocumentUseCase,
-    private val scrapeUrlUseCase: com.chhanda.ai.domain.usecase.ScrapeUrlUseCase,
+    private val turnContextIngestor: com.chhanda.ai.domain.usecase.TurnContextIngestor,
+    private val personaManager: com.chhanda.ai.domain.model.PersonaManager,
     private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
@@ -36,7 +35,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         preferredLanguage: String = "English",
         externalHistory: List<Pair<String, String>>? = null,
         isRefinement: Boolean = false,
-        source: String = "Local"
+        source: String = "Local",
+        persona: String? = null,
+        includeThinking: Boolean = true
     ): kotlinx.coroutines.flow.Flow<com.chhanda.ai.domain.model.TokenUpdate> = kotlinx.coroutines.flow.flow {
         val replica = loadBalancer.getReplica(userText)
         android.util.Log.d("LoadBalancer", "Routed request to replica: $replica")
@@ -95,86 +96,16 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // Wrap user input and context in defensive delimiters
             val sanitizedUserText = com.chhanda.ai.util.SafetyUtil.sanitizeInput(userText)
             
-            // STEP 3: Process Attachments & Detect URLs (Direct Context)
-            val attachmentContext = buildString {
-                // 1. Process explicit attachments
-                if (attachments.isNotEmpty()) {
-                    for (uri in attachments) {
-                        try {
-                            val uriString = uri.toString()
-                            val fileName = uri.lastPathSegment ?: "file"
-                            val (rawText, type) = when {
-                                uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") -> 
-                                    ingestor.ingestImage(uri) to com.chhanda.ai.domain.usecase.DocType.IMAGE
-                                uriString.endsWith(".pdf") -> 
-                                    ingestor.ingestPdf(uri).joinToString("\n") to com.chhanda.ai.domain.usecase.DocType.PDF
-                                uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") -> 
-                                    ingestor.ingestAudio(uri) to com.chhanda.ai.domain.usecase.DocType.AUDIO
-                                uriString.endsWith(".docx") || uriString.endsWith(".doc") -> 
-                                    ingestor.ingestWord(uri) to com.chhanda.ai.domain.usecase.DocType.WORD
-                                uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> 
-                                    ingestor.ingestExcel(uri) to com.chhanda.ai.domain.usecase.DocType.EXCEL
-                                else -> ingestor.ingestTxt(uri) to com.chhanda.ai.domain.usecase.DocType.TXT
-                            }
-                            
-                            try {
-                                persistentIngestor.ingestScrapedText(rawText, uriString, type.name)
-                            } catch (e: Exception) {
-                                android.util.Log.e("SendMessageUseCase", "Failed to persist attachment to DB: ${e.message}")
-                            }
-                            
-                            append("--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n\n")
-                            hasAttachmentKnowledge = true
-                        } catch (e: Exception) {
-                            append("Error processing ${uri.lastPathSegment}: ${e.localizedMessage}\n\n")
-                        }
-                    }
-                }
-
-                // 2. Proactive URL Scraping (Senior Feature)
-                val urlRegex = """(https?://[^\s$.?#].[^\s]*)""".toRegex()
-                val detectedUrls = urlRegex.findAll(userText).map { it.value }.distinct().toList()
-                
-                if (detectedUrls.isNotEmpty()) {
-                    android.util.Log.i("SendMessageUseCase", "Detected ${detectedUrls.size} URLs in message. Scraping proactively...")
-                    for (url in detectedUrls) {
-                        try {
-                            val scrapedText = scrapeUrlUseCase(url)
-                            if (scrapedText.length > 200) {
-                                append("--- SCRAPED WEB CONTENT: $url ---\n$scrapedText\n\n")
-                                hasAttachmentKnowledge = true
-                                // Also persist to vector DB for long-term memory
-                                try {
-                                    persistentIngestor.ingestScrapedText(scrapedText, url, "AUTO_SCRAPE")
-                                } catch (e: Exception) { /* Silent fail for background ingestion */ }
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.w("SendMessageUseCase", "Proactive scrape failed for $url: ${e.message}")
-                        }
-                    }
-                }
+            // STEP 3: Process Attachments & Detect URLs (Refactored)
+            val attachmentContext = turnContextIngestor.processTurnContext(userText, attachments)
+            if (attachmentContext.isNotBlank()) {
+                hasAttachmentKnowledge = true
+                isContextFound = true
             }
-            
-            if (hasAttachmentKnowledge) isContextFound = true
 
-            // ORCHESTRATION: Multi-Tiered Prompt Generation
-            // This is where the RAG 'Augmentation' happens. We wrap the user query with context.
+            // ORCHESTRATION: Multi-Tiered Prompt Generation (Refactored)
             val prompt = buildString {
-                // Adaptive Persona: API requests get a Technical Senior Dev persona, 
-                // while UI requests get the standard Chhanda Gateway identity.
-                if (source.lowercase() == "api") {
-                    append("### SYSTEM ROLE: SENIOR SOFTWARE ENGINEER (EXPERT)\n")
-                    append("You are a Senior Software Engineer with decades of experience in high-performance computing, clean architecture, and robust system design. ")
-                    append("Your goal is to provide expert-level, highly technical, and optimized solutions. Use modern best practices, prioritize performance, security, and scalability. Always explain the 'why' behind architectural decisions.\n\n")
-                } else {
-                    append("### SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR\n")
-                    append("You are Chhanda AI, an expert assistant developed by Kallol Chakraborty. You have access to a tiered knowledge system.\n")
-                }
-
-                // TIERED HIERARCHY: We explicitly tell the LLM the priority of sources.
-                append("PRIORITY 1 (ATTACHMENTS): Use TIER 1 first. It contains the immediate files the user provided.\n")
-                append("PRIORITY 2 (KNOWLEDGE BASE): Use TIER 2 if the answer isn't in TIER 1.\n")
-                append("PRIORITY 3 (INTERNAL): Only use your pre-trained knowledge if the above tiers are insufficient.\n\n")
+                append(personaManager.getSystemPrompt(persona, source))
 
                 // Tier 1: Immediate Context (Files/URLs processed in this specific turn)
                 if (attachmentContext.isNotBlank()) {
@@ -196,6 +127,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 
                 // Guardrails: We provide strict instructions to minimize hallucinations.
                 append("\n\n### CRITICAL INSTRUCTIONS\n")
+                
+                if (includeThinking) {
+                    append("0. REASONING MODE: You MUST think step-by-step before answering. Wrap your internal reasoning inside <thought> tags. Focus on logic, edge cases, and user intent.\n")
+                }
+                
                 append("1. STRICT RELEVANCE: Only use TIER 1 or TIER 2 context if it DIRECTLY and SPECIFICALLY answers the query. If the context is about a different topic, ignore it completely.\n")
                 append("2. ATTACHMENT PRIORITY: If TIER 1 contains the answer, use it and STOP searching.\n")
                 append("3. NO FORCED ANSWERS: If information is missing from context, admit it instead of making things up.\n")
@@ -262,7 +198,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         internalBuffer += update.text
                         
                         while (true) {
-                            if (!isThinking) {
+                            if (!includeThinking && !isThinking) {
                                 val startIdx = internalBuffer.indexOf("<thought>")
                                 val startIdxAlt = if (startIdx == -1) internalBuffer.indexOf("<think>") else -1
                                 val finalStartIdx = if (startIdx != -1) startIdx else startIdxAlt
@@ -286,7 +222,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                     }
                                     break
                                 }
-                            } else {
+                            } else if (!includeThinking && isThinking) {
                                 val endIdx = internalBuffer.indexOf("</thought>")
                                 val endIdxAlt = if (endIdx == -1) internalBuffer.indexOf("</think>") else -1
                                 val finalEndIdx = if (endIdx != -1) endIdx else endIdxAlt
@@ -296,11 +232,18 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                     isThinking = false
                                     internalBuffer = internalBuffer.substring(finalEndIdx + markerLen)
                                 } else {
-                                    if (internalBuffer.length > 11) {
-                                        internalBuffer = internalBuffer.substring(internalBuffer.length - 11)
-                                    }
+                                    // Still thinking, just clear buffer
+                                    internalBuffer = ""
                                     break
                                 }
+                            } else {
+                                // includeThinking is true, just pass through everything
+                                if (internalBuffer.isNotEmpty()) {
+                                    emit(com.chhanda.ai.domain.model.TokenUpdate.Partial(internalBuffer, update.tps))
+                                    partialAccumulated += internalBuffer
+                                    internalBuffer = ""
+                                }
+                                break
                             }
                         }
                     }

@@ -10,6 +10,9 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
     fun getAllMessages(): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
+    suspend fun getAllMessagesSync(): List<MessageEntity>
+
     @Query("SELECT * FROM chat_messages WHERE modelName = :modelName ORDER BY timestamp ASC")
     fun getAllMessagesForModel(modelName: String): Flow<List<MessageEntity>>
 

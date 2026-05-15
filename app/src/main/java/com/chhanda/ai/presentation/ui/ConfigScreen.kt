@@ -49,6 +49,7 @@ fun ConfigScreen(
     val apiKey by viewModel.apiKey.collectAsState()
     val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsState()
     val ragEnabled by viewModel.ragEnabled.collectAsState()
+    val thinkingModeEnabled by viewModel.thinkingModeEnabled.collectAsState()
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
@@ -99,6 +100,19 @@ fun ConfigScreen(
                                 Text(Localization.getString("dark_mode_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                             }
                             Switch(checked = isDark, onCheckedChange = { viewModel.toggleDarkMode(it) })
+                        }
+                        
+                        Spacer(Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(Localization.getString("thinking_mode", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(Localization.getString("thinking_mode_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(checked = thinkingModeEnabled, onCheckedChange = { viewModel.setThinkingModeEnabled(it) })
                         }
                         
                         Spacer(Modifier.height(24.dp))

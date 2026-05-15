@@ -34,6 +34,7 @@ class SettingsRepository @Inject constructor(
         val TURBOQUANT_ENABLED = booleanPreferencesKey("turboquant_enabled")
         val SELECTED_VOICE = stringPreferencesKey("selected_voice")
         val RAG_ENABLED = booleanPreferencesKey("rag_enabled")
+        val THINKING_MODE_ENABLED = booleanPreferencesKey("thinking_mode_enabled")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -90,6 +91,10 @@ class SettingsRepository @Inject constructor(
 
     val ragEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.RAG_ENABLED] ?: true
+    }
+
+    val thinkingModeEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.THINKING_MODE_ENABLED] ?: true
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -173,6 +178,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setRagEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.RAG_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setThinkingModeEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.THINKING_MODE_ENABLED] = enabled
         }
     }
 }

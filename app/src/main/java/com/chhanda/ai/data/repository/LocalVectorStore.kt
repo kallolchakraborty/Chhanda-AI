@@ -37,62 +37,60 @@ class LocalVectorStore @javax.inject.Inject constructor(
     }
 
     override suspend fun search(query: Embedding, topK: Int, modelId: String): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-        // Universal RAG: Search across all relevant knowledge
         val entities = try { vectorChunkDao.getAllForModel(modelId) } catch (e: Exception) { 
             android.util.Log.e("LocalVectorStore", "Search failed: ${e.message}")
             emptyList() 
         }
         
-        if (entities.isEmpty()) {
-            android.util.Log.d("LocalVectorStore", "No chunks found in database.")
-            return@withContext emptyList<SearchResult>()
-        }
+        if (entities.isEmpty()) return@withContext emptyList()
 
         val queryVector = query.vector
-        android.util.Log.d("LocalVectorStore", "Searching ${entities.size} chunks. Query dim: ${queryVector.size}")
-        
-        var maxScore = 0.0f
-        val results = entities.mapNotNull { entity ->
-            val vector = VectorChunkEntity.toFloatArray(entity.embeddingBlob)
-            if (vector.size != queryVector.size) {
-                android.util.Log.w("LocalVectorStore", "Dimension mismatch: chunk=${vector.size}, query=${queryVector.size}")
-                return@mapNotNull null
-            }
+        val queryNorm = calculateNorm(queryVector)
+        if (queryNorm < 1e-8) return@withContext emptyList()
+
+        // Use a Min-Heap to keep only top-K results efficiently
+        val topResults = java.util.PriorityQueue<SearchResult> { a, b -> a.score.compareTo(b.score) }
+
+        for (entity in entities) {
+            val vector = try { VectorChunkEntity.toFloatArray(entity.embeddingBlob) } catch (e: Exception) { continue }
+            if (vector.size != queryVector.size) continue
             
-            val score = calculateCosineSimilarity(queryVector, vector)
-            if (score > maxScore) maxScore = score
-            
-            SearchResult(
+            val score = calculateFastCosine(queryVector, queryNorm, vector)
+            if (score < 0.15f) continue // Ignore very low relevance
+
+            val result = SearchResult(
                 text = entity.text, 
                 score = score, 
                 metadata = mapOf("source" to entity.source, "type" to entity.type)
             )
+            
+            topResults.add(result)
+            if (topResults.size > topK) {
+                topResults.poll()
+            }
         }
         
-        android.util.Log.d("LocalVectorStore", "Search complete. Max score found: $maxScore. Using threshold 0.10")
-        
-        results
-            .sortedByDescending { it.score }
-            .take(topK)
+        topResults.toList().sortedByDescending { it.score }
     }
 
-    private fun calculateCosineSimilarity(v1: FloatArray, v2: FloatArray): Float {
-        if (v1.size != v2.size) return 0.0f
-        
+    private fun calculateNorm(v: FloatArray): Float {
+        var norm = 0.0f
+        for (x in v) norm += x * x
+        return kotlin.math.sqrt(norm.toDouble()).toFloat()
+    }
+
+    private fun calculateFastCosine(q: FloatArray, qNorm: Float, v: FloatArray): Float {
         var dotProduct = 0.0f
-        var normA = 0.0f
-        var normB = 0.0f
-        
-        for (i in v1.indices) {
-            val a = v1[i]
-            val b = v2[i]
-            dotProduct += a * b
-            normA += a * a
-            normB += b * b
+        var vNormSq = 0.0f
+        for (i in q.indices) {
+            val qi = q[i]
+            val vi = v[i]
+            dotProduct += qi * vi
+            vNormSq += vi * vi
         }
-        
-        val denominator = kotlin.math.sqrt(normA.toDouble()) * kotlin.math.sqrt(normB.toDouble())
-        return if (denominator < 1e-8) 0.0f else (dotProduct / denominator).toFloat()
+        val vNorm = kotlin.math.sqrt(vNormSq.toDouble()).toFloat()
+        val denominator = qNorm * vNorm
+        return if (denominator < 1e-8) 0.0f else (dotProduct / denominator)
     }
 
     override suspend fun getStorageUsage(): StorageStats {

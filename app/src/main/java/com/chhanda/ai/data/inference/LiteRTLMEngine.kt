@@ -42,7 +42,8 @@ import javax.inject.Singleton
 class LiteRTLMEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val ingestor: MultimodalIngestor,
-    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository
+    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
+    private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker
 ) : LLMEngine {
 
     // ── State ──────────────────────────────────────────────────────────────────
@@ -127,12 +128,19 @@ class LiteRTLMEngine @Inject constructor(
                 throw Exception("Model file too small. It might be an HTML error page. Check your internet/Token.")
             }
 
+            val thermalStatus = thermalStatusTracker.thermalStatus.value
+            val isHot = thermalStatus == "Fair" || thermalStatus == "Serious" || thermalStatus == "Critical"
+            val isCritical = thermalStatus == "Critical" || thermalStatus == "Emergency"
+
             val contextLengthStr = settingsRepository.contextLengthFlow.first()
-            val contextLength = contextLengthStr.toIntOrNull() ?: 2048
-            Log.d(TAG, "Configured context window: $contextLength tokens")
+            val baseContextLength = contextLengthStr.toIntOrNull() ?: 2048
             
-            val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.first()
-            Log.d(TAG, "TurboQuant feature requested: $turboQuantEnabled")
+            // Senior Throttling: If critical, cut context by 50% to save memory and reduce compute load
+            val contextLength = if (isCritical) baseContextLength / 2 else baseContextLength
+            Log.d(TAG, "Configured context window: $contextLength tokens (Base: $baseContextLength, Thermal: $thermalStatus)")
+            
+            val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.first() || isHot
+            Log.d(TAG, "TurboQuant feature status: $turboQuantEnabled (Forced=$isHot due to thermal $thermalStatus)")
 
             var currentContextLength = contextLength
             var loaded = false
@@ -274,15 +282,33 @@ class LiteRTLMEngine @Inject constructor(
                         }
                     }
                     
+                    val thermalStatus = thermalStatusTracker.thermalStatus.value
+                    val isSerious = thermalStatus == "Serious" || thermalStatus == "Critical" || thermalStatus == "Emergency"
+                    
+                    val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.first() || isSerious
+                    val extraContext = if (turboQuantEnabled) {
+                        mapOf(
+                            "enable_kv_cache_compression" to true,
+                            "odml_turbo_quant" to true // Supporting both potential internal keys
+                        )
+                    } else {
+                        emptyMap<String, Any>()
+                    }
+
+                    if (isSerious) {
+                        Log.w(TAG, "Thermal Throttling Active during generation ($thermalStatus): Forcing TurboQuant=ON")
+                    }
+
                     val session = llmInference!!.createConversation(
                         ConversationConfig(
                             samplerConfig = SamplerConfig(temperature = 0.8, topK = 40, topP = 0.95),
                             systemInstruction = systemInstruction?.let { Contents.of(it) },
-                            initialMessages = initialMessages
+                            initialMessages = initialMessages,
+                            extraContext = extraContext
                         )
                     ).also {
                         persistentSession = it
-                        Log.d(TAG, "Created new Conversation with ${initialMessages.size} history messages.")
+                        Log.d(TAG, "Created new Conversation with ${initialMessages.size} history messages. TurboQuant=$turboQuantEnabled")
                     }
 
                     // 2. Clear any lingering generating flags just before starting

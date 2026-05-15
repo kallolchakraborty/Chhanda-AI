@@ -50,6 +50,7 @@ class SystemViewModel @Inject constructor(
     private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao,
     private val scrapeUrlUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.ScrapeUrlUseCase>,
     private val metricsManagerLazy: dagger.Lazy<com.chhanda.ai.domain.model.RAGMetricsManager>,
+    private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker,
 ) : ViewModel() {
 
     private val llmEngine get() = llmEngineLazy.get()
@@ -374,6 +375,7 @@ class SystemViewModel @Inject constructor(
             mimeType == "application/msword" -> com.chhanda.ai.domain.usecase.DocType.WORD
             mimeType == "application/vnd.ms-excel" || 
             mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> com.chhanda.ai.domain.usecase.DocType.EXCEL
+            mimeType == "application/json" -> com.chhanda.ai.domain.usecase.DocType.JSON
             mimeType?.startsWith("audio/") == true -> com.chhanda.ai.domain.usecase.DocType.AUDIO
             else -> com.chhanda.ai.domain.usecase.DocType.TXT
         }
@@ -416,6 +418,7 @@ class SystemViewModel @Inject constructor(
     val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
     val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Kallol (Indian Male)")
     val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val thinkingModeEnabled = settingsRepository.thinkingModeEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
     val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
     private val _showRestartDialog = MutableStateFlow(false)
@@ -428,8 +431,65 @@ class SystemViewModel @Inject constructor(
         _showServerRunningWarning.value = false
     }
 
+    fun setThinkingModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setThinkingModeEnabled(enabled) }
+    }
+
+    fun exportMemory(onResult: (File?) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            var file: File? = null
+            try {
+                val messages = chatDao.getAllMessagesSync()
+                if (messages.isEmpty()) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) { 
+                        _ingestionError.value = "No chat history to export."
+                        onResult(null) 
+                    }
+                    return@launch
+                }
+
+                val fileName = "chhanda_memory_export_${System.currentTimeMillis()}.json"
+                file = File(context.cacheDir, fileName)
+                
+                file.outputStream().use { outputStream ->
+                    val writer = android.util.JsonWriter(outputStream.bufferedWriter())
+                    writer.setIndent("  ")
+                    writer.beginObject()
+                    writer.name("export_date").value(System.currentTimeMillis())
+                    writer.name("device_id").value("local")
+                    writer.name("messages")
+                    writer.beginArray()
+                    for (msg in messages) {
+                        writer.beginObject()
+                        writer.name("text").value(msg.text)
+                        writer.name("role").value(msg.role)
+                        writer.name("timestamp").value(msg.timestamp)
+                        writer.name("model").value(msg.modelName)
+                        writer.name("session").value(msg.sessionId)
+                        writer.endObject()
+                    }
+                    writer.endArray()
+                    writer.endObject()
+                    writer.close()
+                }
+                
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(file)
+                    addLog("MEMORY", "Memory exported to ${file?.name}", "SUCCESS")
+                }
+            } catch (e: Exception) {
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    _ingestionError.value = "Export failed: ${e.message}"
+                    onResult(null)
+                    addLog("MEMORY", "Export failed: ${e.message}", "ERROR")
+                }
+            }
+        }
+    }
+
     private val _deviceTemperature = MutableStateFlow(0.0)
     val deviceTemperature: StateFlow<Double> = _deviceTemperature
+    val thermalStatus = thermalStatusTracker.thermalStatus
 
     private val _vectorDbUsage = MutableStateFlow(0L)
     val vectorDbUsage: StateFlow<Long> = _vectorDbUsage.asStateFlow()

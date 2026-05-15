@@ -37,13 +37,19 @@ Chhanda is not just a chat app; it is a full-fledged local AI server and gateway
 
 1.  **Zero-Cloud Local Inference**: Utilizes Gemma 2B and 4B (4-bit quantized GGUF) models running entirely on-device via Google LiteRT-LM. No data is ever sent to the cloud.
 2.  **Adaptive Multimodal RAG (Retrieval-Augmented Generation)**:
-    *   **Documents**: Advanced local parsing for `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, and `.txt` using Apache POI.
-    *   **Adaptive Similarity Engine**: Implements a dual-threshold strategy (0.82 for high-precision KB search, 0.65 for deep attachment discovery) to prevent hallucinations while maintaining thoroughness.
-    *   **Selectivity Layer**: Intelligent "Small Talk" filtering that prevents irrelevant knowledge base injection into general greetings and common conversation.
-    *   **Vision**: Extracts text from images using Google ML Kit OCR.
-    *   **Web**: Advanced multi-stage scraping engine (Jsoup/Jina) with **Internet Connectivity Guard**. Extracts semantic content and structured JSON-LD metadata from any website only when a stable connection is present.
-    *   **Audio**: Speech-to-text integration for indexing spoken content.
-3.  **Premium Document & Audio Interface**:
+    *   **Documents**: Advanced local parsing for `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.json`, `.csv`, and `.txt`.
+    *   **Adaptive Similarity Engine**: Optimized **Min-Heap** search with $O(N \log K)$ complexity and fast cosine math.
+    *   **Selectivity Layer**: Intelligent 0.15 relevance thresholding.
+    *   **Vision**: ML Kit OCR for JPG/PNG.
+    *   **Web**: 3-stage scraping (Jsoup/Jina/Semantic).
+    *   **Audio**: Support for `.wav`, `.mp3`, `.m4a`.
+3.  **TurboQuant & Intelligence Modes**:
+    *   **Thinking Mode**: Reasoning traces via `<thought>` tags.
+    *   **TurboQuant (KV-Cache Compression)**: Hardware-level KV-cache optimization.
+4.  **Hardware Resilience & Safety**:
+    *   **Dynamic Compute Scaling**: Thermal-aware auto-throttling.
+    *   **Memory Hygiene**: 2.5s RAM flush delay.
+5.  **Premium Document & Audio Interface**:
     *   **Context-Aware Iconography**: A sophisticated UI system that dynamically renders unique icons and color-coded metadata for various document types.
     *   **Advanced Media Playback**: Integrated TTS (Text-to-Speech) with a dedicated playback bar, seek controls (forward/backward), and full background execution support.
     *   **Unified Formatting**: Integrated metadata display (`[Source: filename] [Type: format]`) across the Knowledge Base and Chat interfaces.
@@ -247,10 +253,11 @@ While Google's AI Edge Gallery is an excellent tool for local AI experimentation
 | Feature | Google AI Edge Gallery | Chhanda AI Gateway |
 | :--- | :--- | :--- |
 | **Core Philosophy** | Research & Experimentation | Production & Productivity |
-| **RAG Engine** | Limited / Basic Skills | **Enterprise RAG**: PDF, Docx, Xlsx, Images, Web |
-| **Observability** | Basic Benchmarking | **Advanced**: p99 Latency, Recall@K, MRR, PSS Tracking |
+| **RAG Engine** | Limited / Basic Skills | **Enterprise RAG**: PDF, Docx, Xlsx, CSV, Json, M4A, Web |
+| **Observability** | Basic Benchmarking | **Real-time**: p99 Latency, Thermal Status, Vector Memory |
+| **Stability** | Standard Android lifecycle | **Senior Grade**: Thermal-aware throttling, 2.5s RAM flush |
 | **Integration** | Standalone App | **Gateway**: QR Web UI + OpenAI-Compatible API |
-| **Personality** | General Assistant | **Context-Aware**: Role switching (e.g., Senior Dev for API) |
+| **Personality** | General Assistant | **Reasoning Mode**: Thinking traces + Expert Role switching |
 | **Multimedia** | Audio/Vision Demos | **Playback Engine**: Global seek, background TTS |
 | **Data Generation** | None | **Document Creator**: Generate .docx, .xlsx, .pdf locally |
 | **Localization** | Broad (Google Default) | **Deep Local**: Specialized Bengali/Hindi personalities |

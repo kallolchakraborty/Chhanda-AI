@@ -116,7 +116,20 @@ object Localization {
             "hotspot_starting" to "Starting hotspot...",
             "hotspot_active_desc" to "Private network active. Join this network first, then scan the QR code.",
             "start_hotspot" to "Create Network",
-            "tts_intro_template" to "Hello, I am {name}. You have selected me as your voice for Chhanda AI."
+            "tts_intro_template" to "Hello, I am {name}. You have selected me as your voice for Chhanda AI.",
+            "welcome_to_chhanda" to "Welcome to Chhanda",
+            "thinking_mode" to "Thinking Mode",
+            "thinking_mode_desc" to "Show or hide the model's internal thinking process.",
+            "external_memory" to "External Memory Integration",
+            "external_memory_desc" to "Import memory from ChatGPT, Perplexity or export your Chhanda memory.",
+            "import_memory" to "Import Memory",
+            "export_memory" to "Export Memory",
+            "import_memory_desc" to "Sync your history from other LLMs.",
+            "export_memory_desc" to "Save your local memory for other apps.",
+            "import_success" to "Memory imported and indexed successfully.",
+            "export_success" to "Memory exported successfully.",
+            "chatgpt_format" to "ChatGPT (conversations.json)",
+            "perplexity_format" to "Perplexity (JSON/Text)"
         ),
         "Bengali" to mapOf(
             "dashboard" to "মূল পাতা",
@@ -231,7 +244,20 @@ object Localization {
             "hotspot_starting" to "হটস্পট চালু হচ্ছে...",
             "hotspot_active_desc" to "প্রাইভেট নেটওয়ার্ক সক্রিয়। প্রথমে এই নেটওয়ার্কে যুক্ত হন, তারপর QR কোড স্ক্যান করুন।",
             "start_hotspot" to "নেটওয়ার্ক তৈরি করুন",
-            "tts_intro_template" to "হ্যালো, আমি {name}। আপনি আমাকে ছন্দ এআই-এর জন্য আপনার কণ্ঠ হিসেবে নির্বাচন করেছেন।"
+            "tts_intro_template" to "হ্যালো, আমি {name}। আপনি আমাকে ছন্দ এআই-এর জন্য আপনার কণ্ঠ হিসেবে নির্বাচন করেছেন।",
+            "welcome_to_chhanda" to "ছন্দ-তে আপনাকে স্বাগতম",
+            "thinking_mode" to "থিঙ্কিং মোড",
+            "thinking_mode_desc" to "মডেলের অভ্যন্তরীণ চিন্তাভাবনা প্রক্রিয়া প্রদর্শন বা লুকান।",
+            "external_memory" to "এক্সটারনাল মেমোরি ইন্টিগ্রেশন",
+            "external_memory_desc" to "ChatGPT, Perplexity থেকে মেমোরি ইম্পোর্ট করুন বা আপনার ছন্দ মেমোরি এক্সপোর্ট করুন।",
+            "import_memory" to "মেমোরি ইম্পোর্ট",
+            "export_memory" to "মেমোরি এক্সপোর্ট",
+            "import_memory_desc" to "অন্যান্য LLM থেকে আপনার ইতিহাস সিঙ্ক করুন।",
+            "export_memory_desc" to "অন্যান্য অ্যাপের জন্য আপনার লোকাল মেমোরি সেভ করুন।",
+            "import_success" to "মেমোরি সফলভাবে ইম্পোর্ট এবং ইনডেক্স করা হয়েছে।",
+            "export_success" to "মেমোরি সফলভাবে এক্সপোর্ট করা হয়েছে।",
+            "chatgpt_format" to "ChatGPT (conversations.json)",
+            "perplexity_format" to "Perplexity (JSON/Text)"
         ),
         "Hindi" to mapOf(
             "dashboard" to "मुख्य",
@@ -346,7 +372,20 @@ object Localization {
             "hotspot_starting" to "हॉटस्पॉट शुरू हो रहा है...",
             "hotspot_active_desc" to "निजी नेटवर्क सक्रिय है। पहले इस नेटवर्क से जुड़ें, फिर QR कोड स्कैन करें।",
             "start_hotspot" to "नेटवर्क बनाएं",
-            "tts_intro_template" to "नमस्ते, मैं {name} हूँ। आपने मुझे छंदा एआई के लिए अपनी आवाज़ के रूप में चुना है।"
+            "tts_intro_template" to "नमस्ते, मैं {name} हूँ। आपने मुझे छंदा एआई के लिए अपनी आवाज़ के रूप में चुना है।",
+            "welcome_to_chhanda" to "छंदा में आपका स्वागत है",
+            "thinking_mode" to "थिंकिंग मोड",
+            "thinking_mode_desc" to "मॉडल की आंतरिक सोच प्रक्रिया को दिखाएं या छिपाएं।",
+            "external_memory" to "बाहरी मेमोरी एकीकरण",
+            "external_memory_desc" to "ChatGPT, Perplexity से मेमोरी आयात करें या अपनी छंदा मेमोरी निर्यात करें।",
+            "import_memory" to "मेमोरी आयात करें",
+            "export_memory" to "मेमोरी निर्यात करें",
+            "import_memory_desc" to "अन्य LLM से अपना इतिहास सिंक करें।",
+            "export_memory_desc" to "अन्य ऐप्स के लिए अपनी स्थानीय मेमोरी सहेजें।",
+            "import_success" to "मेमोरी सफलतापूर्वक आयात और अनुक्रमित की गई।",
+            "export_success" to "मेमोरी सफलतापूर्वक निर्यात की गई।",
+            "chatgpt_format" to "ChatGPT (conversations.json)",
+            "perplexity_format" to "Perplexity (JSON/Text)"
         ),
 
     )

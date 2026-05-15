@@ -44,6 +44,10 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Favorite
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -265,6 +269,19 @@ fun ChatScreen(navController: NavController, viewModel: ChatViewModel, isReadOnl
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (uiState.messages.isEmpty() && !uiState.isGenerating) {
+                    item {
+                        PersonaSelectionHeader(appLanguage)
+                    }
+                    item {
+                        PersonaSelectionGrid(
+                            selectedPersona = uiState.selectedPersona,
+                            onPersonaSelect = { viewModel.setPersona(it) },
+                            appLanguage = appLanguage
+                        )
+                    }
+                }
+
                 items(
                     items = uiState.messages,
                     key = { it.id }
@@ -691,12 +708,39 @@ fun MessageBubble(
             shadowElevation = 0.dp
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                // Thinking process is hidden in saved messages as per user request
-                /*
                 if (thinkingText != null) {
-                    ...
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = 8.dp)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(8.dp)
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    "Thinking...",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = thinkingText,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                            )
+                        }
+                    }
                 }
-                */
                 
                 if (responseText.isNotEmpty()) {
                     MarkdownText(
@@ -1547,4 +1591,122 @@ fun AttachmentDownload(name: String, type: String) {
 
 fun String.trimNewlines(): String {
     return this.dropWhile { it == '\n' || it == '\r' }.dropLastWhile { it == '\n' || it == '\r' }
+}
+
+@Composable
+fun PersonaSelectionHeader(appLanguage: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        ChhandaLogo(size = 64)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = Localization.getString("welcome_to_chhanda", appLanguage),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "Select a persona to start your conversation",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+fun PersonaSelectionGrid(
+    selectedPersona: String?,
+    onPersonaSelect: (String) -> Unit,
+    appLanguage: String
+) {
+    val personas = listOf(
+        Triple("Senior Teacher", Icons.Default.School, Color(0xFF6366F1)),
+        Triple("Senior Software Engineer", Icons.Default.Terminal, Color(0xFF10B981)),
+        Triple("General Companion", Icons.Default.Face, Color(0xFFF59E0B)),
+        Triple("Friend", Icons.Default.Favorite, Color(0xFFEC4899))
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        personas.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                row.forEach { (name, icon, color) ->
+                    PersonaCard(
+                        name = name,
+                        icon = icon,
+                        color = color,
+                        isSelected = selectedPersona == name,
+                        onClick = { onPersonaSelect(name) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (row.size < 2) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+        
+        if (selectedPersona != null) {
+            TextButton(
+                onClick = { onPersonaSelect("") },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text("Clear Persona Selection", color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PersonaCard(
+    name: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (isSelected) color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val borderColor = if (isSelected) color else Color.Transparent
+    
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .height(100.dp)
+            .animateContentSize(),
+        shape = RoundedCornerShape(16.dp),
+        color = backgroundColor,
+        border = androidx.compose.foundation.BorderStroke(2.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = name,
+                tint = if (isSelected) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
 }

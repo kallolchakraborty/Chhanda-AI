@@ -65,6 +65,13 @@ fun KnowledgeBaseScreen(
         }
     )
 
+    val memoryImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            uri?.let { viewModel.ingestDocuments(listOf(it)) }
+        }
+    )
+
     val activeModelName = remember(ownedModels) {
         ownedModels.firstOrNull { it.isActive }?.name ?: Localization.getString("no_active_model", appLanguage)
     }
@@ -126,6 +133,34 @@ fun KnowledgeBaseScreen(
                 }
             }
             
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.Hub, title = Localization.getString("external_memory", appLanguage))
+                    Spacer(Modifier.height(12.dp))
+                    MemoryImportExportCard(
+                        appLanguage = appLanguage,
+                        onImport = { memoryImportLauncher.launch(arrayOf("application/json", "text/plain")) },
+                        onExport = {
+                            viewModel.exportMemory { file ->
+                                file?.let {
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        it
+                                    )
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        type = "application/json"
+                                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(android.content.Intent.createChooser(intent, "Export Chhanda Memory"))
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
             item {
                 Column {
                     ChhandaSectionHeader(icon = Icons.Default.BarChart, title = Localization.getString("stats", appLanguage))
@@ -833,5 +868,68 @@ fun ReadinessRow(label: String, value: String, icon: ImageVector) {
             Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+    }
+}
+@Composable
+fun MemoryImportExportCard(appLanguage: String, onImport: () -> Unit, onExport: () -> Unit) {
+    ChhandaCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.SyncAlt, null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(Modifier.width(16.dp))
+                Column {
+                    Text(Localization.getString("external_memory", appLanguage), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(Localization.getString("external_memory_desc", appLanguage), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            
+            Spacer(Modifier.height(24.dp))
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onImport,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        Text(Localization.getString("import_memory", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                Button(
+                    onClick = onExport,
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.FileUpload, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                        Text(Localization.getString("export_memory", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(Localization.getString("chatgpt_format", appLanguage), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                Icon(Icons.Default.KeyboardArrowRight, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                Text(Localization.getString("perplexity_format", appLanguage), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            }
+        }
     }
 }
