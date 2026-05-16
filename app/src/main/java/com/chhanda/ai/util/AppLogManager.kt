@@ -23,7 +23,8 @@ class AppLogManager @Inject constructor(
     val logs: StateFlow<List<LogEntry>> = _logs.asStateFlow()
     
     private var logSaveJob: Job? = null
-    private val logFile = File(context.filesDir, "app_logs.json")
+    private val processName = getProcessName(context) ?: "main"
+    private val logFile = File(context.filesDir, "app_logs_${processName.replace(":", "_")}.json")
 
     init {
         _logs.value = loadLogsFromFile()
@@ -34,18 +35,23 @@ class AppLogManager @Inject constructor(
         val entry = LogEntry(
             id = UUID.randomUUID().toString(),
             timestamp = timestamp,
-            tag = tag,
+            tag = "[$processName] $tag",
             message = message,
             status = level
         )
-        _logs.update { current ->
+        val currentLogs = _logs.updateAndGet { current ->
             (listOf(entry) + current).take(100)
         }
         
-        logSaveJob?.cancel()
-        logSaveJob = scope.launch {
-            delay(2000)
-            saveLogsToFile(_logs.value)
+        // CRITICAL FIX: Save immediately for crashes or errors
+        if (level == "ERROR" || level == "CRASH") {
+            saveLogsToFile(currentLogs)
+        } else {
+            logSaveJob?.cancel()
+            logSaveJob = scope.launch {
+                delay(2000)
+                saveLogsToFile(_logs.value)
+            }
         }
     }
 
@@ -77,5 +83,10 @@ class AppLogManager @Inject constructor(
         } catch (e: Exception) {
             // Log fallback
         }
+    }
+    private fun getProcessName(context: Context): String? {
+        val pid = android.os.Process.myPid()
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return am.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
     }
 }

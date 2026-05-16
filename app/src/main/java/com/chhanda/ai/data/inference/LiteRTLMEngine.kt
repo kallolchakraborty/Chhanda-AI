@@ -77,9 +77,17 @@ class LiteRTLMEngine @Inject constructor(
                     _isLoaded.value = true
                     _loadingProgress.value = 1.0f
                     Log.i(TAG, "Model loaded successfully: ${File(path).name}")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Model load failed: ${e.message}")
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Model load failed: ${e.message}", e)
                     _isLoaded.value = false
+                    // IMMEDIATE LOG FOR CROSS-PROCESS CRASH VISIBILITY
+                    try {
+                        File(context.filesDir, "inference_crash.txt").writeText(
+                            "TIMESTAMP: ${System.currentTimeMillis()}\n" +
+                            "ERROR: ${e.message}\n" +
+                            "STACKTRACE: ${Log.getStackTraceString(e)}"
+                        )
+                    } catch (ex: Exception) {}
                     throw e
                 } finally {
                     _isLoading.value = false

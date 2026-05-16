@@ -130,7 +130,7 @@ class ChhandaForegroundService : Service() {
                 val ssid = intent?.getStringExtra(EXTRA_SSID)
                 val isHotspot = ssid != null
                 val title = if (isHotspot) "Chhanda Hotspot: $ssid" else "Chhanda AI Node"
-                val icon = com.chhanda.ai.R.drawable.ic_chhanda_status
+                val icon = com.chhanda.ai.R.mipmap.ic_launcher
                 
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     startForeground(

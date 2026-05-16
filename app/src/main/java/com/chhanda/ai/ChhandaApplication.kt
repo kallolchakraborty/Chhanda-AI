@@ -14,8 +14,9 @@ class ChhandaApplication : Application() {
     override fun onCreate() {
         // STEP 1: Marker for adb debugging
         try {
-            java.io.File(filesDir, "boot_marker.txt").writeText("BOOT_REACHED_${System.currentTimeMillis()}")
-        } catch(e: Exception) {}
+            val processName = getProcessName(this)?.replace(":", "_") ?: "main"
+            java.io.File(filesDir, "boot_reached_${processName}.txt").writeText("${System.currentTimeMillis()}")
+        } catch(e: Throwable) {}
 
         super.onCreate()
         crashHandler.initialize()
@@ -23,4 +24,10 @@ class ChhandaApplication : Application() {
     
     @javax.inject.Inject
     lateinit var crashHandler: com.chhanda.ai.util.CrashHandler
+
+    private fun getProcessName(context: android.content.Context): String? {
+        val pid = android.os.Process.myPid()
+        val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return am.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
+    }
 }
