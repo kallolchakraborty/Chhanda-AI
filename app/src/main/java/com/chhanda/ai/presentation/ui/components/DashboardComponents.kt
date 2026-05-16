@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chhanda.ai.util.Localization
 import kotlinx.coroutines.flow.StateFlow
+import com.chhanda.ai.domain.model.HardwareStatus
 
 /**
  * ChhandaSectionHeader: A unified header component for dashboard sections.
@@ -114,7 +115,7 @@ fun ActiveModelCard(
     isLoading: Boolean = false,
     loadingProgress: Float = 0f,
     temperature: Double,
-    thermalStatus: String = "Normal",
+    thermalStatus: HardwareStatus = HardwareStatus.Normal,
     ramUsage: String = "0 MB / 0 MB",
     vectorMemory: String = "0 MB / 1 GB",
     appLanguage: String = "English",
@@ -225,10 +226,9 @@ fun ActiveModelCard(
             
             // Unified Telemetry Chip
             val thermalColor = when (thermalStatus) {
-                "Normal" -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                "Fair", "Serious" -> Color(0xFFFACC15)
-                "Critical", "Emergency", "Shutdown" -> Color(0xFFF87171)
-                else -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                is HardwareStatus.Normal -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                is HardwareStatus.Throttled -> Color(0xFFFACC15)
+                is HardwareStatus.Critical -> Color(0xFFF87171)
             }
 
             Surface(

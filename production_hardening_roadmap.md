@@ -18,54 +18,95 @@ This document outlines the architectural, security, and performance refinements 
 ## 2. Performance & Resource Optimization
 **Objective**: Ensure system stability under high load and thermal stress.
 
-- [ ] **Process Isolation**: Move the `LiteRTLMEngine` to a separate Android process (`:inference`) to isolate native crashes from the UI.
-- [ ] **Dynamic Thermal Feedback**: Implement a control loop that adjusts inference parameters (Context length, Sampler settings) based on thermal status.
-- [ ] **Vector Store Tiering**: Implement a two-stage search (Text-based pre-filter -> Vector-based similarity) to handle large knowledge bases without OOM.
-- [ ] **Low-Memory Strategy**: Implement an automatic "Hibernation" mode that closes the engine after X minutes of background inactivity.
+- [ ] **Process Isolation (AIDL Transition)**
+    - [ ] Define `IInferenceService.aidl` for remote control of the engine.
+    - [ ] Define `IInferenceCallback.aidl` for streaming tokens across process boundaries.
+    - [ ] Implement `InferenceService` running in `:inference` process.
+    - [ ] Create `RemoteLLMEngine` proxy for seamless main-process integration.
+    - [ ] Update Hilt `AppModule` for dynamic cross-process injection.
+- [ ] **Dynamic Thermal Feedback**
+    - [ ] Implement `ThermalStatusTracker` to monitor hardware temperature levels.
+    - [ ] Implement `AdaptiveSampler` logic to reduce context/compute during heat spikes.
+    - [ ] Add "Cooling Down" UI indicator during thermal throttling.
+- [ ] **Vector Store Tiering**
+    - [ ] Implement SQLite FTS5 (Full-Text Search) for rapid keyword pre-filtering.
+    - [ ] Implement Two-Stage Retrieval (BM25 -> Cosine Similarity).
+    - [ ] Implement "Context Pruning" to keep the most relevant 20% of chunks.
+- [ ] **Low-Memory Strategy**
+    - [ ] Implement `MemoryPressureMonitor` using `onTrimMemory`.
+    - [ ] Implement automatic "Hibernation" (Session persistence + Engine shutdown).
+    - [ ] Add "Wake on Demand" logic for incoming API requests.
 
 ---
 
 ## 3. Security & Privacy Hardening
 **Objective**: Protect user data and prevent unauthorized gateway access.
 
-- [ ] **Hardware-Backed Credentials**: Move API Keys and HF Tokens to the **Android Keystore** (encrypted at rest).
-- [ ] **Gateway Access Control**: 
-    - [ ] Implement Biometric (Face/Fingerprint) lock for the Dashboard.
-    - [ ] Restrict Ktor CORS to local subnet patterns (192.168.x.x).
-- [ ] **Local Encryption**: Implement self-signed TLS/SSL for the Ktor server to protect data in transit on open networks.
-- [ ] **Privacy Guard**: Enhance the `SafetyGuardrails` to automatically redact sensitive patterns (Credit Cards, SSNs) from LLM output.
+- [ ] **Hardware-Backed Credentials**
+    - [ ] Implement `MasterKey` generation via Android Keystore.
+    - [ ] Implement `EncryptedSharedPreferences` or `EncryptedDataStore` for secrets.
+    - [ ] Migrate HuggingFace tokens and custom API keys to secure storage.
+- [ ] **Gateway Access Control**
+    - [ ] Integrate `BiometricPrompt` for Dashboard and Chat History access.
+    - [ ] Implement "Local Subnet Only" validation in Ktor Server.
+    - [ ] Add "Revoke All Sessions" feature in the security settings.
+- [ ] **Local Encryption (HTTPS)**
+    - [ ] Generate self-signed SSL/TLS certificates on device.
+    - [ ] Update Ktor Server to support WSS (Secure WebSockets).
+    - [ ] Add "Download Root CA" button for external clients (Browser/Desktop).
+- [ ] **Privacy Guard**
+    - [ ] Implement Regex-based PII (Personally Identifiable Information) scanner.
+    - [ ] Add "Private Mode" toggle (disable all logging and history).
 
 ---
 
 ## 4. Senior UI/UX & Interaction Design
 **Objective**: Create a premium, "wow-factor" interface with professional aesthetics.
 
-- [ ] **Advanced Visuals**:
-    - [ ] Implement Glassmorphic (blurred/frosted) containers using `RenderEffect` (API 31+).
-    - [ ] Add smooth Material You dynamic theming.
-- [ ] **Micro-Interactions**:
-    - [ ] Add subtle haptic feedback for streaming tokens.
-    - [ ] Implement contextual progress logs for agentic actions (e.g., "Indexing PDF...", "Generating Word Doc...").
-- [ ] **Accessibility (A11y)**: Complete the content-description audit and ensure focus-order is optimized for screen readers.
+- [ ] **Advanced Visuals**
+    - [ ] Implement Glassmorphic `Box` wrappers using `RenderEffect`.
+    - [ ] Add "Ambient Glow" backgrounds that change with the active model's color.
+    - [ ] Implement `AnimatedContent` transitions between Dashboard and Chat.
+- [ ] **Micro-Interactions**
+    - [ ] Add `HapticFeedback` for token generation and file indexing.
+    - [ ] Create a "Thinking Animation" (Suppressed text placeholder) for agentic reasoning.
+    - [ ] Add "Scroll to Bottom" button with unread message badge.
+- [ ] **Accessibility (A11y)**
+    - [ ] Complete `contentDescription` audit for all icons.
+    - [ ] Optimize `SemanticNode` tree for TalkBack users.
 
 ---
 
 ## 5. Observability & Maintainability
 **Objective**: Provide professional diagnostics and stable maintenance.
 
-- [ ] **Structured Logging**: Integrate `Timber` + `Logback` for exportable diagnostic logs.
-- [ ] **Analytics Dashboard**: Add real-time performance graphs for TPS, Latency, and Memory overhead.
-- [ ] **Self-Healing Infrastructure**: Use `WorkManager` to ensure background services (Server, Tunnel) recover automatically from system kills.
-- [ ] **Testing Suite**: Implement unit tests for critical paths: `VectorStore` search, `ContextManager` pruning, and `SendMessageUseCase` logic.
+- [ ] **Structured Logging**
+    - [ ] Integrate `Timber` for context-aware logging.
+    - [ ] Implement `LogReporter` to zip and share logs for debugging.
+- [ ] **Analytics Dashboard**
+    - [ ] Implement `TelemetryGraph` using Canvas for TPS/RAM visualization.
+    - [ ] Add "Session Summary" showing total tokens/cost saved.
+- [ ] **Self-Healing Infrastructure**
+    - [ ] Implement `ServiceRestarter` using `WorkManager` for unexpected crashes.
+    - [ ] Add "Reset Engine" button in the Dashboard for native-layer hangs.
+- [ ] **Testing Suite**
+    - [ ] Implement Unit Tests for `ContextManager` logic.
+    - [ ] Implement UI Tests for the core "Send Message" flow.
 
 ---
 
 ## 6. Agentic & Human-Centric Features
 **Objective**: Increase the utility of the AI for daily productivity.
 
-- [ ] **Intelligent Discovery**: Automatically detect and de-duplicate local model files across shared folders.
-- [ ] **Proactive Suggestions**: Add a "Smart Actions" bar that suggests follow-up prompts based on the current conversation context.
-- [ ] **Enhanced File Handling**: Support for more document types (e.g., Markdown, CSV) in the RAG pipeline.
+- [ ] **Intelligent Discovery**
+    - [ ] Implement `ModelScanner` to auto-detect `.bin`/`.gguf`/`.tflite` files.
+    - [ ] Add "Model Comparison" view to see benchmarks (Speed vs Accuracy).
+- [ ] **Proactive Suggestions**
+    - [ ] Implement `ContextualSuggester` based on last 3 messages.
+    - [ ] Add "Quick Action" buttons for Summarize, Translate, and Rewrite.
+- [ ] **Enhanced File Handling**
+    - [ ] Add Markdown rendering for RAG-extracted content.
+    - [ ] Implement "Selective Knowledge" (Toggle specific PDFs on/off).
 
 ---
 *Roadmap curated by Antigravity (Senior Google AI Architect & UI Developer)*

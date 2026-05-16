@@ -18,22 +18,36 @@ class SettingsRepository @Inject constructor(
 ) {
     private val dataStore = context.dataStore
 
-    private val masterKey = androidx.security.crypto.MasterKeys.getOrCreate(androidx.security.crypto.MasterKeys.AES256_GCM_SPEC)
-    private val encryptedPrefs = try {
-        androidx.security.crypto.EncryptedSharedPreferences.create(
-            "secure_settings",
-            masterKey,
-            context,
-            androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    } catch (e: Exception) {
-        android.util.Log.e("SettingsRepository", "EncryptedSharedPreferences failed, falling back to standard", e)
-        context.getSharedPreferences("secure_settings_fallback", Context.MODE_PRIVATE)
+    private val masterKey by lazy {
+        androidx.security.crypto.MasterKeys.getOrCreate(androidx.security.crypto.MasterKeys.AES256_GCM_SPEC)
+    }
+    private val encryptedPrefs by lazy {
+        try {
+            androidx.security.crypto.EncryptedSharedPreferences.create(
+                "secure_settings",
+                masterKey,
+                context,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("SettingsRepository", "EncryptedSharedPreferences failed, falling back to standard", e)
+            context.getSharedPreferences("secure_settings_fallback", Context.MODE_PRIVATE)
+        }
     }
 
-    private val _hfTokenState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("hf_token", "") ?: "")
-    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow(encryptedPrefs.getString("api_key", null) ?: "000000000")
+    private val _hfTokenState = kotlinx.coroutines.flow.MutableStateFlow("")
+    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow("000000000")
+    
+    init {
+        // Defer encrypted prefs access to avoid blocking constructor
+        try {
+            _hfTokenState.value = encryptedPrefs.getString("hf_token", "") ?: ""
+            _apiKeyState.value = encryptedPrefs.getString("api_key", null) ?: "000000000"
+        } catch (e: Exception) {
+            android.util.Log.e("SettingsRepository", "Failed to read secure prefs: ${e.message}")
+        }
+    }
 
     object PreferencesKeys {
         val DARK_MODE = booleanPreferencesKey("dark_mode")

@@ -4,7 +4,11 @@ import android.content.Context
 import androidx.room.Room
 import com.chhanda.ai.data.inference.AndroidMultimodalIngestor
 import com.chhanda.ai.data.inference.LiteRTLMEngine
+import com.chhanda.ai.data.inference.RemoteLLMEngine
 import com.chhanda.ai.data.inference.LiteRTEmbeddingEngine
+import javax.inject.Provider
+import android.app.ActivityManager
+import android.os.Process
 import com.chhanda.ai.data.repository.AppDatabase
 import com.chhanda.ai.data.repository.ChatDao
 import com.chhanda.ai.data.repository.DeviceDao
@@ -54,6 +58,28 @@ object AppModule {
     @Provides @Singleton
     fun provideEmbeddingEngine(impl: LiteRTEmbeddingEngine): EmbeddingEngine = impl
 
+    @Provides @Singleton
+    fun provideLLMEngine(
+        @ApplicationContext ctx: Context,
+        localImpl: Provider<LiteRTLMEngine>,
+        remoteImpl: Provider<RemoteLLMEngine>
+    ): LLMEngine {
+        val processName = getProcessName(ctx)
+        val isInferenceProcess = processName?.endsWith(":inference") == true
+        
+        return if (isInferenceProcess) {
+            localImpl.get()
+        } else {
+            remoteImpl.get()
+        }
+    }
+
+    private fun getProcessName(context: Context): String? {
+        val pid = Process.myPid()
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return am.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName
+    }
+
 }
 
 /**
@@ -64,8 +90,8 @@ object AppModule {
 @InstallIn(SingletonComponent::class)
 abstract class BindingsModule {
 
-    @Binds @Singleton
-    abstract fun bindLLMEngine(impl: LiteRTLMEngine): LLMEngine
+    // @Binds @Singleton
+    // abstract fun bindLLMEngine(impl: LiteRTLMEngine): LLMEngine
 
     @Binds @Singleton
     abstract fun bindMultimodalIngestor(impl: AndroidMultimodalIngestor): MultimodalIngestor

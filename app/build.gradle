@@ -39,6 +39,7 @@ android {
 
     buildFeatures {
         compose true
+        aidl true
     }
 
     // composeOptions removed for Kotlin 2.0

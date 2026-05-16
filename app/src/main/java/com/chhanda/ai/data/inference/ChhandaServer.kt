@@ -241,6 +241,11 @@ class ChhandaServer @Inject constructor(
         server = null
         boundPort = -1
         _boundPortFlow.value = -1
+        
+        // Unload the engine to free memory and clear dashboard status
+        serverScope.launch {
+            try { llmEngine.close() } catch (e: Exception) { Log.w(TAG, "Engine close failed: ${e.message}") }
+        }
     }
 
     fun startTunnel() {
