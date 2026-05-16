@@ -63,10 +63,11 @@ This document outlines the architectural, security, and performance refinements 
 ## 4. Senior UI/UX & Interaction Design
 **Objective**: Create a premium, "wow-factor" interface with professional aesthetics.
 
-- [ ] **Advanced Visuals**
-    - [ ] Implement Glassmorphic `Box` wrappers using `RenderEffect`.
+- [x] **Advanced Visuals**
+    - [x] Implement Glassmorphic `Box` wrappers using `RenderEffect`.
+    - [x] Add Material You dynamic theming support.
     - [ ] Add "Ambient Glow" backgrounds that change with the active model's color.
-    - [ ] Implement `AnimatedContent` transitions between Dashboard and Chat.
+    - [x] Implement `AnimatedContent` transitions between Dashboard and Chat.
 - [ ] **Micro-Interactions**
     - [ ] Add `HapticFeedback` for token generation and file indexing.
     - [ ] Create a "Thinking Animation" (Suppressed text placeholder) for agentic reasoning.

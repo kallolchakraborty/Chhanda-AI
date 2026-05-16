@@ -3,6 +3,7 @@ package com.chhanda.ai.presentation.ui.components
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,7 +26,6 @@ import com.chhanda.ai.domain.model.HardwareStatus
 
 /**
  * ChhandaSectionHeader: A unified header component for dashboard sections.
- * Ensures consistent typography and iconography across the app.
  */
 @Composable
 fun ChhandaSectionHeader(
@@ -77,12 +77,10 @@ fun StatCard(
 ) {
     val displayValue by value.collectAsState()
     
-    Surface(
-        onClick = { onClick?.invoke() },
-        enabled = onClick != null,
-        modifier = modifier.height(80.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(20.dp)
+    GlassBox(
+        modifier = modifier.height(80.dp).clickable(enabled = onClick != null) { onClick?.invoke() },
+        blurRadius = 20f,
+        cornerRadius = 20.dp
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -96,13 +94,10 @@ fun StatCard(
     }
 }
 
-
 /**
  * ActiveModelCard: The primary control surface for the local AI engine.
- * Senior Note: Implements experimental Shared Element Transitions for seamless 
- * navigation to the Chat interface.
  */
-@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun ActiveModelCard(
     modelName: String, 
@@ -120,8 +115,8 @@ fun ActiveModelCard(
     vectorMemory: String = "0 MB / 1 GB",
     appLanguage: String = "English",
     ipAddress: String = "Detecting...",
-    sharedTransitionScope: androidx.compose.animation.SharedTransitionScope,
-    animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
     val shimmerAlpha by infiniteTransition.animateFloat(
@@ -134,192 +129,255 @@ fun ActiveModelCard(
         label = "shimmerAlpha"
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(32.dp))
-            .background(Brush.linearGradient(
-                if (isRunning) listOf(
+    val cardModifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp))
+
+    if (!isRunning) {
+        GlassBox(
+            modifier = cardModifier,
+            blurRadius = 60f,
+            cornerRadius = 32.dp
+        ) {
+            ActiveModelContent(
+                isRunning = isRunning,
+                isLoading = isLoading,
+                loadingProgress = loadingProgress,
+                modelName = modelName,
+                ipAddress = ipAddress,
+                port = port,
+                temperature = temperature,
+                thermalStatus = thermalStatus,
+                ramUsage = ramUsage,
+                appLanguage = appLanguage,
+                isLocalModelPresent = isLocalModelPresent,
+                onStop = onStop,
+                onTryIt = onTryIt,
+                onStart = onStart,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope
+            )
+        }
+    } else {
+        Box(
+            modifier = cardModifier.background(Brush.linearGradient(
+                listOf(
                     MaterialTheme.colorScheme.primary.copy(alpha = shimmerAlpha),
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                 )
-                else listOf(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f))
             ))
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            // Status Header
+        ) {
+            ActiveModelContent(
+                isRunning = isRunning,
+                isLoading = isLoading,
+                loadingProgress = loadingProgress,
+                modelName = modelName,
+                ipAddress = ipAddress,
+                port = port,
+                temperature = temperature,
+                thermalStatus = thermalStatus,
+                ramUsage = ramUsage,
+                appLanguage = appLanguage,
+                isLocalModelPresent = isLocalModelPresent,
+                onStop = onStop,
+                onTryIt = onTryIt,
+                onStart = onStart,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun ActiveModelContent(
+    isRunning: Boolean,
+    isLoading: Boolean,
+    loadingProgress: Float,
+    modelName: String,
+    ipAddress: String,
+    port: String,
+    temperature: Double,
+    thermalStatus: HardwareStatus,
+    ramUsage: String,
+    appLanguage: String,
+    isLocalModelPresent: Boolean,
+    onStop: () -> Unit,
+    onTryIt: () -> Unit,
+    onStart: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
+) {
+    Column(modifier = Modifier.padding(20.dp)) {
+        // Status Header
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(8.dp), 
+                color = if (isRunning) Color(0xFF4ADE80) else Color(0xFFE5E7EB), 
+                shape = CircleShape
+            ) {}
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (isRunning) Localization.getString("connected", appLanguage).uppercase() 
+                else Localization.getString("stopped", appLanguage).uppercase(), 
+                color = if (isRunning) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f), 
+                fontSize = 12.sp, 
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (isLoading) {
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(8.dp), 
-                    color = if (isRunning) Color(0xFF4ADE80) else Color(0xFFE5E7EB), 
-                    shape = CircleShape
-                ) {}
-                Spacer(Modifier.width(8.dp))
+                LinearProgressIndicator(
+                    progress = { loadingProgress },
+                    modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
+                    color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                    trackColor = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f)
+                )
+                Spacer(Modifier.width(12.dp))
                 Text(
-                    if (isRunning) Localization.getString("connected", appLanguage).uppercase() 
-                    else Localization.getString("stopped", appLanguage).uppercase(), 
-                    color = if (isRunning) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f), 
-                    fontSize = 12.sp, 
-                    fontWeight = FontWeight.Bold
+                    "${(loadingProgress * 100).toInt()}%", 
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
+        }
 
-            if (isLoading) {
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LinearProgressIndicator(
-                        progress = { loadingProgress },
-                        modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
-                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                        trackColor = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f)
+        Spacer(Modifier.height(4.dp))
+        
+        // Model Info
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            with(sharedTransitionScope) {
+                ChhandaLogo(
+                    size = 32, 
+                    modelName = modelName,
+                    modifier = Modifier.sharedElement(
+                        sharedTransitionScope.rememberSharedContentState(key = "model_logo_$modelName"),
+                        animatedVisibilityScope = animatedVisibilityScope
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        "${(loadingProgress * 100).toInt()}%", 
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
+                )
             }
-
-            Spacer(Modifier.height(4.dp))
-            
-            // Model Info
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    Localization.getString("active_model", appLanguage),
+                    color = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.7f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 with(sharedTransitionScope) {
-                    ChhandaLogo(
-                        size = 32, 
-                        modelName = modelName,
+                    Text(
+                        if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else modelName, 
+                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
+                        fontSize = 20.sp, 
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.sharedElement(
-                            sharedTransitionScope.rememberSharedContentState(key = "model_logo_$modelName"),
+                            sharedTransitionScope.rememberSharedContentState(key = "model_name_$modelName"),
                             animatedVisibilityScope = animatedVisibilityScope
                         )
                     )
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        // Unified Telemetry Chip
+        val thermalColor = when (thermalStatus) {
+            is HardwareStatus.Normal -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+            is HardwareStatus.Throttled -> Color(0xFFFACC15)
+            is HardwareStatus.Critical -> Color(0xFFF87171)
+        }
+
+        Surface(
+            color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), 
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                // IP Address
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Link, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                    Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                // Port
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                    Text(" $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                // Temperature
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Thermostat, null, tint = thermalColor, modifier = Modifier.size(12.dp))
+                    Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+                
+                // RAM
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Memory, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
+                    Text(" $ramUsage", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        // Action Buttons
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (isRunning) {
+                Button(
+                    onClick = onStop,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) {
+                    Icon(Icons.Default.StopCircle, null, tint = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Localization.getString("stop_server", appLanguage), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onTryIt,
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.onPrimary, 
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        disabledContainerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f),
+                        disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) {
+                    Icon(Icons.Default.Bolt, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Localization.getString("try_it", appLanguage), fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = onStart,
+                    enabled = isLocalModelPresent && !isLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.PlayArrow, null)
+                    }
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        Localization.getString("active_model", appLanguage),
-                        color = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.7f),
-                        fontSize = 12.sp,
+                        if (isLoading) Localization.getString("loading_model", appLanguage) 
+                        else Localization.getString("start_server", appLanguage), 
                         fontWeight = FontWeight.Bold
                     )
-                    with(sharedTransitionScope) {
-                        Text(
-                            if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else modelName, 
-                            color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
-                            fontSize = 20.sp, 
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.sharedElement(
-                                sharedTransitionScope.rememberSharedContentState(key = "model_name_$modelName"),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            )
-                        )
-                    }
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            // Unified Telemetry Chip
-            val thermalColor = when (thermalStatus) {
-                is HardwareStatus.Normal -> if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-                is HardwareStatus.Throttled -> Color(0xFFFACC15)
-                is HardwareStatus.Critical -> Color(0xFFF87171)
-            }
-
-            Surface(
-                color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), 
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    // IP Address
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Link, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    // Port
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    // Temperature
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Thermostat, null, tint = thermalColor, modifier = Modifier.size(12.dp))
-                        Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    // RAM
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Memory, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                        Text(" $ramUsage", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-
-
-                }
-            }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            // Action Buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (isRunning) {
-                    Button(
-                        onClick = onStop,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)),
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier.weight(1f).height(56.dp)
-                    ) {
-                        Icon(Icons.Default.StopCircle, null, tint = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                        Text(Localization.getString("stop_server", appLanguage), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
-                    }
-                    Button(
-                        onClick = onTryIt,
-                        enabled = !isLoading,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.onPrimary, 
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            disabledContainerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f),
-                            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
-                        ),
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier.weight(1f).height(56.dp)
-                    ) {
-                        Icon(Icons.Default.Bolt, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(Localization.getString("try_it", appLanguage), fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    Button(
-                        onClick = onStart,
-                        enabled = isLocalModelPresent && !isLoading,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier.fillMaxWidth().height(56.dp)
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Default.PlayArrow, null)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (isLoading) Localization.getString("loading_model", appLanguage) 
-                            else Localization.getString("start_server", appLanguage), 
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                 }
             }
         }

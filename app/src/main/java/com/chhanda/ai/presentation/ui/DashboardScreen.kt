@@ -282,8 +282,12 @@ fun DashboardScreen(
         return
     }
 
-    Scaffold(
-        topBar = {
+    Box(modifier = Modifier.fillMaxSize()) {
+        com.chhanda.ai.presentation.ui.components.AmbientBackground()
+        
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
             TopAppBar(
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1049,8 +1053,7 @@ fun DashboardScreen(
             }
         )
     }
-
-
+}
 }
 
 @androidx.compose.material3.ExperimentalMaterial3Api

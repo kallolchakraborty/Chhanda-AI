@@ -50,7 +50,7 @@ class MainActivity : FragmentActivity() {
             systemViewModel = vm
             val isDark by vm.darkMode.collectAsState()
             
-            MaterialTheme(colorScheme = if (isDark) darkColorScheme() else lightColorScheme()) {
+            com.chhanda.ai.presentation.ui.theme.ChhandaTheme(darkTheme = isDark) {
                 ChhandaApp(vm)
             }
 
