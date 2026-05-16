@@ -15,6 +15,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val turnContextIngestor: com.chhanda.ai.domain.usecase.TurnContextIngestor,
     private val personaManager: com.chhanda.ai.domain.model.PersonaManager,
     private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
+    private val responseProcessor: com.chhanda.ai.domain.service.ResponseProcessor,
+    private val agenticActionHandler: com.chhanda.ai.domain.service.AgenticActionHandler,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
@@ -154,93 +156,18 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 "$baseInstructions\n\n$formatInstruction\n\n$agentCapabilities"
             }
 
-            var isThinking = false
-            val internalBuffer = StringBuilder()
-
-            llmEngine.generateResponse(prompt, history, systemInstruction, attachments).collect { update ->
+            val responseFlow = llmEngine.generateResponse(prompt, history, systemInstruction, attachments)
+            
+            responseProcessor.processStream(responseFlow, includeThinking).collect { update ->
                 when (update) {
                     is com.chhanda.ai.domain.model.TokenUpdate.Partial -> {
-                        internalBuffer.append(update.text)
-
-                        if (!includeThinking) {
-                            while (internalBuffer.isNotEmpty()) {
-                                if (!isThinking) {
-
-                                    val startMarkers = listOf("<thought>", "<think>", "Thinking...", "Thought:", "Reasoning:", "Reasoning Process:", "Chain of Thought:")
-                                    var foundMarker: String? = null
-                                    var markerIdx = -1
-
-                                    for (m in startMarkers) {
-                                        val idx = internalBuffer.indexOf(m, ignoreCase = true)
-                                        if (idx != -1 && (markerIdx == -1 || idx < markerIdx)) {
-                                            markerIdx = idx
-                                            foundMarker = m
-                                        }
-                                    }
-
-                                    if (foundMarker != null && markerIdx != -1) {
-
-                                        val before = internalBuffer.substring(0, markerIdx)
-                                        if (before.isNotEmpty()) {
-                                            emit(com.chhanda.ai.domain.model.TokenUpdate.Partial(before, update.tps))
-                                            partialAccumulated += before
-                                        }
-                                        isThinking = true
-                                        internalBuffer.delete(0, markerIdx + foundMarker.length)
-                                    } else {
-
-                                        if (internalBuffer.length > 20) {
-                                            val toEmit = internalBuffer.substring(0, internalBuffer.length - 20)
-                                            emit(com.chhanda.ai.domain.model.TokenUpdate.Partial(toEmit, update.tps))
-                                            partialAccumulated += toEmit
-                                            internalBuffer.delete(0, internalBuffer.length - 20)
-                                        }
-                                        break 
-                                    }
-                                } else {
-
-                                    val endMarkers = listOf("</thought>", "</think>")
-                                    var foundEnd: String? = null
-                                    var endIdx = -1
-
-                                    for (e in endMarkers) {
-                                        val idx = internalBuffer.indexOf(e, ignoreCase = true)
-                                        if (idx != -1 && (endIdx == -1 || idx < endIdx)) {
-                                            endIdx = idx
-                                            foundEnd = e
-                                        }
-                                    }
-
-                                    if (foundEnd != null && endIdx != -1) {
-                                        isThinking = false
-                                        internalBuffer.delete(0, endIdx + foundEnd.length)
-                                    } else {
-
-                                        internalBuffer.setLength(0)
-                                        break
-                                    }
-                                }
-                            }
-                        } else {
-
-                            val content = internalBuffer.toString()
-                            emit(com.chhanda.ai.domain.model.TokenUpdate.Partial(content, update.tps))
-                            partialAccumulated += content
-                            internalBuffer.setLength(0)
-                        }
+                        partialAccumulated += update.text
+                        emit(update)
                     }
                     is com.chhanda.ai.domain.model.TokenUpdate.Final -> {
-                        if (internalBuffer.isNotEmpty() && !isThinking) {
-                            val content = internalBuffer.toString()
-                            partialAccumulated += content
-                            emit(com.chhanda.ai.domain.model.TokenUpdate.Partial(content, update.tps))
-                        }
-
-                        val thinkingRegex = """<(?:thought|think)>([\s\S]*?)</(?:thought|think)>""".toRegex()
-                        val thinkingMatch = thinkingRegex.find(partialAccumulated)
-                        val extractedThinking = thinkingMatch?.groupValues?.get(1)?.trim()
-
-                        var cleanedResponse = partialAccumulated.replace(thinkingRegex, "").trim()
+                        val processed = responseProcessor.cleanFinalResponse(partialAccumulated)
+                        val cleanedResponse = processed.text
+                        val extractedThinking = processed.thinking
 
                         val sourceTag = when {
                             hasAttachmentKnowledge && hasDbKnowledge -> "\n\n*(Ref: Multi-Source Context)*"
@@ -249,45 +176,12 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                             else -> ""
                         }
 
-                        val prefixesToStrip = listOf("Thinking...", "Thinking:", "Thought:", "Thought...")
-                        var changed = true
-                        while (changed) {
-                            changed = false
-                            for (prefix in prefixesToStrip) {
-                                if (cleanedResponse.startsWith(prefix, ignoreCase = true)) {
-                                    cleanedResponse = cleanedResponse.substring(prefix.length).trim()
-                                    changed = true
-                                }
-                            }
-                        }
-
                         val toSave = cleanedResponse + if (isContextFound) sourceTag else ""
 
                         if (toSave.isNotBlank() || !extractedThinking.isNullOrBlank()) {
 
-                            var filePath: String? = null
-                            if (toSave.contains("[GENERATE_FILE")) {
-                                try {
-                                    val regex = """\[GENERATE_FILE\s+type="(\w+)"\s+name="([^"]+)"\]([\s\S]*?)\[/GENERATE_FILE\]""".toRegex()
-                                    val match = regex.find(toSave)
-                                    if (match != null) {
-                                        val type = match.groupValues[1].lowercase()
-                                        val name = match.groupValues[2]
-                                        val content = match.groupValues[3].trim()
-
-                                        val file = when(type) {
-                                            "excel" -> com.chhanda.ai.util.DocumentGenerator.generateExcel(context, name, content)
-                                            "word" -> com.chhanda.ai.util.DocumentGenerator.generateWord(context, name, content)
-                                            "pdf" -> com.chhanda.ai.util.DocumentGenerator.generatePdf(context, name, content)
-                                            else -> null
-                                        }
-                                        filePath = file?.absolutePath
-                                        android.util.Log.i("SendMessageUseCase", "Generated $type file: $filePath")
-                                    }
-                                } catch (e: Exception) {
-                                    android.util.Log.e("SendMessageUseCase", "File generation failed: ${e.message}")
-                                }
-                            }
+                            val actionResult = agenticActionHandler.handleActions(toSave)
+                            val filePath = actionResult.generatedFilePath
 
                             if (source.lowercase() != "api") {
                                 chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(

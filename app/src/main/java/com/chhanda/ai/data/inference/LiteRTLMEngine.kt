@@ -72,6 +72,9 @@ class LiteRTLMEngine @Inject constructor(
     private val _performanceMetrics = MutableStateFlow(0.0)
     override val performanceMetrics: Flow<Double> = _performanceMetrics.asStateFlow()
 
+    private val _loadingProgress = MutableStateFlow(0f)
+    override val loadingProgress: Flow<Float> = _loadingProgress.asStateFlow()
+
     companion object {
         private const val TAG = "LiteRTLMEngine"
         // Stop tokens the model emits to signal end of turn
@@ -109,9 +112,11 @@ class LiteRTLMEngine @Inject constructor(
     private suspend fun loadModel(path: String) = engineLock.withLock {
         // Tear down any existing engine instance to free up memory before allocating new space.
         close()
+        _loadingProgress.value = 0.05f
         
         // MANDATORY MEMORY FLUSH: Manually triggering GC to ensure the JVM releases heap space.
         System.gc()
+        _loadingProgress.value = 0.1f
         Runtime.getRuntime().gc()
         
         // CRITICAL RESOURCE LOCK: We enforce a 2.5s delay to allow the Android OS and 
@@ -158,6 +163,7 @@ class LiteRTLMEngine @Inject constructor(
                 Log.w(TAG, "Detected previous GPU crash! Forcing CPU fallback for this session.")
                 try { gpuFailureMarker.delete() } catch(e: Exception) {}
             }
+            _loadingProgress.value = 0.2f
 
             while (!loaded && attempts < 3) {
                 try {
@@ -173,11 +179,13 @@ class LiteRTLMEngine @Inject constructor(
                         )
                         val engine = Engine(gpuConfig)
                         engine.initialize()
+                        _loadingProgress.value = 0.9f
                         
                         // If we reached here, GPU init succeeded
                         try { gpuFailureMarker.delete() } catch(e: Exception) {}
                         llmInference = engine
                         loaded = true
+                        _loadingProgress.value = 1.0f
                         Log.i(TAG, "Model loaded successfully on GPU")
                     } else {
                         throw Exception("Forcing CPU fallback")
@@ -195,8 +203,11 @@ class LiteRTLMEngine @Inject constructor(
                         )
                         val engine = Engine(cpuConfig)
                         engine.initialize()
+                        _loadingProgress.value = 0.9f
+                        
                         llmInference = engine
                         loaded = true
+                        _loadingProgress.value = 1.0f
                         Log.i(TAG, "Model loaded successfully on CPU")
                     } catch (cpuError: Throwable) {
                         val msg = cpuError.localizedMessage ?: cpuError.javaClass.simpleName
@@ -499,6 +510,7 @@ class LiteRTLMEngine @Inject constructor(
                 persistentSession = null
                 llmInference?.close()
                 llmInference = null
+                _loadingProgress.value = 0f
                 currentModelPath = null
                 lastEngineCloseTime = System.currentTimeMillis()
                 Log.d(TAG, "Engine and session closed successfully on inference thread.")

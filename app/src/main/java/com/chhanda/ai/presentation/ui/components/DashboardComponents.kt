@@ -112,6 +112,7 @@ fun ActiveModelCard(
     onStart: () -> Unit,
     onTryIt: () -> Unit,
     isLoading: Boolean = false,
+    loadingProgress: Float = 0f,
     temperature: Double,
     thermalStatus: String = "Normal",
     ramUsage: String = "0 MB / 0 MB",
@@ -164,11 +165,21 @@ fun ActiveModelCard(
 
             if (isLoading) {
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(4.dp),
-                    color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                    trackColor = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { loadingProgress },
+                        modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
+                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                        trackColor = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "${(loadingProgress * 100).toInt()}%", 
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
 
             Spacer(Modifier.height(4.dp))
@@ -275,7 +286,13 @@ fun ActiveModelCard(
                     }
                     Button(
                         onClick = onTryIt,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary, contentColor = MaterialTheme.colorScheme.primary),
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onPrimary, 
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            disabledContainerColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f),
+                            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
+                        ),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) {
@@ -286,14 +303,22 @@ fun ActiveModelCard(
                 } else {
                     Button(
                         onClick = onStart,
-                        enabled = isLocalModelPresent,
+                        enabled = isLocalModelPresent && !isLoading,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, null)
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.PlayArrow, null)
+                        }
                         Spacer(Modifier.width(8.dp))
-                        Text(Localization.getString("start_server", appLanguage), fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isLoading) Localization.getString("loading_model", appLanguage) 
+                            else Localization.getString("start_server", appLanguage), 
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

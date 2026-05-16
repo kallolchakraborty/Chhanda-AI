@@ -81,15 +81,16 @@ fun DashboardScreen(
     val displayPort = if (actualPort > 0) actualPort else 8888
     val connectedDevices by viewModel.connectedDevices.collectAsStateWithLifecycle()
     val activeDeviceCount by viewModel.activeDeviceCount.collectAsStateWithLifecycle()
-    val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val downloadPauseState by viewModel.downloadPauseFlow.collectAsStateWithLifecycle()
     val downloadStatus by viewModel.downloadStatus.collectAsStateWithLifecycle()
     val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
-    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val modelLoadingProgress by viewModel.modelLoadingProgress.collectAsStateWithLifecycle()
+    val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
     val vectorDbUsage by viewModel.vectorDbUsage.collectAsStateWithLifecycle()
     val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsStateWithLifecycle()
     val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsStateWithLifecycle()
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showModelPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -320,12 +321,19 @@ fun DashboardScreen(
                     isLocalModelPresent = (ownedModels + sharedModels).isNotEmpty(),
                     port = displayPort.toString(),
                     onStop = { viewModel.stopServer() },
-                    onStart = { showModelPicker = true },
+                    onStart = { 
+                        if (anyActiveModel) {
+                            viewModel.toggleServer()
+                        } else {
+                            showModelPicker = true 
+                        }
+                    },
                     onTryIt = { 
                         selectedModelForHistory = activeModelName
                         showHistorySheet = true 
                     },
                     isLoading = isModelLoading,
+                    loadingProgress = modelLoadingProgress,
                     temperature = deviceTemperature,
                     thermalStatus = thermalStatus,
                     ramUsage = ramUsage,
@@ -815,6 +823,7 @@ fun DashboardScreen(
                             Surface(
                                 onClick = {
                                     viewModel.activateModel(model.name)
+                                    viewModel.toggleServer()
                                     showModelPicker = false
                                 },
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

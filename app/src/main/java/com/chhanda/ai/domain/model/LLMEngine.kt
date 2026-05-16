@@ -65,6 +65,11 @@ interface LLMEngine {
      * Checks if the model is currently being loaded.
      */
     fun isModelLoading(): Boolean
+
+    /**
+     * Real-time loading progress (0.0 to 1.0).
+     */
+    val loadingProgress: Flow<Float>
 }
 
 sealed class TokenUpdate {

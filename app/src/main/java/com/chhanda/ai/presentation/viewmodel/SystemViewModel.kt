@@ -56,6 +56,10 @@ class SystemViewModel @Inject constructor(
     private val scrapeUrlUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.ScrapeUrlUseCase>,
     private val metricsManagerLazy: dagger.Lazy<com.chhanda.ai.domain.model.RAGMetricsManager>,
     private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker,
+    private val hardwareMonitor: com.chhanda.ai.data.repository.HardwareMonitor,
+    private val networkManager: com.chhanda.ai.data.repository.NetworkManager,
+    private val serverOrchestrator: com.chhanda.ai.data.inference.ServerOrchestrator,
+    private val modelProvisioner: com.chhanda.ai.data.repository.ModelProvisioner,
 ) : ViewModel() {
 
     private val llmEngine get() = llmEngineLazy.get()
@@ -65,20 +69,45 @@ class SystemViewModel @Inject constructor(
     private val scrapeUrlUseCase get() = scrapeUrlUseCaseLazy.get()
     private val metricsManager get() = metricsManagerLazy.get()
 
-    private val _latencyMetrics = MutableStateFlow(com.chhanda.ai.domain.model.LatencyMetrics(0, 0, 0))
-    val latencyMetrics = _latencyMetrics.asStateFlow()
+    // Telemetry Delegation
+    val latencyMetrics = hardwareMonitor.latencyMetrics
+    val throughputMetrics = hardwareMonitor.throughputMetrics
+    val memoryMetrics = hardwareMonitor.memoryMetrics
+    val qualityMetrics = hardwareMonitor.qualityMetrics
+    val costMetrics = hardwareMonitor.costMetrics
+    val processorInfo = hardwareMonitor.processorInfo
+    val tokensPerSec = hardwareMonitor.tokensPerSec
+    val deviceTemperature = hardwareMonitor.batteryTemp
 
-    private val _throughputMetrics = MutableStateFlow(com.chhanda.ai.domain.model.ThroughputMetrics(0.0, 0.0))
-    val throughputMetrics = _throughputMetrics.asStateFlow()
+    // Model Delegation
+    val ownedModels = modelProvisioner.ownedModels
+    val sharedModels = modelProvisioner.sharedModels
+    val downloadableModels = modelProvisioner.downloadableModels
+    val isScanning = modelProvisioner.isScanning
+    val downloadProgress = modelProvisioner.downloadProgress
+    val downloadStatus = modelProvisioner.downloadStatus
+    val modelLoadingProgress = llmEngine.loadingProgress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0f)
 
-    private val _memoryMetrics = MutableStateFlow(com.chhanda.ai.domain.model.MemoryMetrics(0, 0.0, 0f))
-    val memoryMetrics = _memoryMetrics.asStateFlow()
+    val isModelLoading = modelLoadingProgress
+        .map { it > 0f && it < 1.0f }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
-    private val _qualityMetrics = MutableStateFlow(com.chhanda.ai.domain.model.QualityMetrics(0f, 0f))
-    val qualityMetrics = _qualityMetrics.asStateFlow()
+    // Network Delegation
+    val isVpnActive = networkManager.isVpnActive
+    val networkIps = networkManager.allIps
+    val hasNetwork = networkManager.isConnected
 
-    private val _costMetrics = MutableStateFlow(com.chhanda.ai.domain.model.CostMetrics("", "", ""))
-    val costMetrics = _costMetrics.asStateFlow()
+    // Server Delegation
+    val isServerRunning = serverOrchestrator.isServerRunning
+    val serverActualPort = serverOrchestrator.boundPort
+    val serverError = serverOrchestrator.serverError
+    val tunnelUrl = serverOrchestrator.tunnelUrl
+
+    fun manualRefreshNetwork() {
+        networkManager.refreshNetwork()
+    }
+    val isTunnelActive = serverOrchestrator.isTunnelActive
 
 
 
@@ -200,25 +229,7 @@ class SystemViewModel @Inject constructor(
 
 
 
-    private fun reAttachDownloads() {
-        viewModelScope.launch {
-
-            val potentialModels = listOf("Gemma-4-E2B-IT", "Gemma-4-E4B-IT")
-            potentialModels.forEach { modelName ->
-                try {
-                    val workInfos = workManager.getWorkInfosForUniqueWork("download_$modelName").get()
-                    val activeWork = workInfos.find { !it.state.isFinished }
-                    if (activeWork != null) {
-                        _downloadIds.update { it + (modelName to activeWork.id) }
-                        observeDownloadProgress(modelName, activeWork.id)
-                        addLog("SYSTEM", "Re-attached to background download: $modelName", "INFO")
-                    }
-                } catch (e: Exception) {
-
-                }
-            }
-        }
-    }
+    // reAttachDownloads removed - handled by ModelProvisioner
 
     private val workManager by lazy { androidx.work.WorkManager.getInstance(context) }
 
@@ -242,7 +253,7 @@ class SystemViewModel @Inject constructor(
     fun processIngestDocuments(uris: List<android.net.Uri>, inBackground: Boolean = false) {
         pendingBackgroundPrompt = null
 
-        if (_vectorDbUsage.value >= _vectorDbCapacityBytes.value * 0.9) {
+        if (hardwareMonitor.storageMetrics.value.vectorDbBytes >= vectorDbCapacityBytes.value * 0.9) {
             _showVectorStorageWarning.value = true
             return
         }
@@ -327,7 +338,7 @@ class SystemViewModel @Inject constructor(
                 _isIngesting.value = false
                 _ingestionProgress.value = 1.0f
                 _ingestionMessage.value = "All $totalFiles files processed successfully. Tap to close."
-                updateStats()
+                hardwareMonitor.startMonitoring()
             } catch (e: Exception) {
                 _isIngesting.value = false
                 _ingestionProgress.value = 1.0f
@@ -391,8 +402,10 @@ class SystemViewModel @Inject constructor(
     val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Kallol (Indian Male)")
     val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     val thinkingModeEnabled = settingsRepository.thinkingModeEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
-    private val _vectorDbCapacityBytes = MutableStateFlow(1024L * 1024 * 1024)
-    val vectorDbCapacityBytes: StateFlow<Long> = _vectorDbCapacityBytes.asStateFlow()
+    val vectorDbCapacityBytes = hardwareMonitor.storageMetrics.map { 
+        val dynamicLimit = (it.deviceAvailableBytes * 0.15).toLong()
+        maxOf(1024L * 1024 * 1024, dynamicLimit)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 1024L * 1024 * 1024)
     private val _showRestartDialog = MutableStateFlow(false)
     val showRestartDialog: StateFlow<Boolean> = _showRestartDialog
 
@@ -459,8 +472,8 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    private val _vectorDbUsage = MutableStateFlow(0L)
-    val vectorDbUsage: StateFlow<Long> = _vectorDbUsage.asStateFlow()
+    val vectorDbUsage = hardwareMonitor.storageMetrics.map { it.vectorDbBytes }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0L)
 
     val vectorStorageMetrics: StateFlow<String> = combine(vectorDbUsage, vectorDbCapacityBytes) { usage, capacity ->
         val usageStr = if (usage > 1024 * 1024 * 1024) {
@@ -478,15 +491,10 @@ class SystemViewModel @Inject constructor(
         "$usageStr / $capacityStr"
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Calculating...")
 
-    private val _processorInfo = MutableStateFlow("Detecting...")
-    val processorInfo: StateFlow<String> = _processorInfo.asStateFlow()
-
-    private val _tokensPerSec = MutableStateFlow("0.0")
-    val tokensPerSec: StateFlow<String> = _tokensPerSec
-
     private val _isAppVisible = MutableStateFlow(true)
     fun onVisibilityChanged(visible: Boolean) {
         _isAppVisible.value = visible
+        hardwareMonitor.setAppVisibility(visible)
         if (visible) {
             addLog("SYSTEM", "UI foreground: Resuming monitors", "INFO")
         } else {
@@ -504,46 +512,23 @@ class SystemViewModel @Inject constructor(
 
     fun clearAllLogs() {
         _logs.value = emptyList()
-        // We don't add a log entry here so the screen actually appears empty.
         saveLogsToFile(emptyList()) 
     }
 
-    private val _ownedModels = MutableStateFlow<List<com.chhanda.ai.presentation.ui.ModelInfo>>(emptyList())
-    val ownedModels: StateFlow<List<com.chhanda.ai.presentation.ui.ModelInfo>> = _ownedModels.asStateFlow()
-
-    private val _sharedModels = MutableStateFlow<List<com.chhanda.ai.presentation.ui.ModelInfo>>(emptyList())
-    val sharedModels: StateFlow<List<com.chhanda.ai.presentation.ui.ModelInfo>> = _sharedModels.asStateFlow()
-
-    val isThinkingSupported = combine(_ownedModels, _sharedModels) { owned, shared ->
+    val isThinkingSupported = combine(ownedModels, sharedModels) { owned, shared ->
         val activeModel = (owned + shared).find { it.isActive }
         activeModel?.name?.contains("deepseek", ignoreCase = true) == true || 
         activeModel?.name?.contains("r1", ignoreCase = true) == true ||
         activeModel?.name?.contains("gemma-4", ignoreCase = true) == true
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
-    private val _downloadableModels = MutableStateFlow<List<com.chhanda.ai.presentation.ui.DownloadModelInfo>>(emptyList())
-    val downloadableModels: StateFlow<List<com.chhanda.ai.presentation.ui.DownloadModelInfo>> = _downloadableModels
-
     private val _recommendedModel = MutableStateFlow<String?>(null)
     val recommendedModel: StateFlow<String?> = _recommendedModel
 
-    private val _isConfigEnabled = MutableStateFlow(false)
+    private val _isConfigEnabled = MutableStateFlow(true)
     val isConfigEnabled: StateFlow<Boolean> = _isConfigEnabled
 
-    private val _downloadStatus = MutableStateFlow<Map<String, DownloadStatus>>(emptyMap())
-    val downloadStatus: StateFlow<Map<String, DownloadStatus>> = _downloadStatus.asStateFlow()
-
-    val downloadProgress: StateFlow<Map<String, Float>> = _downloadStatus.map { map ->
-        map.mapValues { it.value.progress }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyMap())
-
-    private val _downloadPauseState = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    val downloadPauseFlow: StateFlow<Map<String, Boolean>> = _downloadPauseState
-
-    private val _downloadIds = MutableStateFlow<Map<String, java.util.UUID>>(emptyMap())
-
-    private val _isServerRunning = MutableStateFlow(false)
-    val isServerRunning: StateFlow<Boolean> = _isServerRunning.asStateFlow()
+    val downloadPauseFlow = modelProvisioner.downloadPauseFlow
 
     val storageSummary = combine(
         chatDao.getAllMessages(),
@@ -578,20 +563,19 @@ class SystemViewModel @Inject constructor(
         }
     }.combine(_connectedDevices) { now, devices ->
         val cutoff = now - 40000 
-        devices.count { it.connectionType != "LOCAL" && it.isCurrentlyConnected && it.lastActive > cutoff }
+        devices.count { it.isCurrentlyConnected && it.lastActive > cutoff }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0)
 
     val localIpAddress: StateFlow<String> = flow {
         while(true) {
-
             val ip = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                if (_isServerRunning.value) {
+                if (serverOrchestrator.isServerRunning.value) {
                     try { 
                         val bound = chhandaServer.boundIp
-                        if (bound.isBlank() || bound == "0.0.0.0" || bound == "127.0.0.1") getIpAddress() else bound
-                    } catch (e: Exception) { getIpAddress() }
+                        if (bound.isBlank() || bound == "0.0.0.0" || bound == "127.0.0.1") networkManager.getBestIp() else bound
+                    } catch (e: Exception) { networkManager.getBestIp() }
                 } else {
-                    getIpAddress()
+                    networkManager.getBestIp()
                 }
             }
             emit(ip)
@@ -599,45 +583,26 @@ class SystemViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Detecting...")
 
-    val serverActualPort: StateFlow<Int> = chhandaServer.boundPortFlow
-
-    val isVpnActive: StateFlow<Boolean> = flow {
-        while(true) {
-            emit(chhandaServer.isVpnActive)
-            delay(5000)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
-
-    val networkIps: StateFlow<List<String>> = flow {
-        while(true) {
-            emit(chhandaServer.allIps)
-            delay(5000)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
-
-    val hasNetwork: StateFlow<Boolean> = networkIps.map { ips: List<String> ->
-        ips.isNotEmpty() && ips.first() != "127.0.0.1" 
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
-
-    fun manualRefreshNetwork() {
-        viewModelScope.launch {
-            chhandaServer.refreshNetworkStatus()
+    fun toggleServer() {
+        if (serverOrchestrator.isServerRunning.value) {
+            serverOrchestrator.stopServer()
+            viewModelScope.launch {
+                try { llmEngine.close() } catch(_: Exception) {}
+                modelProvisioner.refreshModels()
+                addLog("SERVER", "Manual Stop Requested", "WARN")
+            }
+        } else {
+            viewModelScope.launch {
+                val portStr = settingsRepository.serverPortFlow.first()
+                val maxDevices = settingsRepository.maxDevicesFlow.first()
+                val port = portStr.toIntOrNull() ?: 8888
+                serverOrchestrator.startServer(port, maxDevices)
+                addLog("SERVER", "Local AI Gateway Online (Port $port)", "SUCCESS")
+            }
         }
     }
 
-    val isTunnelActive: StateFlow<Boolean> = flow {
-        while(true) {
-            emit(chhandaServer.isTunnelActive)
-            delay(3000)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
-
-    val tunnelUrl: StateFlow<String> = flow {
-        while(true) {
-            emit(chhandaServer.publicUrl)
-            delay(3000)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
+    // Duplicate network states removed
 
     fun toggleTunnel() {
         if (chhandaServer.isTunnelActive) {
@@ -656,7 +621,7 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             while (true) {
 
-                if (_isAppVisible.value && _isServerRunning.value) {
+                if (_isAppVisible.value && serverOrchestrator.isServerRunning.value) {
                     val port = try { chhandaServerLazy.get().port } catch (e: Exception) { -1 }
                     if (port > 0) {
                         val isOk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -776,17 +741,11 @@ class SystemViewModel @Inject constructor(
     }
 
     init {
-        // Hardened Initialization: Move all startup logic to a background coroutine
-        // to prevent blocking the main thread and avoid race conditions with Hilt injections.
         viewModelScope.launch {
             try {
-                // Short delay to allow the ViewModel and its dependencies to fully settle
                 delay(500)
-                
                 setupLogs()
                 setupSystem()
-                setupNetworkObservables()
-                startSystemMonitors()
             } catch (e: Throwable) {
                 Log.e("SystemViewModel", "CRITICAL: Initialization failure detected", e)
             }
@@ -811,14 +770,11 @@ class SystemViewModel @Inject constructor(
                 Log.e("SystemViewModel", "Crash log reader failed", e)
             }
             
-            reAttachDownloads()
-            scanForModels()
+            // reAttachDownloads removed - handled by ModelProvisioner
             delay(1000)
             provisionDefaultDevice()
             ensureDefaultPort()
-            delay(1000)
-            checkForModelUpdates()
-            addLog("SYSTEM", "Gateway Engine v18 Active", "SUCCESS")
+            addLog("SYSTEM", "Chhanda Gateway Refactored Active", "SUCCESS")
         }
         
         viewModelScope.launch {
@@ -835,68 +791,8 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    private fun setupNetworkObservables() {
-        viewModelScope.launch {
-            try {
-                llmEngine.performanceMetrics.collect { tps ->
-                    val formatted = if (tps > 0) tps.format(1) else "0.0"
-                    if (_tokensPerSec.value != formatted) {
-                        _tokensPerSec.value = formatted
-                    }
-                }
-            } catch (e: Exception) {
-                addLog("SYSTEM", "Telemetry observer failed: ${e.message}", "WARNING")
-            }
-        }
-
-        viewModelScope.launch {
-            chhandaServer.boundPortFlow.collect { port ->
-                _isServerRunning.value = port > 0
-            }
-        }
-        
-        viewModelScope.launch {
-            chhandaServer.serverErrorFlow.collect { msg ->
-                if (msg != null) addLog("SERVER", msg.toString(), "ERROR")
-            }
-        }
-    }
-
-    private fun startSystemMonitors() {
-        viewModelScope.launch {
-            var counter = 0
-            while (true) {
-                try {
-                    if (_isAppVisible.value) {
-                        // Fast updates (every 2-3s)
-                        if (counter % 1 == 0) {
-                            updateStats()
-                            updateTelemetry()
-                        }
-                        
-                        // Medium updates (every 10s)
-                        if (counter % 5 == 0) {
-                            reapDevices()
-                            performHealthCheck()
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("SystemViewModel", "Monitor loop error", e)
-                }
-                
-                delay(2000)
-                counter++
-                if (counter > 1000) counter = 0
-            }
-        }
-    }
-
     private fun updateTelemetry() {
-        _latencyMetrics.value = metricsManager.getLatencyMetrics()
-        _throughputMetrics.value = metricsManager.getThroughputMetrics()
-        _memoryMetrics.value = metricsManager.getMemoryMetrics()
-        _qualityMetrics.value = metricsManager.getQualityMetrics()
-        _costMetrics.value = metricsManager.getCostMetrics()
+        // Handled by HardwareMonitor
     }
 
     private suspend fun provisionDefaultDevice() {
@@ -946,7 +842,7 @@ class SystemViewModel @Inject constructor(
     }
 
     private suspend fun performHealthCheck() {
-        if (!_isServerRunning.value) return
+        if (!serverOrchestrator.isServerRunning.value) return
         val port = try { chhandaServer.port } catch (e: Exception) { -1 }
         if (port <= 0) return
         
@@ -1007,147 +903,10 @@ class SystemViewModel @Inject constructor(
     private val _modelPaths = MutableStateFlow<Map<String, String>>(emptyMap())
 
     private val _isScanning = MutableStateFlow(false)
-    val isScanning: StateFlow<Boolean> = _isScanning
-
-    private val _isModelLoading = MutableStateFlow(false)
-    val isModelLoading: StateFlow<Boolean> = _isModelLoading.asStateFlow()
+    // Duplicate model states removed
 
     fun scanForModels() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _isScanning.value = true
-            try {
-                val potentialModels = listOf(
-                    "gemma-4-e2b.litertlm" to "Gemma-4-E2B-IT",
-                    "gemma-4-e4b.litertlm" to "Gemma-4-E4B-IT"
-                )
-
-                val recommendedName = "Gemma-4-E2B-IT"
-                _recommendedModel.value = recommendedName
-
-                val ownedFound = mutableListOf<com.chhanda.ai.presentation.ui.ModelInfo>()
-                val sharedFound = mutableListOf<com.chhanda.ai.presentation.ui.ModelInfo>()
-                val missing = mutableListOf<com.chhanda.ai.presentation.ui.DownloadModelInfo>()
-                val pathMap = mutableMapOf<String, String>()
-
-                val ownedPaths = listOfNotNull(
-                    context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
-                    context.filesDir,
-                    java.io.File(context.filesDir, "models")
-                )
-
-                val sharedPaths = emptyList<java.io.File>()
-
-                val processedPaths = mutableSetOf<String>()
-
-                fun addFoundModel(name: String, file: java.io.File, isOwned: Boolean) {
-                    if (processedPaths.contains(file.absolutePath)) return
-
-                    val sizeStr = android.text.format.Formatter.formatFileSize(context, file.length())
-
-                    val info = com.chhanda.ai.presentation.ui.ModelInfo(
-                        name = name,
-                        details = if (isOwned) "Internal: $sizeStr" 
-                                 else "Shared: $sizeStr",
-                        isActive = false
-                    )
-
-                    if (isOwned) {
-                        if (ownedFound.any { it.name == name }) return
-                        ownedFound.add(info)
-                    } else {
-                        if (sharedFound.any { it.name == name }) return
-                        sharedFound.add(info)
-                    }
-                    pathMap[name] = file.absolutePath
-                    processedPaths.add(file.absolutePath)
-                }
-
-                ownedPaths.forEach { dir ->
-                    if (dir.exists() && dir.isDirectory) {
-                        dir.listFiles()?.forEach { file ->
-                            if (file.isFile && (file.name.endsWith(".litertlm") || file.name.endsWith(".bin") || file.name.endsWith(".tflite"))) {
-
-                                val matchedModel = potentialModels.find { (filename, _) ->
-                                    file.name.equals(filename, ignoreCase = true)
-                                } ?: potentialModels.find { (_, name) ->
-                                    file.name.contains(name.replace("-", ""), ignoreCase = true)
-                                } ?: potentialModels.find { (_, name) ->
-                                    val version = if (name.contains("E4B")) "E4B" else if (name.contains("E2B")) "E2B" else ""
-                                    version.isNotEmpty() && file.name.contains(version, ignoreCase = true) && file.name.contains("Gemma", ignoreCase = true)
-                                }
-
-                                if (matchedModel != null) {
-                                    addFoundModel(matchedModel.second, file, true)
-                                } else if (file.length() > 500_000_000) {
-
-                                    val fallbackName = if (file.name.contains("Gemma", ignoreCase = true)) {
-                                        if (file.name.contains("4B", ignoreCase = true) || file.name.contains("E4B", ignoreCase = true)) "Gemma-4-E4B-IT"
-                                        else if (file.name.contains("2B", ignoreCase = true) || file.name.contains("E2B", ignoreCase = true)) "Gemma-4-E2B-IT"
-                                        else "Imported: ${file.name}"
-                                    } else "Imported: ${file.name}"
-                                    addFoundModel(fallbackName, file, true)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                potentialModels.forEach { (filename, name) ->
-                    if (!pathMap.containsKey(name) && !pathMap.containsKey("$name (Shared)")) {
-                        missing.add(com.chhanda.ai.presentation.ui.DownloadModelInfo(
-                            name = name,
-                            description = "Mobile-optimized $name for on-device inference.",
-                            size = when (name) {
-                                "Gemma-4-E2B-IT" -> "2.6 GB"
-                                "Gemma-4-E4B-IT" -> "3.7 GB"
-                                "Gemma-3-E4B-IT" -> "3.7 GB"
-                                "Qwen-2.5-1.5B" -> "1.6 GB"
-                                "DeepSeek-R1-1.5B" -> "1.8 GB"
-                                else -> when {
-                                    name.contains("1.5b", ignoreCase = true) || name.contains("1b", ignoreCase = true) -> "1.6 GB"
-                                    name.contains("2b", ignoreCase = true) -> "2.6 GB"
-                                    name.contains("4b", ignoreCase = true) -> "3.7 GB"
-                                    name.contains("3b", ignoreCase = true) -> "2.1 GB"
-                                    name.contains("mini", ignoreCase = true) -> "1.9 GB"
-                                    else -> "2.5 GB"
-                                }
-                            },
-                            isRecommended = name == recommendedName
-                        ))
-                    }
-                }
-
-                _ownedModels.value = ownedFound
-                _sharedModels.value = sharedFound
-
-                val existingUpdates = _ownedModels.value.filter { it.hasUpdate }.map { it.name }.toSet()
-                if (existingUpdates.isNotEmpty()) {
-                    _ownedModels.value = _ownedModels.value.map { it.copy(hasUpdate = existingUpdates.contains(it.name)) }
-                }
-
-                val newPathMap = pathMap.toMutableMap()
-                _modelPaths.value.forEach { (name, path) ->
-                    if (name.startsWith("Imported:") && !newPathMap.containsKey(name)) {
-                        newPathMap[name] = path
-                    }
-                }
-                _modelPaths.value = newPathMap
-
-                _downloadableModels.value = missing
-                _isConfigEnabled.value = (ownedFound + sharedFound + newPathMap.filter { it.key.startsWith("Imported:") }).isNotEmpty()
-
-                if ((ownedFound + sharedFound).isNotEmpty()) {
-                    addLog("SYSTEM", "Discovery: ${ownedFound.size} internal, ${sharedFound.size} shared", "SUCCESS")
-
-                } else {
-                    addLog("SYSTEM", "No models found. Download one from the Models tab.", "INFO")
-                }
-            } catch (e: Throwable) {
-                addLog("SYSTEM", "Model scan failed: ${e.localizedMessage}", "ERROR")
-            } finally {
-                _isScanning.value = false
-            }
-        }
+        modelProvisioner.refreshModels()
     }
 
     fun setVectorDbCapacity(gb: Int) {
@@ -1168,63 +927,7 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    private fun updateStats() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-
-                val now = System.currentTimeMillis()
-                val totalAppSize = if (now - lastStorageCheck > 30000 || storageDirty) {
-                    lastStorageCheck = now
-                    storageDirty = false
-                    getAppStorageSize()
-                } else cachedStorageSize
-                
-                cachedStorageSize = totalAppSize
-                val vectorUsage = getVectorDbSize()
-
-                val rawCpu = getCpuName()
-                val cpuName = when {
-                    rawCpu.contains("qcom", ignoreCase = true) || rawCpu.contains("sm", ignoreCase = true) -> "Snapdragon"
-                    rawCpu.contains("exynos", ignoreCase = true) -> "Exynos"
-                    rawCpu.contains("mt", ignoreCase = true) || rawCpu.contains("mediatek", ignoreCase = true) -> "MediaTek"
-                    rawCpu.contains("tensor", ignoreCase = true) -> "Google Tensor"
-                    else -> rawCpu
-                }
-                val cores = Runtime.getRuntime().availableProcessors()
-                _processorInfo.value = "$cpuName\n$cores Cores | $cores Threads"
-
-                val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-                val memoryInfo = android.app.ActivityManager.MemoryInfo()
-                activityManager.getMemoryInfo(memoryInfo)
-                val usedMem = (memoryInfo.totalMem - memoryInfo.availMem) / (1024.0 * 1024 * 1024)
-                val totalMem = memoryInfo.totalMem / (1024.0 * 1024 * 1024)
-
-                val intent = try {
-                    context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-                } catch (e: Exception) { null }
-                val rawTemp = intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
-                val celsius = rawTemp / 10.0
-
-                val statFs = android.os.StatFs(context.filesDir.path)
-                val availableBytes = statFs.availableBlocksLong * statFs.blockSizeLong
-                val dynamicLimit = (availableBytes * 0.15).toLong()
-                val finalCapacity = maxOf(1024L * 1024 * 1024, dynamicLimit)
-                _vectorDbCapacityBytes.value = finalCapacity
-
-                _vectorDbUsage.value = vectorUsage
-
-                if (finalCapacity > 0) {
-                    val usageRatio = vectorUsage.toDouble() / finalCapacity
-                    if (usageRatio >= 0.9) {
-                        _showVectorStorageWarning.value = true
-                        showStorageSystemNotification()
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("SystemViewModel", "Failed to update stats: ${e.message}")
-            }
-        }
-    }
+    // updateStats removed - handled by HardwareMonitor
 
     private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
@@ -1256,34 +959,12 @@ class SystemViewModel @Inject constructor(
         }
     }
 
-    private fun showStorageSystemNotification() {
-        try {
-            val channelId = "system_alerts"
-            val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val channel = android.app.NotificationChannel(channelId, "System Alerts", android.app.NotificationManager.IMPORTANCE_HIGH)
-                notificationManager.createNotificationChannel(channel)
-            }
-
-            val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
-                .setContentTitle("Chhanda Storage Warning")
-                .setContentText("Vector database is 90% full. Empty it or free phone space to continue.")
-                .setSmallIcon(android.R.drawable.stat_notify_error)
-                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .build()
-
-            notificationManager.notify(8008, notification)
-        } catch (e: Exception) {
-            Log.e("SystemViewModel", "Failed to show system notification", e)
-        }
-    }
+    // Storage notifications removed - will be refactored into a separate manager
 
     fun setAppLanguage(language: String) {
         if (appLanguage.value == language) return
 
-        if (_isServerRunning.value) {
+        if (serverOrchestrator.isServerRunning.value) {
             _showServerRunningWarning.value = true
             return
         }
@@ -1347,9 +1028,11 @@ class SystemViewModel @Inject constructor(
     }
 
     fun stopServer() {
+        serverOrchestrator.stopServer()
         viewModelScope.launch {
-            com.chhanda.ai.service.ChhandaForegroundService.stop(context)
-            addLog("SERVER", "Web Gateway manually stopped", "WARNING")
+            try { llmEngine.close() } catch(_: Exception) {}
+            modelProvisioner.refreshModels()
+            addLog("SERVER", "Web Gateway and Inference Engine stopped", "WARNING")
         }
     }
 
@@ -1362,69 +1045,9 @@ class SystemViewModel @Inject constructor(
 
     fun activateModel(modelName: String) {
         viewModelScope.launch {
-            val path = _modelPaths.value[modelName]
-            if (path == null) {
-                addLog("SYSTEM", "Model path not found for: $modelName. Available paths: ${_modelPaths.value.keys}", "ERROR")
-
-                scanForModels()
-                return@launch
-            }
-
-            val file = java.io.File(path)
-            if (!file.exists()) {
-                addLog("SYSTEM", "Model file vanished: $path", "ERROR")
-                scanForModels()
-                return@launch
-            }
-
-            addLog("SYSTEM", "Path verified: ${file.name} (${file.length() / 1024 / 1024}MB)", "INFO")
-
-            _ownedModels.value = _ownedModels.value.map { it.copy(isActive = it.name == modelName) }
-            _sharedModels.value = _sharedModels.value.map { it.copy(isActive = it.name == modelName) }
-            addLog("SYSTEM", "Initializing model: $modelName", "INFO")
-
-            val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val memoryInfo = android.app.ActivityManager.MemoryInfo()
-            activityManager.getMemoryInfo(memoryInfo)
-            val availableMegs = memoryInfo.availMem / (1024 * 1024)
-
-            val optimizedContextLength = when {
-                availableMegs < 1000 -> 512  
-                availableMegs < 2000 -> 1024 
-                availableMegs < 3000 -> 2048 
-                else -> 4096                 
-            }
-
-            addLog("SYSTEM", "Auto-calculated optimized context length: $optimizedContextLength based on ${availableMegs}MB free RAM", "INFO")
-            setContextLength(optimizedContextLength)
-
-            try {
-                _isModelLoading.value = true
-
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    llmEngine.initModel(path)
-                }
-                _isModelLoading.value = false
-
-                val finalPort = (serverPort.value.toIntOrNull() ?: 8888).let { p ->
-                    if (p == 8000 || p == 8080) 8888 else p
-                }
-
-                com.chhanda.ai.service.ChhandaForegroundService.start(context, finalPort, maxDevices.value)
-                addLog("SYSTEM", "Model ready: $modelName", "SUCCESS")
-                addLog("SERVER", "Gateway start requested on port $finalPort", "INFO")
-            } catch (e: Throwable) {
-                _isModelLoading.value = false
-
-                _ownedModels.value = _ownedModels.value.map { it.copy(isActive = false) }
-                _sharedModels.value = _sharedModels.value.map { it.copy(isActive = false) }
-                try { llmEngine.close() } catch (_: Exception) {}
-                try { com.chhanda.ai.service.ChhandaForegroundService.stop(context) } catch (_: Exception) {}
-                val errorMsg = e.localizedMessage ?: e.javaClass.simpleName
-                val guidance = if (errorMsg.contains("metadata", ignoreCase = true)) 
-                    " | Ensure you are using a compatible .task or .litertlm model bundle." else ""
-                addLog("SYSTEM", "Failed to load model $modelName: $errorMsg$guidance", "ERROR")
-            }
+            addLog("SYSTEM", "Activating model: $modelName", "INFO")
+            modelProvisioner.activateModel(modelName)
+            addLog("SYSTEM", "Model activation requested", "SUCCESS")
         }
     }
 
@@ -1440,119 +1063,25 @@ class SystemViewModel @Inject constructor(
             currentPaths[name] = file.absolutePath
             _modelPaths.value = currentPaths
 
-            val sizeStr = android.text.format.Formatter.formatFileSize(context, file.length())
-
-            val info = com.chhanda.ai.presentation.ui.ModelInfo(
-                name = name,
-                details = "Imported: $sizeStr",
-                isActive = false
-            )
-            _ownedModels.value = _ownedModels.value + info
-
             addLog("SYSTEM", "Manually registered model: ${file.name}", "SUCCESS")
+            modelProvisioner.refreshModels()
             activateModel(name)
         }
     }
 
-    fun downloadModel(model: com.chhanda.ai.presentation.ui.DownloadModelInfo, isResume: Boolean = false) {
-        try {
-            val filename = when {
-                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "gemma-4-e4b.litertlm"
-                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "gemma-4-e2b.litertlm"
-                model.name.contains("Gemma-3", ignoreCase = true) -> "gemma-3n-e4b.litertlm"
-                model.name.contains("Qwen", ignoreCase = true) -> "qwen-2.5-1.5b.litertlm"
-                model.name.contains("DeepSeek", ignoreCase = true) -> "deepseek-r1-1.5b.litertlm"
-                else -> "gemma-4-e2b.litertlm"
-            }
-
-            val url = when {
-                model.name.contains("Gemma-4-E4B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm"
-                model.name.contains("Gemma-4-E2B", ignoreCase = true) -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
-                model.name.contains("Gemma-3", ignoreCase = true) -> "https://huggingface.co/google/gemma-3n-E4B-it-litert-lm/resolve/main/gemma-3n-E4B-it-int4.litertlm"
-                model.name.contains("Qwen", ignoreCase = true) -> "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm"
-                model.name.contains("DeepSeek", ignoreCase = true) -> "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm"
-                else -> "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm"
-            }
-
-            val inputData = androidx.work.Data.Builder()
-                .putString(com.chhanda.ai.service.DownloadWorker.KEY_URL, url)
-                .putString(com.chhanda.ai.service.DownloadWorker.KEY_FILENAME, filename)
-                .putString(com.chhanda.ai.service.DownloadWorker.KEY_TOKEN, hfToken.value)
-                .build()
-
-            if (url.contains("huggingface.co") && hfToken.value.isBlank()) {
-                addLog("DOWNLOAD", "Warning: Token missing for gated model. Download might fail.", "WARNING")
-            }
-
-            val request = androidx.work.OneTimeWorkRequestBuilder<com.chhanda.ai.service.DownloadWorker>()
-                .setInputData(inputData)
-                .addTag("download_${model.name}")
-                .setConstraints(androidx.work.Constraints.Builder()
-                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
-                    .build())
-                .build()
-
-            workManager.enqueueUniqueWork(
-                "download_${model.name}",
-                if (isResume) androidx.work.ExistingWorkPolicy.KEEP else androidx.work.ExistingWorkPolicy.REPLACE,
-                request
-            )
-
-            _downloadIds.update { it + (model.name to request.id) }
-            observeDownloadProgress(model.name, request.id)
-
-            addLog("DOWNLOAD", "Started background download: ${model.name}", "INFO")
-        } catch (e: Exception) {
-            Log.e("SystemViewModel", "Download initiation failed", e)
-            addLog("DOWNLOAD", "Critical failure starting ${model.name}: ${e.message}", "ERROR")
+    fun downloadModel(model: com.chhanda.ai.presentation.ui.DownloadModelInfo) {
+        viewModelScope.launch {
+            addLog("DOWNLOAD", "Download request: ${model.name}", "INFO")
+            modelProvisioner.startDownload(model)
         }
     }
 
     private fun observeDownloadProgress(modelName: String, workId: java.util.UUID) {
-        viewModelScope.launch {
-            workManager.getWorkInfoByIdFlow(workId).collect { info ->
-                if (info != null) {
-                    when (info.state) {
-                        androidx.work.WorkInfo.State.RUNNING -> {
-                            val progress = info.progress.getInt(com.chhanda.ai.service.DownloadWorker.KEY_PROGRESS, 0)
-                            val speed = info.progress.getLong(com.chhanda.ai.service.DownloadWorker.KEY_SPEED, 0L)
-                            val downloaded = info.progress.getLong(com.chhanda.ai.service.DownloadWorker.KEY_BYTES_DOWNLOADED, 0L)
-                            val total = info.progress.getLong(com.chhanda.ai.service.DownloadWorker.KEY_BYTES_TOTAL, 0L)
-
-                            _downloadStatus.update { current ->
-                                current + (modelName to DownloadStatus(progress.toFloat() / 100f, speed, downloaded, total))
-                            }
-                        }
-                        androidx.work.WorkInfo.State.SUCCEEDED -> {
-                            _downloadStatus.update { it - modelName }
-                            addLog("DOWNLOAD", "Download successful: $modelName", "SUCCESS")
-                            scanForModels()
-                        }
-                        androidx.work.WorkInfo.State.FAILED -> {
-                            val error = info.outputData.getString(com.chhanda.ai.service.DownloadWorker.KEY_STATUS) ?: "Unknown failure"
-                            _downloadStatus.update { it - modelName }
-                            addLog("DOWNLOAD", "Download failed: $modelName - $error", "ERROR")
-                        }
-                        androidx.work.WorkInfo.State.CANCELLED -> {
-                            _downloadStatus.update { it - modelName }
-                        }
-                        else -> {}
-                    }
-                }
-            }
-        }
+        // Now handled by ModelProvisioner
     }
 
     fun isInternetAvailable(): Boolean {
-        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = connectivityManager.activeNetwork ?: return false
-        val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return when {
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> true
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> true
-            activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> true
-            else -> false
-        }
+        return networkManager.isConnected.value
     }
 
     private fun checkForModelUpdates() {
@@ -1562,13 +1091,13 @@ class SystemViewModel @Inject constructor(
         }
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val modelsToCheck = _ownedModels.value
+            val modelsToCheck = modelProvisioner.ownedModels.value
             if (modelsToCheck.isEmpty()) return@launch
 
             addLog("SYSTEM", "Checking for model updates...", "INFO")
 
             var updatesFound = 0
-            val updatedModels = _ownedModels.value.toMutableList()
+            val updatedModels = modelProvisioner.ownedModels.value.toMutableList()
 
             modelsToCheck.forEachIndexed { index, model ->
                 try {
@@ -1606,7 +1135,7 @@ class SystemViewModel @Inject constructor(
             }
 
             if (updatesFound > 0) {
-                _ownedModels.value = updatedModels
+                modelProvisioner.refreshModels()
                 addLog("SYSTEM", "Detected $updatesFound model updates available", "WARNING")
             } else {
                 addLog("SYSTEM", "All models are up to date", "SUCCESS")
@@ -1637,7 +1166,7 @@ class SystemViewModel @Inject constructor(
 
                 val ids = allFiles.value.map { it.id }
                 uploadedFileDao.markMultipleAsDeleted(ids)
-                updateStats()
+                hardwareMonitor.startMonitoring()
                 addLog("STORAGE", "Vector database emptied successfully", "SUCCESS")
             } catch (e: Exception) {
                 addLog("STORAGE", "Failed to clear vector store: ${e.message}", "ERROR")
@@ -1661,7 +1190,7 @@ class SystemViewModel @Inject constructor(
 
         val isKaggle = url.contains("kaggle.com", ignoreCase = true)
 
-        if (isKaggle && !_isServerRunning.value) {
+        if (isKaggle && !serverOrchestrator.isServerRunning.value) {
             _showLlmServerWarning.value = true
             return
         }
@@ -1731,7 +1260,7 @@ class SystemViewModel @Inject constructor(
                 _ingestionError.value = "Failed to scrape $label. Please try again."
             } finally {
                 _isIngesting.value = false
-                updateStats()
+                hardwareMonitor.startMonitoring()
             }
         }
     }
@@ -1803,27 +1332,24 @@ class SystemViewModel @Inject constructor(
     }
 
     fun pauseDownload(modelName: String) {
-        workManager.cancelUniqueWork("download_$modelName")
-        _downloadPauseState.update { it + (modelName to true) }
+        modelProvisioner.pauseDownload(modelName)
         addLog("DOWNLOAD", "Download paused: $modelName", "INFO")
     }
 
     fun resumeDownload(modelName: String, model: com.chhanda.ai.presentation.ui.DownloadModelInfo) {
-        _downloadPauseState.update { it + (modelName to false) }
-        downloadModel(model, isResume = true)
+        modelProvisioner.resumeDownload(modelName)
+        addLog("DOWNLOAD", "Download resumed: $modelName", "INFO")
     }
 
     fun cancelDownload(modelName: String) {
-        workManager.cancelUniqueWork("download_$modelName")
-        _downloadStatus.update { it - modelName }
+        modelProvisioner.cancelDownload(modelName)
         addLog("DOWNLOAD", "Download cancelled: $modelName", "WARNING")
     }
 
     fun stopGlobalInference() {
         llmEngine.stopInference()
-        chhandaServer.stop()
-        _tokensPerSec.value = "0.0"
-        _isServerRunning.value = false
+        serverOrchestrator.stopServer()
+        hardwareMonitor.setPerformanceMetrics(0.0)
         addLog("SYSTEM", "Global Inference Halted", "WARN")
         addLog("SERVER", "Web Gateway Stopped", "WARN")
     }
@@ -1860,8 +1386,6 @@ class SystemViewModel @Inject constructor(
             chatDao.clearHistory()
             uploadedFileDao.markMultipleAsDeleted(ids)
             vectorStore.clear()
-            _vectorDbUsage.value = 0L
-            updateStats()
             addLog("STORAGE", "Deep purge complete: Files and DB cleared", "SUCCESS")
         }
     }
@@ -1980,7 +1504,7 @@ class SystemViewModel @Inject constructor(
             if (isActive) {
                 try { llmEngine.close() } catch (_: Exception) {}
                 try { com.chhanda.ai.service.ChhandaForegroundService.stop(context) } catch (_: Exception) {}
-                _isServerRunning.value = false
+                serverOrchestrator.updateStatus(false, 0)
             }
 
             val path = _modelPaths.value[modelName]
@@ -2003,15 +1527,16 @@ class SystemViewModel @Inject constructor(
             }
 
             _modelPaths.value = _modelPaths.value - modelName
-            scanForModels()
+            modelProvisioner.refreshModels()
         }
     }
+
 
     fun shutdown() {
         viewModelScope.launch {
             try { llmEngine.close() } catch (_: Exception) {}
             try { com.chhanda.ai.service.ChhandaForegroundService.stop(context) } catch (_: Exception) {}
-            _tokensPerSec.value = "0.0"
+            hardwareMonitor.setPerformanceMetrics(0.0)
             addLog("SYSTEM", "App shutdown requested. Disconnected all devices and stopped LLM.", "INFO")
         }
     }

@@ -129,7 +129,8 @@ object Localization {
             "import_success" to "Memory imported and indexed successfully.",
             "export_success" to "Memory exported successfully.",
             "chatgpt_format" to "ChatGPT (conversations.json)",
-            "perplexity_format" to "Perplexity (JSON/Text)"
+            "perplexity_format" to "Perplexity (JSON/Text)",
+            "loading_model" to "Initializing Engine..."
         ),
         "Bengali" to mapOf(
             "dashboard" to "মূল পাতা",
@@ -257,7 +258,8 @@ object Localization {
             "import_success" to "মেমোরি সফলভাবে ইম্পোর্ট এবং ইনডেক্স করা হয়েছে।",
             "export_success" to "মেমোরি সফলভাবে এক্সপোর্ট করা হয়েছে।",
             "chatgpt_format" to "ChatGPT (conversations.json)",
-            "perplexity_format" to "Perplexity (JSON/Text)"
+            "perplexity_format" to "Perplexity (JSON/Text)",
+            "loading_model" to "ইঞ্জিন চালু হচ্ছে..."
         ),
         "Hindi" to mapOf(
             "dashboard" to "मुख्य",
@@ -385,7 +387,8 @@ object Localization {
             "import_success" to "मेमोरी सफलतापूर्वक आयात और अनुक्रमित की गई।",
             "export_success" to "मेमोरी सफलतापूर्वक निर्यात की गई।",
             "chatgpt_format" to "ChatGPT (conversations.json)",
-            "perplexity_format" to "Perplexity (JSON/Text)"
+            "perplexity_format" to "Perplexity (JSON/Text)",
+            "loading_model" to "इंजन चालू हो रहा है..."
         ),
 
     )
