@@ -100,7 +100,9 @@ class ChhandaServer @Inject constructor(
     private val contextManagerLazy: dagger.Lazy<com.chhanda.ai.domain.model.ContextManager>,
     private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao,
     private val templateProvider: ServerTemplateProvider,
-    private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker
+    private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker,
+    private val securityRepository: com.chhanda.ai.data.repository.SecurityRepository,
+    private val sslCertManager: com.chhanda.ai.util.SslCertManager
 ) {
     private val llmEngine get() = llmEngineLazy.get()
     private val sendMessageUseCase get() = sendMessageUseCaseLazy.get()
@@ -201,17 +203,42 @@ class ChhandaServer @Inject constructor(
         _serverErrorFlow.value = null
         for (port in requestedPort..requestedPort + 10) {
             try {
-                val engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
-                    configureEngine(this, port)
+                val sslConfig = sslCertManager.getSslConfig()
+                val sslPort = port + 1 // Use next port for SSL
+                
+                val environment = io.ktor.server.engine.applicationEngineEnvironment {
+                    log = org.slf4j.LoggerFactory.getLogger("ktor.application")
+                    
+                    connector {
+                        this.host = "0.0.0.0"
+                        this.port = port
+                    }
+                    
+                    sslConnector(
+                        keyStore = sslConfig.keyStore,
+                        keyAlias = sslConfig.keyAlias,
+                        keyStorePassword = sslConfig.jksPassword,
+                        privateKeyPassword = sslConfig.keyPassword
+                    ) {
+                        this.host = "0.0.0.0"
+                        this.port = sslPort
+                    }
+                    
+                    module {
+                        configureEngine(this, port)
+                    }
                 }
+
+                val engine = embeddedServer(CIO, environment)
                 engine.start(wait = false)
                 server = engine
                 boundPort = port
                 _boundPortFlow.value = port
                 startReaper()
+                Log.i(TAG, "Server started: HTTP on $port, HTTPS on $sslPort")
                 return
             } catch (e: Exception) {
-                Log.w(TAG, "Port $port binding failed: ${e.message}")
+                Log.w(TAG, "Port binding failed at $port: ${e.message}")
             }
         }
         _serverErrorFlow.value = "CRITICAL: No ports available for binding."
@@ -295,7 +322,23 @@ class ChhandaServer @Inject constructor(
     private fun configureEngine(app: io.ktor.server.application.Application, capturedPort: Int) {
         app.apply {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }) }
-            install(CORS) { anyHost(); allowHeader("*"); allowMethod(io.ktor.http.HttpMethod.Options); allowMethod(io.ktor.http.HttpMethod.Get); allowMethod(io.ktor.http.HttpMethod.Post) }
+            install(CORS) {
+                // Restrict CORS to local subnet patterns and loopback
+                allowHost("localhost")
+                allowHost("127.0.0.1")
+                allowHost("0:0:0:0:0:0:0:1")
+                
+                // Allow private subnet patterns (Heuristic for common home/office networks)
+                allowHost("192.168.*.*", schemes = listOf("http", "https"))
+                allowHost("10.*.*.*", schemes = listOf("http", "https"))
+                allowHost("172.*.*.*", schemes = listOf("http", "https"))
+
+                allowHeader("X-API-KEY")
+                allowHeader("Content-Type")
+                allowMethod(io.ktor.http.HttpMethod.Options)
+                allowMethod(io.ktor.http.HttpMethod.Get)
+                allowMethod(io.ktor.http.HttpMethod.Post)
+            }
             routing {
                 get("/status") {
                     val loaded = llmEngine.isModelLoaded()
@@ -305,11 +348,24 @@ class ChhandaServer @Inject constructor(
                 }
                 get("/ping") { call.respondText("pong") }
 
-                val validateAuth: suspend (io.ktor.server.application.ApplicationCall) -> Boolean = { call ->
+                val isLocalRequest: (String) -> Boolean = { host ->
+                    host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || 
+                    host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172.")
+                }
+
+                val validateAuth: suspend (io.ktor.server.application.ApplicationCall) -> Boolean = validateAuth@{ call ->
+                    val remoteHost = call.request.local.remoteHost
+                    
+                    // Allow local loopback always, but restrict subnet if tunnel is inactive
+                    if (!tunnelActive && !isLocalRequest(remoteHost)) {
+                        call.respond(io.ktor.http.HttpStatusCode.Forbidden, mapOf("error" to "Access Restricted: Non-local requests blocked without active tunnel."))
+                        return@validateAuth false
+                    }
+
                     val providedKey = call.request.headers["X-API-KEY"] ?: call.request.queryParameters["key"]
-                    val actualKey = settingsRepository.apiKeyFlow.firstOrNull()
-                    if (actualKey.isNullOrBlank() || actualKey == "Initializing..." || providedKey != actualKey) {
-                        call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid API Key"))
+                    val actualKey = securityRepository.apiKey.value
+                    if (actualKey.isBlank() || actualKey == "Initializing..." || actualKey == "000000000" || providedKey != actualKey) {
+                        call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid or Uninitialized API Key"))
                         false
                     } else true
                 }

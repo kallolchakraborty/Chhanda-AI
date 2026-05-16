@@ -19,7 +19,7 @@ import javax.inject.Singleton
 class ModelProvisioner @Inject constructor(
     @ApplicationContext private val context: Context,
     private val llmEngine: LLMEngine,
-    private val settingsRepository: SettingsRepository
+    private val securityRepository: SecurityRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
@@ -115,6 +115,7 @@ class ModelProvisioner @Inject constructor(
             else -> return
         }
 
+        val hfToken = securityRepository.hfToken.value
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle("Downloading $modelName")
             .setDescription("Chhanda AI Model Download")
@@ -122,6 +123,10 @@ class ModelProvisioner @Inject constructor(
             .setDestinationInExternalFilesDir(context, "models", "$modelName.litertlm")
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
+            
+        if (url.contains("huggingface.co") && hfToken.isNotBlank()) {
+            request.addRequestHeader("Authorization", "Bearer $hfToken")
+        }
 
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = dm.enqueue(request)

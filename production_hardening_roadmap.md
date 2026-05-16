@@ -42,17 +42,17 @@ This document outlines the architectural, security, and performance refinements 
 ## 3. Security & Privacy Hardening
 **Objective**: Protect user data and prevent unauthorized gateway access.
 
-- [ ] **Hardware-Backed Credentials**
-    - [ ] Implement `MasterKey` generation via Android Keystore.
-    - [ ] Implement `EncryptedSharedPreferences` or `EncryptedDataStore` for secrets.
-    - [ ] Migrate HuggingFace tokens and custom API keys to secure storage.
-- [ ] **Gateway Access Control**
-    - [ ] Integrate `BiometricPrompt` for Dashboard and Chat History access.
-    - [ ] Implement "Local Subnet Only" validation in Ktor Server.
+- [x] **Hardware-Backed Credentials**
+    - [x] Implement `MasterKey` generation via Android Keystore.
+    - [x] Implement `EncryptedSharedPreferences` or `EncryptedDataStore` for secrets.
+    - [x] Migrate HuggingFace tokens and custom API keys to secure storage.
+- [x] **Gateway Access Control**
+    - [x] Integrate `BiometricPrompt` for Dashboard and Chat History access.
+    - [x] Implement "Local Subnet Only" validation in Ktor Server.
     - [ ] Add "Revoke All Sessions" feature in the security settings.
-- [ ] **Local Encryption (HTTPS)**
-    - [ ] Generate self-signed SSL/TLS certificates on device.
-    - [ ] Update Ktor Server to support WSS (Secure WebSockets).
+- [x] **Local Encryption (HTTPS)**
+    - [x] Generate self-signed SSL/TLS certificates on device.
+    - [x] Update Ktor Server to support WSS (Secure WebSockets).
     - [ ] Add "Download Root CA" button for external clients (Browser/Desktop).
 - [ ] **Privacy Guard**
     - [ ] Implement Regex-based PII (Personally Identifiable Information) scanner.

@@ -58,12 +58,80 @@ fun ConfigScreen(
     val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsStateWithLifecycle()
     val ragEnabled by viewModel.ragEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val activity = context as? androidx.fragment.app.FragmentActivity
+    var isUnlocked by remember { mutableStateOf(false) }
+    var authError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        if (activity != null && com.chhanda.ai.util.BiometricAuthenticator.canAuthenticate(context)) {
+            com.chhanda.ai.util.BiometricAuthenticator.authenticate(
+                activity = activity,
+                onResult = { success, error ->
+                    if (success) {
+                        isUnlocked = true
+                        authError = null
+                    } else {
+                        authError = error ?: "Authentication failed"
+                    }
+                }
+            )
+        } else {
+            isUnlocked = true
+        }
+    }
+
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     var tempPort by remember(port) { mutableStateOf(port) }
     var tempHfToken by remember(hfToken) { mutableStateOf(hfToken) }
     var tempApiKey by remember(apiKey) { mutableStateOf(apiKey) }
     var showSaveConfirmDialog by remember { mutableStateOf(false) }
+
+    if (!isUnlocked) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = "Locked",
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Secure Settings",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    authError ?: "Authentication required to access configuration",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = {
+                    if (activity != null) {
+                        com.chhanda.ai.util.BiometricAuthenticator.authenticate(
+                            activity = activity,
+                            onResult = { success, error ->
+                                if (success) {
+                                    isUnlocked = true
+                                    authError = null
+                                } else {
+                                    authError = error ?: "Authentication failed"
+                                }
+                            }
+                        )
+                    }
+                }) {
+                    Text("Unlock Settings")
+                }
+            }
+        }
+        return
+    }
 
     Scaffold(
         topBar = {

@@ -18,43 +18,15 @@ class SettingsRepository @Inject constructor(
 ) {
     private val dataStore = context.dataStore
 
-    private val masterKey by lazy {
-        androidx.security.crypto.MasterKeys.getOrCreate(androidx.security.crypto.MasterKeys.AES256_GCM_SPEC)
-    }
-    private val encryptedPrefs by lazy {
-        try {
-            androidx.security.crypto.EncryptedSharedPreferences.create(
-                "secure_settings",
-                masterKey,
-                context,
-                androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("SettingsRepository", "EncryptedSharedPreferences failed, falling back to standard", e)
-            context.getSharedPreferences("secure_settings_fallback", Context.MODE_PRIVATE)
-        }
-    }
-
-    private val _hfTokenState = kotlinx.coroutines.flow.MutableStateFlow("")
-    private val _apiKeyState = kotlinx.coroutines.flow.MutableStateFlow("000000000")
     
     init {
-        // Defer encrypted prefs access to avoid blocking constructor
-        try {
-            _hfTokenState.value = encryptedPrefs.getString("hf_token", "") ?: ""
-            _apiKeyState.value = encryptedPrefs.getString("api_key", null) ?: "000000000"
-        } catch (e: Exception) {
-            android.util.Log.e("SettingsRepository", "Failed to read secure prefs: ${e.message}")
-        }
+        // Initialization for standard settings if needed
     }
 
     object PreferencesKeys {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val PORT = stringPreferencesKey("server_port")
         val CONTEXT_LENGTH = stringPreferencesKey("context_length")
-        val HF_TOKEN = stringPreferencesKey("hf_token")
-        val API_KEY = stringPreferencesKey("api_key")
         val NOTIFICATIONS = booleanPreferencesKey("notifications")
         val MAX_DEVICES = intPreferencesKey("max_devices")
         val PUBLIC_URL = stringPreferencesKey("public_url")
@@ -80,13 +52,9 @@ class SettingsRepository @Inject constructor(
         preferences[PreferencesKeys.CONTEXT_LENGTH] ?: "2048"
     }
 
-    val hfTokenFlow: Flow<String> = _hfTokenState
-
     val maxDevicesFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.MAX_DEVICES] ?: 5
     }
-
-    val apiKeyFlow: Flow<String?> = _apiKeyState
 
     val publicUrlFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.PUBLIC_URL] ?: ""
@@ -142,20 +110,10 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun setHfToken(token: String) {
-        encryptedPrefs.edit().putString("hf_token", token).apply()
-        _hfTokenState.value = token
-    }
-
     suspend fun setMaxDevices(max: Int) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.MAX_DEVICES] = max
         }
-    }
-
-    suspend fun setApiKey(key: String) {
-        encryptedPrefs.edit().putString("api_key", key).apply()
-        _apiKeyState.value = key
     }
 
     suspend fun setPublicUrl(url: String) {

@@ -1,7 +1,7 @@
 package com.chhanda.ai
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.layout.padding
@@ -26,7 +26,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private var systemViewModel: SystemViewModel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {

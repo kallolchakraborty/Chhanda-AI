@@ -60,6 +60,7 @@ class SystemViewModel @Inject constructor(
     private val networkManager: com.chhanda.ai.data.repository.NetworkManager,
     private val serverOrchestrator: com.chhanda.ai.data.inference.ServerOrchestrator,
     private val modelProvisioner: com.chhanda.ai.data.repository.ModelProvisioner,
+    private val securityRepository: com.chhanda.ai.data.repository.SecurityRepository,
 ) : ViewModel() {
 
     private val llmEngine get() = llmEngineLazy.get()
@@ -387,13 +388,11 @@ class SystemViewModel @Inject constructor(
     }
 
     val darkMode = settingsRepository.darkModeFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
-    val hfToken = settingsRepository.hfTokenFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
+    val hfToken = securityRepository.hfToken.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val serverPort = settingsRepository.serverPortFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "8080")
     val contextLength = settingsRepository.contextLengthFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "2048")
     val maxDevices = settingsRepository.maxDevicesFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 5)
-    val apiKey = settingsRepository.apiKeyFlow
-        .map { it ?: "Initializing..." }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Initializing...")
+    val apiKey = securityRepository.apiKey.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Initializing...")
     val publicUrl = settingsRepository.publicUrlFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "")
     val appLanguage = settingsRepository.appLanguageFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "English")
     val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 7)
@@ -779,10 +778,10 @@ class SystemViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                val currentKey = settingsRepository.apiKeyFlow.first()
-                if (currentKey == null || currentKey == "Initializing..." || currentKey == "8961221281" || currentKey == "000000000") {
+                val currentKey = securityRepository.apiKey.value
+                if (currentKey == "Initializing..." || currentKey == "000000000") {
                     val newKey = "CH-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
-                    settingsRepository.setApiKey(newKey)
+                    securityRepository.setApiKey(newKey)
                     addLog("SYSTEM", "Provisioned device node key: $newKey", "SUCCESS")
                 }
             } catch (e: Exception) {
@@ -940,7 +939,7 @@ class SystemViewModel @Inject constructor(
 
     fun setHfToken(token: String) {
         viewModelScope.launch {
-            settingsRepository.setHfToken(token)
+            securityRepository.setHfToken(token)
             addLog("CONFIG", "HuggingFace token updated", "INFO")
         }
     }
@@ -1022,7 +1021,7 @@ class SystemViewModel @Inject constructor(
 
     fun setApiKey(key: String) {
         viewModelScope.launch {
-            settingsRepository.setApiKey(key)
+            securityRepository.setApiKey(key)
             addLog("CONFIG", "Global API Key updated", "SUCCESS")
         }
     }
