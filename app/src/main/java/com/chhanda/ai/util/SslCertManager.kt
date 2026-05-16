@@ -26,11 +26,17 @@ class SslCertManager @Inject constructor(
     fun getOrCreateKeyStore(): KeyStore {
         val file = File(context.filesDir, KEYSTORE_FILE)
         
-        return if (file.exists()) {
-            KeyStore.getInstance("PKCS12").apply {
-                file.inputStream().use { load(it, PASSWORD.toCharArray()) }
+        return try {
+            if (file.exists()) {
+                KeyStore.getInstance("PKCS12").apply {
+                    file.inputStream().use { load(it, PASSWORD.toCharArray()) }
+                }
+            } else {
+                generateAndSaveCertificate(file)
             }
-        } else {
+        } catch (e: Exception) {
+            android.util.Log.e("SslCertManager", "Invalid KeyStore format, regenerating: ${e.message}")
+            file.delete()
             generateAndSaveCertificate(file)
         }
     }

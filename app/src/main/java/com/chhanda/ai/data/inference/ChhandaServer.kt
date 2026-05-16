@@ -115,7 +115,7 @@ class ChhandaServer @Inject constructor(
 
     companion object { private const val TAG = "ChhandaServer" }
 
-    private val requestSemaphore = kotlinx.coroutines.sync.Semaphore(2)
+    private val requestSemaphore = kotlinx.coroutines.sync.Semaphore(1)
     private val clientRequestWindow = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val RATE_LIMIT_MS = 1000L
 

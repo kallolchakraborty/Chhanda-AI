@@ -21,11 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.semantics.*
 import com.chhanda.ai.util.Localization
-import androidx.compose.ui.semantics.*
 import kotlinx.coroutines.flow.StateFlow
 import com.chhanda.ai.domain.model.HardwareStatus
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * ChhandaSectionHeader: A unified header component for dashboard sections.
@@ -579,5 +578,20 @@ fun TelemetryGraph(
                 join = androidx.compose.ui.graphics.StrokeJoin.Round
             )
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun AnalyticsDashboardPreview() {
+    MaterialTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            AnalyticsDashboardSection(
+                tpsHistory = listOf(2.0, 4.5, 3.8, 5.2, 6.1, 5.5, 7.2),
+                ramHistory = listOf(1.2, 1.3, 1.5, 1.4, 1.6, 1.8, 1.7),
+                sessionTokens = 1450,
+                sessionCostSaved = 12.45
+            )
+        }
     }
 }

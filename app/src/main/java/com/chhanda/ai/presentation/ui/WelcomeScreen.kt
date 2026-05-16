@@ -21,6 +21,8 @@ import com.chhanda.ai.Screen
 import com.chhanda.ai.presentation.ui.components.ChhandaLogo
 import kotlinx.coroutines.delay
 
+import androidx.compose.ui.tooling.preview.Preview
+
 @Composable
 fun WelcomeScreen(navController: NavController) {
     var startAnimation by remember { mutableStateOf(false) }
@@ -128,5 +130,13 @@ fun WelcomeScreen(navController: NavController) {
                 }
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun WelcomeScreenPreview() {
+    MaterialTheme {
+        WelcomeScreen(navController = androidx.navigation.compose.rememberNavController())
     }
 }

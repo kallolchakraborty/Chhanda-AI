@@ -45,7 +45,7 @@ class ContextManagerTest {
         coEvery { chatDao.getRecentMessagesForSession(sessionId, 10) } returns history
         coEvery { embeddingEngine.embed(any()) } returns floatArrayOf(0.1f, 0.2f)
         coEvery { vectorStore.search(any(), any(), any(), any()) } returns listOf(
-            VectorResult(text = "Paris is the capital.", score = 0.9f, metadata = mapOf("source" -> "world_capitals.pdf"))
+            VectorResult(text = "Paris is the capital.", score = 0.9f, metadata = mapOf("source" to "world_capitals.pdf"))
         )
         coEvery { uploadedFileDao.getDisabledFileNames() } returns emptyList()
 
@@ -91,7 +91,7 @@ class ContextManagerTest {
         coEvery { chatDao.getRecentMessagesForSession(sessionId, 10) } returns emptyList()
         coEvery { embeddingEngine.embed(any()) } returns floatArrayOf(0.1f)
         coEvery { vectorStore.search(any(), any(), any(), any()) } returns listOf(
-            VectorResult(text = "Secret details.", score = 0.9f, metadata = mapOf("source" -> "confidential.pdf"))
+            VectorResult(text = "Secret details.", score = 0.9f, metadata = mapOf("source" to "confidential.pdf"))
         )
         coEvery { uploadedFileDao.getDisabledFileNames() } returns listOf("confidential.pdf")
 

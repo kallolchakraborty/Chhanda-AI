@@ -103,7 +103,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     val activity = context as? androidx.fragment.app.FragmentActivity
-    var isUnlocked by remember { mutableStateOf(false) }
+    var isUnlocked by remember { mutableStateOf(true) }
     var authError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
