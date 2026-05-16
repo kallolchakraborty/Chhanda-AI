@@ -14,6 +14,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -118,7 +119,9 @@ class LiteRTLMEngine @Inject constructor(
                     if (isImageUri(uri)) {
                         val bitmap = loadBitmap(uri)
                         if (bitmap != null) {
-                            contentList.add(Content.of(bitmap))
+                            val stream = ByteArrayOutputStream()
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
+                            contentList.add(Content.ImageBytes(stream.toByteArray()))
                             Log.d(TAG, "Attached image to inference: $uri")
                         }
                     }
