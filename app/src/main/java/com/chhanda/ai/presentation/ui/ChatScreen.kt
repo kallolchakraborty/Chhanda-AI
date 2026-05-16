@@ -45,6 +45,7 @@ fun ChatScreen(
     val selectedVoice by systemViewModel.selectedVoice.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
 
@@ -118,8 +119,15 @@ fun ChatScreen(
         }
     }
 
-    val totalItems = uiState.messages.size + (if (uiState.currentPartialResponse.isNotEmpty()) 1 else 0)
+    val totalItems = uiState.messages.size + (if (uiState.currentPartialResponse.isNotEmpty() || uiState.agentStatus != null) 1 else 0)
     LaunchedEffect(totalItems) { if (totalItems > 0) listState.animateScrollToItem(totalItems - 1) }
+
+    // Haptic feedback for streaming tokens
+    LaunchedEffect(uiState.currentPartialResponse) {
+        if (uiState.currentPartialResponse.isNotEmpty()) {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -188,6 +196,25 @@ fun ChatScreen(
                             }
                         }
                     )
+                }
+
+                if (uiState.agentStatus != null) {
+                    item(key = "agent_status") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = uiState.agentStatus!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                 }
 
                 if (uiState.currentPartialResponse.isNotEmpty()) {

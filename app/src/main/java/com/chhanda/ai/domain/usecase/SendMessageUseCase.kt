@@ -39,8 +39,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         var isContextFound = false
 
         try {
-
             val ragEnabled = settingsRepository.ragEnabledFlow.first()
+            if (ragEnabled) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Searching local knowledge base..."))
+            }
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
@@ -77,12 +79,17 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 llmEngine.resetSession()
             }
 
+            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Applying safety guardrails..."))
             if (com.chhanda.ai.util.SafetyGuardrails.isPotentialInjection(userText)) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Potential safety violation detected."))
                 return@flow
             }
 
             val sanitizedUserText = com.chhanda.ai.util.SafetyGuardrails.sanitizeInput(userText)
+            
+            if (attachments.isNotEmpty()) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Processing ${attachments.size} attachments..."))
+            }
             val attachmentContext = turnContextIngestor.processTurnContext(userText, attachments)
             if (attachmentContext.isNotBlank()) {
                 hasAttachmentKnowledge = true
@@ -156,6 +163,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 "$baseInstructions\n\n$formatInstruction\n\n$agentCapabilities"
             }
 
+            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Orchestrating model response..."))
             val responseFlow = llmEngine.generateResponse(prompt, history, systemInstruction, attachments)
             
             responseProcessor.processStream(responseFlow, includeThinking).collect { update ->
@@ -180,6 +188,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
                         if (toSave.isNotBlank() || !extractedThinking.isNullOrBlank()) {
 
+                            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Handling agentic actions..."))
                             val actionResult = agenticActionHandler.handleActions(toSave)
                             val filePath = actionResult.generatedFilePath
 
@@ -209,6 +218,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         }
                         emit(update)
                     }
+                    is com.chhanda.ai.domain.model.TokenUpdate.Status -> emit(update)
                     is com.chhanda.ai.domain.model.TokenUpdate.Error -> {
                         emit(update)
                     }
@@ -217,8 +227,6 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         } catch (e: Throwable) {
             emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Generation failure: ${e.localizedMessage}"))
         } finally {
-            // Load balancer logic removed
-
             if (!saved && partialAccumulated.trim().isNotBlank()) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
                     chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = partialAccumulated.trim(), role = "model", deviceId = deviceId, modelName = modelName, sessionId = sessionId, isRagUsed = isContextFound))
@@ -228,4 +236,3 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         }
     }
 }
-

@@ -14,5 +14,6 @@ data class ChatUiState(
     val isModelLoading: Boolean = false,
     val currentTps: Double = 0.0,
     val currentRt: Long = 0,
-    val selectedPersona: String? = null
+    val selectedPersona: String? = null,
+    val agentStatus: String? = null
 )

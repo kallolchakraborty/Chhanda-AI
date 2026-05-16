@@ -33,6 +33,7 @@ class ChatViewModel @Inject constructor(
     private val _currentRt = MutableStateFlow(0L)
     private val _error = MutableStateFlow<String?>(null)
     private val _selectedPersona = MutableStateFlow<String?>(null)
+    private val _agentStatus = MutableStateFlow<String?>(null)
     private var messageJob: kotlinx.coroutines.Job? = null
 
     private val _selectedFiles = MutableStateFlow<List<android.net.Uri>>(emptyList())
@@ -77,7 +78,7 @@ class ChatViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val uiState: StateFlow<ChatUiState> = combine(
-        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error, _selectedPersona
+        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error, _selectedPersona, _agentStatus
     ) { args: Array<Any?> ->
         ChatUiState(
             messages = args[0] as List<com.chhanda.ai.data.repository.MessageEntity>,
@@ -87,6 +88,7 @@ class ChatViewModel @Inject constructor(
             currentRt = args[4] as Long,
             error = args[5] as String?,
             selectedPersona = args[6] as String?,
+            agentStatus = args[7] as String?,
             isModelLoaded = llmEngine.isModelLoaded(),
             isModelLoading = llmEngine.isModelLoading()
         )
@@ -117,6 +119,7 @@ class ChatViewModel @Inject constructor(
             _isGenerating.value = true
             _currentPartialResponse.value = ""
             _currentTps.value = 0.0
+            _agentStatus.value = "Preparing workspace..."
             _error.value = null
             _selectedFiles.value = emptyList()
 
@@ -164,9 +167,13 @@ class ChatViewModel @Inject constructor(
                             if (now - lastUpdate > 150) {
                                 _currentPartialResponse.value += buffer
                                 _currentTps.value = update.tps
+                                _agentStatus.value = null // Clear status when generation starts
                                 buffer = ""
                                 lastUpdate = now
                             }
+                        }
+                        is TokenUpdate.Status -> {
+                            _agentStatus.value = update.message
                         }
                         is TokenUpdate.Final -> {
                             if (buffer.isNotEmpty()) {
