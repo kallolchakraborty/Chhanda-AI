@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -120,7 +121,36 @@ fun ChatScreen(
     }
 
     val totalItems = uiState.messages.size + (if (uiState.currentPartialResponse.isNotEmpty() || uiState.agentStatus != null) 1 else 0)
-    LaunchedEffect(totalItems) { if (totalItems > 0) listState.animateScrollToItem(totalItems - 1) }
+    val isAtBottom by remember { 
+        derivedStateOf { 
+            val layoutInfo = listState.layoutInfo
+            val visibleItemsInfo = layoutInfo.visibleItemsInfo
+            if (visibleItemsInfo.isEmpty()) true
+            else {
+                val lastVisibleItem = visibleItemsInfo.last()
+                lastVisibleItem.index >= totalItems - 1
+            }
+        }
+    }
+    var lastSeenCount by remember { mutableIntStateOf(totalItems) }
+    var unreadCount by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(totalItems) { 
+        if (isAtBottom) {
+            listState.animateScrollToItem(totalItems - 1)
+            lastSeenCount = totalItems
+            unreadCount = 0
+        } else {
+            unreadCount = (totalItems - lastSeenCount).coerceAtLeast(0)
+        }
+    }
+
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom) {
+            lastSeenCount = totalItems
+            unreadCount = 0
+        }
+    }
 
     // Haptic feedback for streaming tokens
     LaunchedEffect(uiState.currentPartialResponse) {
@@ -222,6 +252,45 @@ fun ChatScreen(
                 }
 
                 uiState.error?.let { item(key = "error") { ErrorBubble(it) } }
+            }
+            
+            // Floating Scroll to Bottom Button
+            Box(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !isAtBottom,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    ExtendedFloatingActionButton(
+                        onClick = { 
+                            scope.launch { listState.animateScrollToItem(totalItems - 1) }
+                        },
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        elevation = FloatingActionButtonDefaults.elevation(4.dp),
+                        modifier = Modifier.height(36.dp),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(18.dp))
+                        if (unreadCount > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.error,
+                                shape = CircleShape,
+                                modifier = Modifier.size(18.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        unreadCount.toString(), 
+                                        color = Color.White, 
+                                        fontSize = 10.sp, 
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             // TTS Bar

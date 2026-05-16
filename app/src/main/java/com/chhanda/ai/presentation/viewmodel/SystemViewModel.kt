@@ -401,6 +401,7 @@ class SystemViewModel @Inject constructor(
     val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), "Kallol (Indian Male)")
     val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     val thinkingModeEnabled = settingsRepository.thinkingModeEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+    val privacyShieldEnabled = settingsRepository.privacyShieldEnabledFlow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
     val vectorDbCapacityBytes = hardwareMonitor.storageMetrics.map { 
         val dynamicLimit = (it.deviceAvailableBytes * 0.15).toLong()
         maxOf(1024L * 1024 * 1024, dynamicLimit)
@@ -417,6 +418,10 @@ class SystemViewModel @Inject constructor(
 
     fun setThinkingModeEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setThinkingModeEnabled(enabled) }
+    }
+
+    fun setPrivacyShieldEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setPrivacyShieldEnabled(enabled) }
     }
 
     fun exportMemory(onResult: (File?) -> Unit) {

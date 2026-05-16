@@ -1,16 +1,20 @@
 package com.chhanda.ai.domain.service
 
 import com.chhanda.ai.domain.model.TokenUpdate
+import com.chhanda.ai.util.PrivacyGuard
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Handles real-time token processing, including thinking suppression and tag extraction.
+ * Handles real-time token processing, including thinking suppression, tag extraction, and PII redaction.
  */
 @Singleton
-class ResponseProcessor @Inject constructor() {
+class ResponseProcessor @Inject constructor(
+    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository
+) {
 
     fun processStream(
         rawStream: Flow<TokenUpdate>,
@@ -18,6 +22,7 @@ class ResponseProcessor @Inject constructor() {
     ): Flow<TokenUpdate> = flow {
         var isThinking = false
         val internalBuffer = StringBuilder()
+        val privacyShieldEnabled = settingsRepository.privacyShieldEnabledFlow.first()
 
         rawStream.collect { update ->
             when (update) {
@@ -25,12 +30,14 @@ class ResponseProcessor @Inject constructor() {
                     internalBuffer.append(update.text)
                     if (!includeThinking) {
                         processThinkingSuppression(internalBuffer, isThinking, update.tps) { emittedText, thinkingState ->
-                            emit(TokenUpdate.Partial(emittedText, update.tps))
+                            val safeText = if (privacyShieldEnabled) PrivacyGuard.redact(emittedText) else emittedText
+                            emit(TokenUpdate.Partial(safeText, update.tps))
                             isThinking = thinkingState
                         }
                     } else {
                         val content = internalBuffer.toString()
-                        emit(TokenUpdate.Partial(content, update.tps))
+                        val safeText = if (privacyShieldEnabled) PrivacyGuard.redact(content) else content
+                        emit(TokenUpdate.Partial(safeText, update.tps))
                         internalBuffer.setLength(0)
                     }
                 }
@@ -68,10 +75,11 @@ class ResponseProcessor @Inject constructor() {
                     isThinking = true
                     buffer.delete(0, markerIdx + foundMarker.length)
                 } else {
-                    if (buffer.length > 20) {
-                        val toEmit = buffer.substring(0, buffer.length - 20)
+                    // Buffer management to allow for multi-token marker detection
+                    if (buffer.length > 30) {
+                        val toEmit = buffer.substring(0, buffer.length - 30)
                         onEmit(toEmit, false)
-                        buffer.delete(0, buffer.length - 20)
+                        buffer.delete(0, buffer.length - 30)
                     }
                     break
                 }
@@ -99,7 +107,7 @@ class ResponseProcessor @Inject constructor() {
         }
     }
 
-    fun cleanFinalResponse(text: String): ProcessedResponse {
+    suspend fun cleanFinalResponse(text: String): ProcessedResponse {
         val thinkingRegex = """<(?:thought|think)>([\s\S]*?)</(?:thought|think)>""".toRegex()
         val thinkingMatch = thinkingRegex.find(text)
         val extractedThinking = thinkingMatch?.groupValues?.get(1)?.trim()
@@ -116,6 +124,11 @@ class ResponseProcessor @Inject constructor() {
                     changed = true
                 }
             }
+        }
+
+        val privacyShieldEnabled = settingsRepository.privacyShieldEnabledFlow.first()
+        if (privacyShieldEnabled) {
+            cleaned = PrivacyGuard.redact(cleaned)
         }
 
         return ProcessedResponse(cleaned, extractedThinking)

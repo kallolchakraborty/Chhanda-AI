@@ -57,6 +57,7 @@ fun ConfigScreen(
     val maxDevices by viewModel.maxDevices.collectAsStateWithLifecycle()
     val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsStateWithLifecycle()
     val ragEnabled by viewModel.ragEnabled.collectAsStateWithLifecycle()
+    val privacyShieldEnabled by viewModel.privacyShieldEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
     var isUnlocked by remember { mutableStateOf(false) }
@@ -408,6 +409,22 @@ fun ConfigScreen(
                     ChhandaSectionHeader(icon = Icons.Default.Lock, title = Localization.getString("security", appLanguage))
                     Spacer(Modifier.height(12.dp))
                     ChhandaCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Privacy Shield", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text("Automatically redact Emails, Phone numbers, and Credit Cards from AI responses.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(
+                                checked = privacyShieldEnabled,
+                                onCheckedChange = { viewModel.setPrivacyShieldEnabled(it) }
+                            )
+                        }
+                        
+                        Spacer(Modifier.height(24.dp))
                         Text(Localization.getString("api_key", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Text(Localization.getString("api_key_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         Spacer(Modifier.height(8.dp))

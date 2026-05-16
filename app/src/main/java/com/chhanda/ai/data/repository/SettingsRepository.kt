@@ -38,6 +38,7 @@ class SettingsRepository @Inject constructor(
         val SELECTED_VOICE = stringPreferencesKey("selected_voice")
         val RAG_ENABLED = booleanPreferencesKey("rag_enabled")
         val THINKING_MODE_ENABLED = booleanPreferencesKey("thinking_mode_enabled")
+        val PRIVACY_SHIELD_ENABLED = booleanPreferencesKey("privacy_shield_enabled")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -90,6 +91,10 @@ class SettingsRepository @Inject constructor(
 
     val thinkingModeEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.THINKING_MODE_ENABLED] ?: true
+    }
+
+    val privacyShieldEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.PRIVACY_SHIELD_ENABLED] ?: true
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -167,6 +172,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setThinkingModeEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.THINKING_MODE_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setPrivacyShieldEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PRIVACY_SHIELD_ENABLED] = enabled
         }
     }
 }

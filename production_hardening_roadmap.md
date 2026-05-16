@@ -68,9 +68,10 @@ This document outlines the architectural, security, and performance refinements 
     - [x] Add Material You dynamic theming support.
     - [ ] Add "Ambient Glow" backgrounds that change with the active model's color.
     - [x] Implement `AnimatedContent` transitions between Dashboard and Chat.
-- [ ] **Micro-Interactions**
-    - [ ] Add `HapticFeedback` for token generation and file indexing.
-    - [ ] Create a "Thinking Animation" (Suppressed text placeholder) for agentic reasoning.
+- [x] **Micro-Interactions**
+    - [x] Add subtle haptic feedback for streaming tokens.
+    - [x] Implement contextual progress logs for agentic actions (e.g., "Indexing PDF...", "Generating Word Doc...").
+    - [ ] Add "Thinking" indicator with pulse animation for complex reasoning steps.
     - [ ] Add "Scroll to Bottom" button with unread message badge.
 - [ ] **Accessibility (A11y)**
     - [ ] Complete `contentDescription` audit for all icons.
