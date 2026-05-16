@@ -16,7 +16,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 class SslCertManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val KEYSTORE_FILE = "chhanda_server_keystore.p12"
+    private val KEYSTORE_FILE = "chhanda_server_keystore_v5.bin"
     private val KEY_ALIAS = "chhanda-gateway"
     private val PASSWORD = "chhanda-secure-password" // In production, this could be generated and stored in Keystore
 
@@ -28,7 +28,7 @@ class SslCertManager @Inject constructor(
         
         return try {
             if (file.exists()) {
-                KeyStore.getInstance("PKCS12").apply {
+                KeyStore.getInstance(KeyStore.getDefaultType()).apply {
                     file.inputStream().use { load(it, PASSWORD.toCharArray()) }
                 }
             } else {
