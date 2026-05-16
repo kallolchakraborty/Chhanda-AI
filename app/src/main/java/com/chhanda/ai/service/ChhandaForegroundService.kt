@@ -33,6 +33,7 @@ class ChhandaForegroundService : Service() {
     private var currentPort: Int = 8080
     private var currentMaxDevices: Int = 5
     private var nsdRegistered = false
+    private var serviceStarting = false
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var nsdManager: NsdManager? = null
@@ -114,6 +115,11 @@ class ChhandaForegroundService : Service() {
 
         when (effectiveAction) {
             ACTION_START -> {
+                if (serviceStarting) {
+                    Log.w(TAG, "Server startup already in progress, ignoring request")
+                    return START_STICKY
+                }
+                serviceStarting = true
                 // Restore port from extras if available; keep currentPort if this is a re-delivery
                 if (intent != null) {
                     currentPort = intent.getIntExtra(EXTRA_PORT, 8888)
@@ -141,14 +147,14 @@ class ChhandaForegroundService : Service() {
                 if (wifiLock?.isHeld == false) wifiLock?.acquire()
 
                 // 3. Start server on a background thread.
-                //    CIO engine binds asynchronously; server thread must stay alive
-                //    while probing. Non-daemon so Android respects the service lifecycle.
                 Thread({
                     try {
                         chhandaServer.start(currentPort, currentMaxDevices)
                         Log.i(TAG, "Server start complete on port $currentPort")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Server start failed: ${e.message}")
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Server thread crash: ${e.message}", e)
+                    } finally {
+                        serviceStarting = false
                     }
                 }, "chhanda-server-start").start()
 

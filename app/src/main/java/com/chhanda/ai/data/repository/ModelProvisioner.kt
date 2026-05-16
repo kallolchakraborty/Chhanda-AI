@@ -19,7 +19,8 @@ import javax.inject.Singleton
 class ModelProvisioner @Inject constructor(
     @ApplicationContext private val context: Context,
     private val llmEngine: LLMEngine,
-    private val securityRepository: SecurityRepository
+    private val securityRepository: SecurityRepository,
+    private val settingsRepository: SettingsRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
@@ -48,7 +49,11 @@ class ModelProvisioner @Inject constructor(
     private val activeDownloads = mutableMapOf<String, Long>()
 
     init {
-        refreshModels()
+        scope.launch {
+            settingsRepository.activeModelFlow.collect {
+                refreshModels()
+            }
+        }
     }
 
     fun refreshModels() {
@@ -59,14 +64,26 @@ class ModelProvisioner @Inject constructor(
                 if (!modelDir.exists()) modelDir.mkdirs()
                 
                 val files = modelDir.listFiles { f -> f.extension == "bin" || f.extension == "gguf" || f.extension == "litertlm" } ?: emptyArray()
-                val currentModel = llmEngine.getCurrentModelName()
+                val selectedModel = settingsRepository.activeModelFlow.firstOrNull()
+                val currentLoaded = llmEngine.getCurrentModelName()
+                val activeTarget = selectedModel ?: currentLoaded
 
                 val owned = files.filter { !it.name.contains("shared", ignoreCase = true) }.map {
-                    ModelInfo(it.name, "${it.length() / 1024 / 1024} MB", it.nameWithoutExtension == currentModel)
+                    ModelInfo(
+                        name = it.name, 
+                        details = "${it.length() / 1024 / 1024} MB", 
+                        isActive = it.name == activeTarget,
+                        isMultimodal = it.name.contains("E4B", ignoreCase = true) || it.name.contains("multimodal", ignoreCase = true)
+                    )
                 }
                 
                 val shared = files.filter { it.name.contains("shared", ignoreCase = true) }.map {
-                    ModelInfo(it.name, "Shared Local Model", it.nameWithoutExtension == currentModel)
+                    ModelInfo(
+                        name = it.name, 
+                        details = "Shared Local Model", 
+                        isActive = it.name == activeTarget,
+                        isMultimodal = it.name.contains("E4B", ignoreCase = true) || it.name.contains("multimodal", ignoreCase = true)
+                    )
                 }
 
                 _ownedModels.value = owned
@@ -74,7 +91,7 @@ class ModelProvisioner @Inject constructor(
                 
                 _downloadableModels.value = listOf(
                     DownloadModelInfo("Gemma-4-E2B-IT", "Google's 2B parameter evolutionary model optimized for on-device reasoning.", "2.4 GB", isRecommended = true),
-                    DownloadModelInfo("Gemma-4-E4B-IT", "Enhanced 4B parameter model with superior multimodal understanding.", "3.4 GB", isRecommended = true)
+                    DownloadModelInfo("Gemma-4-E4B-IT", "Enhanced 4B parameter model with superior multimodal understanding.", "3.4 GB", isRecommended = true, isMultimodal = true)
                 ).filter { model -> !owned.any { it.name.contains(model.name, ignoreCase = true) } }
 
             } finally {
@@ -85,24 +102,34 @@ class ModelProvisioner @Inject constructor(
 
     fun activateModel(modelName: String) {
         scope.launch {
-            val modelDir = File(context.getExternalFilesDir(null), "models")
-            val file = File(modelDir, modelName)
-            if (file.exists()) {
-                llmEngine.initModel(file.absolutePath)
-                refreshModels()
-            }
+            settingsRepository.setActiveModel(modelName)
+            // Proactively refresh to show active selection in UI immediately
+            refreshModels()
         }
     }
 
     fun deleteModel(modelName: String) {
         scope.launch {
-            val file = File(File(context.getExternalFilesDir(null), "models"), modelName)
+            val modelDir = File(context.getExternalFilesDir(null), "models")
+            val file = File(modelDir, modelName)
+            
             if (file.exists()) {
-                file.delete()
+                // IMPORTANT: Close engine FIRST to release file handles if this is the active model
                 if (llmEngine.getCurrentModelName() == modelName) {
                     llmEngine.close()
                 }
-                refreshModels()
+                
+                val deleted = file.delete()
+                if (deleted) {
+                    Log.d("ModelProvisioner", "Successfully deleted model: $modelName")
+                    // Clear from settings if it was the persisted choice
+                    if (settingsRepository.activeModelFlow.firstOrNull() == modelName) {
+                        settingsRepository.setActiveModel(null)
+                    }
+                    refreshModels()
+                } else {
+                    Log.e("ModelProvisioner", "Failed to delete model file: $modelName")
+                }
             }
         }
     }

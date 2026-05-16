@@ -15,6 +15,8 @@ import com.chhanda.ai.data.repository.DeviceDao
 import com.chhanda.ai.data.repository.LocalVectorStore
 import com.chhanda.ai.data.repository.UploadedFileDao
 import com.chhanda.ai.data.repository.VectorChunkDao
+import com.chhanda.ai.util.VoiceAssistant
+import com.chhanda.ai.util.HapticManager
 import com.chhanda.ai.domain.model.EmbeddingEngine
 import com.chhanda.ai.domain.model.Embedding
 import com.chhanda.ai.domain.model.LLMEngine
@@ -57,6 +59,12 @@ object AppModule {
 
     @Provides @Singleton
     fun provideEmbeddingEngine(impl: LiteRTEmbeddingEngine): EmbeddingEngine = impl
+    
+    @Provides @Singleton
+    fun provideVoiceAssistant(@ApplicationContext ctx: Context): VoiceAssistant = VoiceAssistant(ctx)
+
+    @Provides @Singleton
+    fun provideHapticManager(@ApplicationContext ctx: Context): HapticManager = HapticManager(ctx)
 
     @Provides @Singleton
     fun provideLLMEngine(

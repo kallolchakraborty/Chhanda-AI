@@ -154,6 +154,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     append("UNSURE CASE: If the context doesn't contain the answer, say: 'Based on the provided documents, I don't have enough information.'\n")
                 }
 
+                if (llmEngine.isMultimodal() && attachments.any { it.toString().contains("image") }) {
+                    append("VISION CAPABILITY: You have native vision processing enabled. Analyze the provided image attachments to answer the query accurately.\n")
+                }
+
                 append("GUARDRAILS: Redact PII (Emails, Phones, CC) in output. No hallucinations. No generic conversational filler.\n")
             }
 

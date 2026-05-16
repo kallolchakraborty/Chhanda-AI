@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.*
 import androidx.compose.ui.graphics.asImageBitmap
 import com.chhanda.ai.domain.model.QRCodeGenerator
 import androidx.compose.foundation.Image
@@ -91,8 +92,16 @@ fun DashboardScreen(
     val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsStateWithLifecycle()
     val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+
+    // --- Analytics Dashboard State ---
+    val tpsHistory by viewModel.tpsHistory.collectAsStateWithLifecycle()
+    val ramHistory by viewModel.ramHistory.collectAsStateWithLifecycle()
+    val sessionTokens by viewModel.sessionTokens.collectAsStateWithLifecycle()
+    val sessionCostSaved by viewModel.sessionCostSaved.collectAsStateWithLifecycle()
+    // ----------------------------------
     
     val context = LocalContext.current
+    val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     val activity = context as? androidx.fragment.app.FragmentActivity
     var isUnlocked by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
@@ -186,7 +195,7 @@ fun DashboardScreen(
     if (showVectorWarning) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissVectorStorageWarning() },
-            icon = { Icon(Icons.Default.Storage, null, tint = MaterialTheme.colorScheme.error) },
+            icon = { Icon(Icons.Default.Storage, contentDescription = "Storage Status", tint = MaterialTheme.colorScheme.error) },
             title = { Text("Storage Nearly Full") },
             text = { Text("The vector database is 90% full. Please empty the vector database or free up phone space to continue using RAG.") },
             confirmButton = {
@@ -282,8 +291,20 @@ fun DashboardScreen(
         return
     }
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val modelColor = remember(activeModelName, primaryColor) {
+        when {
+            activeModelName.contains("Gemma", ignoreCase = true) -> Color(0xFF6366F1) // Indigo/Violet
+            activeModelName.contains("Llama", ignoreCase = true) -> Color(0xFF10B981) // Emerald/Green
+            activeModelName.contains("Phi", ignoreCase = true) -> Color(0xFFF59E0B) // Amber/Gold
+            activeModelName.contains("Mistral", ignoreCase = true) -> Color(0xFFEC4899) // Pink/Fuchsia
+            activeModelName.contains("None", ignoreCase = true) || activeModelName == "No Active Model" -> primaryColor
+            else -> Color(0xFF3B82F6) // Azure Blue
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        com.chhanda.ai.presentation.ui.components.AmbientBackground()
+        com.chhanda.ai.presentation.ui.components.AmbientBackground(baseColor = modelColor)
         
         Scaffold(
             containerColor = Color.Transparent,
@@ -339,6 +360,7 @@ fun DashboardScreen(
 
                     IconButton(
                         onClick = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                             if (!hasNetworkState) {
                                 showHotspotPrompt = true 
                             } else {
@@ -376,7 +398,7 @@ fun DashboardScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                     ) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Default.Warning, contentDescription = "Security Warning", tint = MaterialTheme.colorScheme.error)
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 Localization.getString("vpn_warning", appLanguage),
@@ -393,8 +415,12 @@ fun DashboardScreen(
                     isRunning = isServerRunning,
                     isLocalModelPresent = (ownedModels + sharedModels).isNotEmpty(),
                     port = displayPort.toString(),
-                    onStop = { viewModel.stopServer() },
+                    onStop = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                        viewModel.stopServer() 
+                    },
                     onStart = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                         if (anyActiveModel) {
                             viewModel.toggleServer()
                         } else {
@@ -402,6 +428,7 @@ fun DashboardScreen(
                         }
                     },
                     onTryIt = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                         selectedModelForHistory = activeModelName
                         showHistorySheet = true 
                     },
@@ -418,8 +445,15 @@ fun DashboardScreen(
                 )
             }
             
-            // Removed System Health section for better density.
-            
+            item {
+                AnalyticsDashboardSection(
+                    tpsHistory = tpsHistory,
+                    ramHistory = ramHistory,
+                    sessionTokens = sessionTokens,
+                    sessionCostSaved = sessionCostSaved,
+                    appLanguage = appLanguage
+                )
+            }
 
             
 
@@ -451,23 +485,39 @@ fun DashboardScreen(
                 }
             }
             
-            items(
-                items = ownedModels,
-                key = { "owned_${it.name}" }
-            ) { model ->
-                LocalModelItem(
-                    model = model,
-                    isServerRunning = isServerRunning,
-                    onActivate = { viewModel.activateModel(model.name) }, 
-                    onStop = { viewModel.stopServer() },
-                    onTryIt = { 
-                        viewModel.activateModel(model.name)
-                        selectedModelForHistory = model.name
-                        showHistorySheet = true 
-                    },
-                    onDelete = { modelToDelete = model.name },
-                    appLanguage = appLanguage
-                )
+            if (isScanning && ownedModels.isEmpty()) {
+                items(5) {
+                    SkeletonModelItem()
+                }
+            } else {
+                items(
+                    items = ownedModels,
+                    key = { "owned_${it.name}" }
+                ) { model ->
+                    LocalModelItem(
+                        model = model,
+                        isServerRunning = isServerRunning,
+                        onActivate = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                            viewModel.activateModel(model.name) 
+                        }, 
+                        onStop = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                            viewModel.stopServer() 
+                        },
+                        onTryIt = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                            viewModel.activateModel(model.name)
+                            selectedModelForHistory = model.name
+                            showHistorySheet = true 
+                        },
+                        onDelete = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
+                            modelToDelete = model.name 
+                        },
+                        appLanguage = appLanguage
+                    )
+                }
             }
 
             if (sharedModels.isNotEmpty()) {
@@ -486,14 +536,24 @@ fun DashboardScreen(
                     LocalModelItem(
                         model = model,
                         isServerRunning = isServerRunning,
-                        onActivate = { viewModel.activateModel(model.name) }, 
-                        onStop = { viewModel.stopServer() },
+                        onActivate = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                            viewModel.activateModel(model.name) 
+                        }, 
+                        onStop = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                            viewModel.stopServer() 
+                        },
                         onTryIt = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                             viewModel.activateModel(model.name)
                             selectedModelForHistory = model.name
                             showHistorySheet = true 
                         },
-                        onDelete = { modelToDelete = model.name },
+                        onDelete = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
+                            modelToDelete = model.name 
+                        },
                         appLanguage = appLanguage
                     )
                 }
@@ -514,6 +574,7 @@ fun DashboardScreen(
                     isPaused = downloadPauseState[model.name] == true,
                     status = downloadStatus[model.name],
                     onDownload = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                         val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                              Manifest.permission.READ_MEDIA_VIDEO
                         } else {
@@ -531,9 +592,18 @@ fun DashboardScreen(
                             permissionLauncher.launch(permission)
                         }
                     },
-                    onPause = { viewModel.pauseDownload(model.name) },
-                    onResume = { viewModel.resumeDownload(model.name, model) },
-                    onCancel = { viewModel.cancelDownload(model.name) },
+                    onPause = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                        viewModel.pauseDownload(model.name) 
+                    },
+                    onResume = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                        viewModel.resumeDownload(model.name, model) 
+                    },
+                    onCancel = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
+                        viewModel.cancelDownload(model.name) 
+                    },
                     appLanguage = appLanguage
                 )
             }
@@ -541,6 +611,30 @@ fun DashboardScreen(
 
             item {
                 ChhandaSectionHeader(icon = Icons.Default.Chat, title = Localization.getString("chat_management", appLanguage), badge = Localization.getString("secure_badge", appLanguage))
+            }
+
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                    onClick = { 
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                        navController.navigate(Screen.Comparison.route) 
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Model Comparison", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                            Text("Compare speed and accuracy of installed models.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.Compare, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                    }
+                }
             }
 
             item {
@@ -559,7 +653,10 @@ fun DashboardScreen(
                             Text(Localization.getString("manage_chat_history_desc", appLanguage), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Button(
-                            onClick = { showStorageManager = true },
+                            onClick = { 
+                                hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                showStorageManager = true 
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -596,8 +693,8 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.primary)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics { heading() }) {
+                        Icon(Icons.Default.History, contentDescription = "Chat History", tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
                         Text("Chat History - $modelName", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
@@ -652,7 +749,7 @@ fun DashboardScreen(
                         items(sessions) { sessionId ->
                             val isSelected = selectedSessions.contains(sessionId)
                             Surface(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
                                 color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 shape = RoundedCornerShape(12.dp),
                                 onClick = {
@@ -675,7 +772,7 @@ fun DashboardScreen(
                                         }
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Default.Chat, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(Icons.Default.Chat, contentDescription = "Chat Session", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.width(12.dp))
                                     Text(
                                         text = "Session: ${sessionId.take(8)}...", // Show short ID
@@ -715,7 +812,7 @@ fun DashboardScreen(
                     .padding(bottom = 40.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Devices, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Devices, contentDescription = "Managed Devices", tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(12.dp))
                     Text("Device Management", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
@@ -748,13 +845,13 @@ fun DashboardScreen(
                     enabled = isQrEnabled
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.QrCode, null, tint = contentColor)
+                        Icon(Icons.Default.QrCode, contentDescription = "QR Code", tint = contentColor)
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Share via QR Code", fontWeight = FontWeight.Bold, color = contentColor)
                             Text("Invite other devices to use this AI model.", fontSize = 12.sp, color = contentColor.copy(alpha = 0.7f))
                         }
-                        Icon(Icons.Default.ArrowForward, null, tint = contentColor)
+                        Icon(Icons.Default.ArrowForward, contentDescription = "View Details", tint = contentColor)
                     }
                 }
                 
@@ -768,7 +865,7 @@ fun DashboardScreen(
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
                         ) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
@@ -807,7 +904,7 @@ fun DashboardScreen(
                                 ) {
                                     Icon(
                                         Icons.Default.DeleteSweep, 
-                                        null, 
+                                        contentDescription = "Clear Device History", 
                                         modifier = Modifier.size(16.dp),
                                         tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
                                     )
@@ -864,7 +961,7 @@ fun DashboardScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
                                 Icons.Default.FolderOff, 
-                                null, 
+                                contentDescription = "No Models Found", 
                                 modifier = Modifier.size(64.dp), 
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                             )
@@ -884,7 +981,7 @@ fun DashboardScreen(
                                 onClick = { viewModel.scanForModels() },
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Refresh, contentDescription = "Scan Storage", modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Scan Storage")
                             }
@@ -909,7 +1006,7 @@ fun DashboardScreen(
                                 ) {
                                     Icon(
                                         Icons.Default.Dns, 
-                                        null, 
+                                        contentDescription = "Model Asset", 
                                         tint = if (model.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Spacer(Modifier.width(16.dp))
@@ -928,7 +1025,7 @@ fun DashboardScreen(
                                     if (model.isActive) {
                                         Icon(
                                             Icons.Default.CheckCircle, 
-                                            null, 
+                                            contentDescription = "Active Model", 
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
@@ -1032,7 +1129,7 @@ fun DashboardScreen(
     if (modelToDelete != null) {
         AlertDialog(
             onDismissRequest = { modelToDelete = null },
-            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            icon = { Icon(Icons.Default.Warning, contentDescription = "Warning", tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete Model?") },
             text = { Text("Are you sure you want to permanently delete '${modelToDelete}'? This will remove the model weights from your device.") },
             confirmButton = {
@@ -1074,7 +1171,7 @@ fun StorageManagerSheet(
             .padding(bottom = 40.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Storage, null, tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Default.Storage, contentDescription = "Storage Status", tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Text("Chat Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
@@ -1155,11 +1252,11 @@ fun StorageManagerSheet(
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             placeholder = { Text("Search chats...", fontSize = 14.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", modifier = Modifier.size(20.dp)) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Close, null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Close, contentDescription = "Clear Search", modifier = Modifier.size(18.dp))
                     }
                 }
             },
@@ -1245,7 +1342,7 @@ fun DeviceHistoryItem(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             if (deviceHistory.deviceId == "local") Icons.Default.Smartphone else Icons.Default.Devices,
-                            null,
+                            contentDescription = "Device Type",
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -1259,12 +1356,12 @@ fun DeviceHistoryItem(
                 IconButton(onClick = onToggleExpand) {
                     Icon(
                         if (isExpanded) androidx.compose.material.icons.Icons.Default.ExpandLess else androidx.compose.material.icons.Icons.Default.ExpandMore,
-                        null,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(onClick = onClear) {
-                    Icon(androidx.compose.material.icons.Icons.Default.DeleteSweep, null, tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
+                    Icon(androidx.compose.material.icons.Icons.Default.DeleteSweep, contentDescription = "Purge Device Data", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f))
                 }
             }
             
@@ -1290,7 +1387,7 @@ fun DeviceHistoryItem(
                         ) {
                             Icon(
                                 Icons.Default.ChatBubble, 
-                                null, 
+                                contentDescription = "Chat Thread", 
                                 modifier = Modifier.size(16.dp), 
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -1306,7 +1403,7 @@ fun DeviceHistoryItem(
                             }
                             Icon(
                                 Icons.Default.ChevronRight, 
-                                null, 
+                                contentDescription = "Open Thread", 
                                 modifier = Modifier.size(16.dp), 
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
@@ -1334,7 +1431,8 @@ data class ModelInfo(
     val name: String, 
     val details: String, 
     val isActive: Boolean,
-    val hasUpdate: Boolean = false
+    val hasUpdate: Boolean = false,
+    val isMultimodal: Boolean = false
 )
 
 data class DownloadModelInfo(
@@ -1342,7 +1440,8 @@ data class DownloadModelInfo(
     val description: String, 
     val size: String,
     val isRecommended: Boolean = false,
-    val hasUpdate: Boolean = false
+    val hasUpdate: Boolean = false,
+    val isMultimodal: Boolean = false
 )
 
 // Internal components like AssistantConfigSection and ConnectionDetailCard are retained 
@@ -1364,7 +1463,7 @@ fun AssistantConfigSection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    null,
+                    contentDescription = if (isExpanded) "Show Less" else "Show More",
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -1422,7 +1521,7 @@ private fun ConnectionDetailCard(
                 )
                 if (trailingIcon != null && onIconClick != null) {
                     IconButton(onClick = onIconClick, modifier = Modifier.size(24.dp)) {
-                        Icon(trailingIcon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(trailingIcon, contentDescription = "Action", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

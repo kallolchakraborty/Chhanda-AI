@@ -28,6 +28,7 @@ class RemoteLLMEngine @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectionState = MutableStateFlow(false)
     private var isBound = false
+    private var lastModelPath: String? = null
     
     private val _performanceMetrics = MutableStateFlow(0.0)
     override val performanceMetrics: Flow<Double> = _performanceMetrics.asStateFlow()
@@ -75,6 +76,18 @@ class RemoteLLMEngine @Inject constructor(
             remoteService = IInferenceService.Stub.asInterface(service)
             connectionState.value = true
             Log.i(TAG, "Connected to InferenceService")
+            
+            // Automatic Recovery: Re-init model if one was previously loaded
+            lastModelPath?.let { path ->
+                scope.launch {
+                    try {
+                        Log.i(TAG, "Restoring model state after reconnect: $path")
+                        remoteService?.initModel(path)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to restore model state: ${e.message}")
+                    }
+                }
+            }
         }
         override fun onServiceDisconnected(name: ComponentName?) {
             remoteService = null
@@ -89,6 +102,7 @@ class RemoteLLMEngine @Inject constructor(
     }
 
     override suspend fun initModel(path: String) {
+        lastModelPath = path
         ensureConnected()
         try { remoteService?.initModel(path) } catch (e: Exception) {
             Log.e(TAG, "initModel IPC error: ${e.message}")
@@ -117,6 +131,7 @@ class RemoteLLMEngine @Inject constructor(
     override fun isModelLoaded(): Boolean = try { remoteService?.isModelLoaded ?: false } catch (e: Exception) { false }
     override fun isModelLoading(): Boolean = try { remoteService?.isModelLoading ?: false } catch (e: Exception) { false }
     override fun getCurrentModelName(): String = try { remoteService?.currentModelName ?: "None" } catch (e: Exception) { "None" }
+    override fun isMultimodal(): Boolean = try { remoteService?.isMultimodal ?: false } catch (e: Exception) { false }
     override suspend fun close() { try { remoteService?.closeEngine() } catch (e: Exception) {} }
 
     private suspend fun ensureConnected() {

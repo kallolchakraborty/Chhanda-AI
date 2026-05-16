@@ -14,7 +14,8 @@ class ContextManager @Inject constructor(
     private val chatDao: ChatDao,
     private val vectorStore: VectorStore,
     private val embeddingEngine: EmbeddingEngine,
-    private val metricsManager: RAGMetricsManager
+    private val metricsManager: RAGMetricsManager,
+    private val uploadedFileDao: com.chhanda.ai.data.repository.UploadedFileDao
 ) {
     /**
      * Retrieves the most relevant history and database context for a query.
@@ -50,21 +51,33 @@ class ContextManager @Inject constructor(
             // Generate vector embedding for the query
             val queryEmbedding = embeddingEngine.embed(augmentedQuery)
             
-            // Search the vector store.
-            val results = vectorStore.search(queryEmbedding, topK = if (modelName.contains("4B")) 8 else 12, modelId = "shared_rag_db")
+            // Search the vector store with hybrid retrieval (Vector + Keyword)
+            val results = vectorStore.search(
+                query = queryEmbedding, 
+                topK = if (modelName.contains("4B")) 12 else 15, 
+                modelId = "shared_rag_db",
+                queryText = augmentedQuery
+            )
             
             val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || 
                                  query.lowercase().contains("web") || query.lowercase().contains("search")
             
-            // Senior Optimization: Lowering thresholds for the lightweight on-device embedding engine.
-            // 0.45 was too aggressive for hash-based projections. 
-            // 0.30 provides a better balance for on-device RAG.
+            // Tiered Filtering & Selection
             val threshold = if (isExplicitSearch) 0.25f else 0.30f 
-            var filtered = results.filter { it.score >= threshold } 
+            val disabledSources = try { uploadedFileDao.getDisabledFileNames().toSet() } catch (e: Exception) { emptySet() }
+            
+            var filtered = results.filter { result ->
+                val source = result.metadata["source"] ?: ""
+                // Filter by threshold and also ensure the source is not disabled
+                result.score >= threshold && !disabledSources.contains(source)
+            } 
 
             if (filtered.isEmpty() && isFollowUp) {
-                val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db")
-                filtered = rawResults.filter { it.score >= 0.25f }
+                val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db", queryText = query)
+                filtered = rawResults.filter { result ->
+                    val source = result.metadata["source"] ?: ""
+                    result.score >= 0.25f && !disabledSources.contains(source)
+                }
             }
 
             // Format results using XML-style tags for better LLM boundary detection.

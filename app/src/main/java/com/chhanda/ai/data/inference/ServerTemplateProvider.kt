@@ -158,9 +158,9 @@ s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');
 s=s.replace(/_(.+?)_/g,'<em>$1</em>');
 s=s.replace(/~~(.+?)~~/g,'<del>$1</del>');
 s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,function(_,text,url){
-var u=url.replace(/&amp;/g,'&');
+var u=url.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/"/g,'');
 if(!/^https?:\/\//i.test(u))return text;
-return '<a href="'+url+'" target="_blank" rel="noopener">'+text+'</a>';
+return '<a href="'+esc(u)+'" target="_blank" rel="noopener">'+text+'</a>';
 });
 return s;
 }

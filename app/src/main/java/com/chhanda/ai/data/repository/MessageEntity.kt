@@ -3,6 +3,9 @@ package com.chhanda.ai.data.repository
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 @Entity(tableName = "chat_messages")
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

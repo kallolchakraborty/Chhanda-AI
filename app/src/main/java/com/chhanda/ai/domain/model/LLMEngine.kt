@@ -70,6 +70,11 @@ interface LLMEngine {
      * Real-time loading progress (0.0 to 1.0).
      */
     val loadingProgress: Flow<Float>
+
+    /**
+     * Returns true if the current model supports vision/multimodal input.
+     */
+    fun isMultimodal(): Boolean
 }
 
 sealed class TokenUpdate {

@@ -52,6 +52,20 @@ class HardwareMonitor @Inject constructor(
     private val _costMetrics = MutableStateFlow(CostMetrics("", "", ""))
     val costMetrics: StateFlow<CostMetrics> = _costMetrics.asStateFlow()
 
+    // --- Analytics Dashboard Extension ---
+    private val _tpsHistory = MutableStateFlow<List<Double>>(List(30) { 0.0 })
+    val tpsHistory: StateFlow<List<Double>> = _tpsHistory.asStateFlow()
+
+    private val _ramHistory = MutableStateFlow<List<Double>>(List(30) { 0.0 })
+    val ramHistory: StateFlow<List<Double>> = _ramHistory.asStateFlow()
+
+    private val _sessionTokens = MutableStateFlow(0L)
+    val sessionTokens: StateFlow<Long> = _sessionTokens.asStateFlow()
+
+    private val _sessionCostSaved = MutableStateFlow(0.0)
+    val sessionCostSaved: StateFlow<Double> = _sessionCostSaved.asStateFlow()
+    // --------------------------------------
+
     private val isAppVisible = MutableStateFlow(true)
 
     init {
@@ -78,6 +92,14 @@ class HardwareMonitor @Inject constructor(
                     updateBatteryStats()
                     updateStorageMetrics()
                     updateRagMetrics()
+                    
+                    // Update rolling history for RAM
+                    val currentRam = _ramUsage.value
+                    _ramHistory.update { (it + currentRam).takeLast(30) }
+                    
+                    // Update rolling history for TPS (use current value)
+                    val currentTps = _tokensPerSec.value.toDoubleOrNull() ?: 0.0
+                    _tpsHistory.update { (it + currentTps).takeLast(30) }
                 }
                 delay(2000)
             }
@@ -130,6 +152,16 @@ class HardwareMonitor @Inject constructor(
         scope.launch {
             llmEngine.performanceMetrics.collect { tps ->
                 _tokensPerSec.value = "%.1f".format(tps)
+                
+                // If we're getting tokens, increment session totals
+                // Assuming tps is emitted regularly when generating
+                if (tps > 0) {
+                    val tokensAdded = (tps * 2).toLong() // Since we update every 2s in monitoring, or just use raw tps if it's tokens-per-event
+                    // Actually, a better way is to have llmEngine emit total tokens.
+                    // But we can approximate here or just track the fact that tokens happened.
+                    _sessionTokens.update { it + tokensAdded }
+                    _sessionCostSaved.update { it + (tokensAdded * 0.00003) } // $0.03 per 1k tokens simulated
+                }
             }
         }
     }

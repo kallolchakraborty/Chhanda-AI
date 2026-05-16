@@ -20,7 +20,9 @@ class ChatViewModel @Inject constructor(
     private val chatDao: ChatDao,
     private val settingsRepository: SettingsRepository,
     private val llmEngineLazy: dagger.Lazy<LLMEngine>,
-    private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao
+    private val vectorChunkDao: com.chhanda.ai.data.repository.VectorChunkDao,
+    private val voiceAssistant: com.chhanda.ai.util.VoiceAssistant,
+    private val hapticManager: com.chhanda.ai.util.HapticManager
 ) : ViewModel() {
     private val llmEngine get() = llmEngineLazy.get()
 
@@ -38,6 +40,10 @@ class ChatViewModel @Inject constructor(
 
     private val _selectedFiles = MutableStateFlow<List<android.net.Uri>>(emptyList())
     val selectedFiles: StateFlow<List<android.net.Uri>> = _selectedFiles
+
+    val voiceListening = voiceAssistant.isListening
+    val voiceResult = voiceAssistant.partialResult
+    val voiceError = voiceAssistant.error
 
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions: StateFlow<List<String>> = _suggestions
@@ -107,6 +113,8 @@ class ChatViewModel @Inject constructor(
 
     fun sendMessage(text: String, isRefinement: Boolean = false) {
         if (text.isBlank() || _isGenerating.value) return
+        
+        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
 
         if (!llmEngine.isModelLoaded()) {
             _error.value = "No model loaded. Go to Dashboard and activate a model first."
@@ -170,6 +178,7 @@ class ChatViewModel @Inject constructor(
                                 _agentStatus.value = null // Clear status when generation starts
                                 buffer = ""
                                 lastUpdate = now
+                                hapticManager.streamingTick()
                             }
                         }
                         is TokenUpdate.Status -> {
@@ -188,6 +197,7 @@ class ChatViewModel @Inject constructor(
                         is TokenUpdate.Error -> {
                             _error.value = update.message
                             _isGenerating.value = false
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
                         }
                     }
                 }
@@ -211,6 +221,26 @@ class ChatViewModel @Inject constructor(
     }
 
     fun dismissError() { _error.value = null }
+
+    fun startVoiceInput() {
+        viewModelScope.launch {
+            val lang = appLanguage.value
+            val langCode = when(lang) {
+                "Bengali" -> "bn-BD"
+                "Hindi" -> "hi-IN"
+                else -> "en-US"
+            }
+            voiceAssistant.startListening(langCode)
+        }
+    }
+
+    fun stopVoiceInput() {
+        voiceAssistant.stopListening()
+    }
+
+    fun clearVoiceResult() {
+        voiceAssistant.clearResults()
+    }
 
     fun setPersona(persona: String?) {
         _selectedPersona.value = persona

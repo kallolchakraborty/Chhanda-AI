@@ -132,6 +132,12 @@ class ChhandaServer @Inject constructor(
     private val _serverErrorFlow = MutableStateFlow<String?>(null)
     val serverErrorFlow: StateFlow<String?> = _serverErrorFlow.asStateFlow()
 
+    private fun isPortFree(port: Int): Boolean {
+        return try {
+            java.net.ServerSocket(port).use { true }
+        } catch (_: Exception) { false }
+    }
+
     fun isServerActive(): Boolean = server != null
 
     private fun logAudit(tag: String, message: String, level: String) {
@@ -197,14 +203,22 @@ class ChhandaServer @Inject constructor(
 
     fun start(requestedPort: Int, @Suppress("UNUSED_PARAMETER") maxDevices: Int) {
         stop()
+        cleanupTempFiles()
         startTime = System.currentTimeMillis()
         lastIpRefresh = 0L
         val ip = freshIp()
         _serverErrorFlow.value = null
         for (port in requestedPort..requestedPort + 10) {
             try {
-                val sslConfig = sslCertManager.getSslConfig()
                 val sslPort = port + 1 // Use next port for SSL
+                
+                // PRO FIX: Verify ports are free before attempting bind
+                if (!isPortFree(port) || !isPortFree(sslPort)) {
+                    Log.w(TAG, "Ports $port or $sslPort are occupied, trying next...")
+                    continue
+                }
+
+                val sslConfig = sslCertManager.getSslConfig()
                 
                 val environment = io.ktor.server.engine.applicationEngineEnvironment {
                     log = org.slf4j.LoggerFactory.getLogger("ktor.application")
@@ -400,6 +414,16 @@ class ChhandaServer @Inject constructor(
                         return@post
                     }
                     clientRequestWindow[remoteIp] = now
+                    
+                    // Wake on Demand: Ensure model is loaded
+                    if (!llmEngine.isModelLoaded() && !llmEngine.isModelLoading()) {
+                        val lastModel = settingsRepository.activeModelFlow.firstOrNull()
+                        if (lastModel != null) {
+                            Log.i(TAG, "Wake on Demand: Auto-loading model $lastModel")
+                            try { llmEngine.initModel(lastModel) } catch (e: Exception) { Log.e(TAG, "Wake on Demand failed", e) }
+                        }
+                    }
+
                     try {
                         val req = call.receive<OpenAiChatRequest>()
                         val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.content ?: ""
@@ -469,6 +493,15 @@ class ChhandaServer @Inject constructor(
                     }
                     clientRequestWindow[remoteIp] = now
 
+                    // Wake on Demand: Ensure model is loaded
+                    if (!llmEngine.isModelLoaded() && !llmEngine.isModelLoading()) {
+                        val lastModel = settingsRepository.activeModelFlow.firstOrNull()
+                        if (lastModel != null) {
+                            Log.i(TAG, "Wake on Demand: Auto-loading model $lastModel")
+                            try { llmEngine.initModel(lastModel) } catch (e: Exception) { Log.e(TAG, "Wake on Demand failed", e) }
+                        }
+                    }
+
                     val msg = call.receive<WebMessage>()
                     val attachmentFiles = mutableListOf<java.io.File>()
                     val attachmentUris = msg.attachments.mapNotNull { webAtt ->
@@ -531,6 +564,21 @@ class ChhandaServer @Inject constructor(
     }
 
     private fun heartbeatDevice(ip: String) {
-        serverScope.launch { try { deviceDao.updateDeviceStatus(deviceDao.getDeviceByIp(ip)?.deviceName ?: return@launch, true, System.currentTimeMillis()) } catch (_: Exception) {} }
+        serverScope.launch { 
+            try { 
+                deviceDao.updateDeviceStatus(deviceDao.getDeviceByIp(ip)?.deviceName ?: return@launch, true, System.currentTimeMillis()) 
+            } catch (_: Exception) {} 
+        }
+    }
+
+    private fun cleanupTempFiles() {
+        try {
+            val cacheDir = context.cacheDir
+            cacheDir.listFiles { _, name -> name.startsWith("web_upload_") }?.forEach { 
+                if (it.delete()) Log.d(TAG, "Cleaned orphaned temp file: ${it.name}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Temp cleanup failed: ${e.message}")
+        }
     }
 }

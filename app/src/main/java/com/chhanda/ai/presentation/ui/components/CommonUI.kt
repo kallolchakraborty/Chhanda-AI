@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.chhanda.ai.R
@@ -52,7 +53,9 @@ fun ChhandaCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {},
         color = containerColor ?: MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
         shadowElevation = 2.dp

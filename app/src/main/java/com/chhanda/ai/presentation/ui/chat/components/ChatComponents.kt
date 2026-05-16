@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.*
 import com.chhanda.ai.data.repository.MessageEntity
 
 @Composable
@@ -59,6 +60,7 @@ fun DocumentDownloadCard(file: java.io.File) {
             .padding(top = 8.dp)
             .widthIn(max = 300.dp)
             .clip(RoundedCornerShape(16.dp))
+            .semantics(mergeDescendants = true) {}
             .clickable {
                 val uri = androidx.core.content.FileProvider.getUriForFile(context, "com.chhanda.ai.fileprovider", file)
                 val intent = Intent(Intent.ACTION_SEND).apply {
@@ -128,7 +130,8 @@ fun MessageBubble(
         Surface(
             color = bubbleColor,
             shape = shape,
-            shadowElevation = 0.dp
+            shadowElevation = 0.dp,
+            modifier = Modifier.semantics(mergeDescendants = true) {}
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 if (!finalThinking.isNullOrBlank()) {
@@ -439,7 +442,7 @@ fun PersonaSelectionGrid(selectedPersona: String?, onPersonaSelect: (String) -> 
 fun PersonaCard(name: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(110.dp),
+        modifier = modifier.height(110.dp).semantics(mergeDescendants = true) {},
         shape = RoundedCornerShape(24.dp),
         color = if (isSelected) color.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         border = androidx.compose.foundation.BorderStroke(2.dp, if (isSelected) color else Color.Transparent)
@@ -463,7 +466,8 @@ fun StreamingBubble(text: String, tps: Double = 0.0, rt: Long = 0L) {
     ) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(24.dp, 24.dp, 24.dp, 4.dp)
+            shape = RoundedCornerShape(24.dp, 24.dp, 24.dp, 4.dp),
+            modifier = Modifier.semantics(mergeDescendants = true) {}
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 if (thinkingText != null) {
@@ -569,7 +573,7 @@ fun CodeBlock(code: String, language: String) {
         color = Color.Black.copy(alpha = 0.05f),
         shape = RoundedCornerShape(12.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f)),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).semantics(mergeDescendants = true) {}
     ) {
         Column {
             Row(

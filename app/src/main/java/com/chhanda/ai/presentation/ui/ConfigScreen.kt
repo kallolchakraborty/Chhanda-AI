@@ -1,5 +1,6 @@
 package com.chhanda.ai.presentation.ui
 import android.content.Intent
+import android.util.Log
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -275,16 +276,16 @@ fun ConfigScreen(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
-                                                Text(voice)
-                                                // Use a Box to catch clicks and prevent propagation to DropdownMenuItem
-                                                Box(modifier = Modifier.size(32.dp).clickable(onClick = { 
-                                                    viewModel.playSample(voice, appLanguage)
-                                                }, indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() })) {
+                                                Text(voice, modifier = Modifier.weight(1f))
+                                                IconButton(
+                                                    onClick = { viewModel.playSample(voice, appLanguage) },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
                                                     Icon(
                                                         imageVector = Icons.Default.PlayArrow,
-                                                        contentDescription = "Play Sample",
+                                                        contentDescription = "Play $voice sample",
                                                         tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(20.dp).align(Alignment.Center)
+                                                        modifier = Modifier.size(20.dp)
                                                     )
                                                 }
                                             }
@@ -404,6 +405,14 @@ fun ConfigScreen(
 
             item {
                 Column {
+                    ChhandaSectionHeader(icon = Icons.Default.CloudSync, title = "Cloud Sync & Backup")
+                    Spacer(Modifier.height(12.dp))
+                    CloudSyncCard(viewModel = viewModel)
+                }
+            }
+
+            item {
+                Column {
                     var isKeyVisible by remember { mutableStateOf(false) }
 
                     ChhandaSectionHeader(icon = Icons.Default.Lock, title = Localization.getString("security", appLanguage))
@@ -437,18 +446,18 @@ fun ConfigScreen(
                             trailingIcon = { 
                                 Row {
                                     IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
-                                        Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
+                                        Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = if (isKeyVisible) "Hide API Key" else "Show API Key")
                                     }
                                     IconButton(onClick = { 
                                         val newKey = "CH-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
                                         tempApiKey = newKey
                                     }) {
-                                        Icon(Icons.Default.Refresh, null)
+                                        Icon(Icons.Default.Refresh, contentDescription = "Regenerate API Key")
                                     }
                                     IconButton(onClick = { 
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempApiKey))
                                     }) {
-                                        Icon(Icons.Default.ContentCopy, null)
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy API Key")
                                     }
                                 }
                             },
@@ -475,12 +484,12 @@ fun ConfigScreen(
                             trailingIcon = {
                                 Row {
                                     IconButton(onClick = { clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempHfToken)) }) {
-                                        Icon(Icons.Default.ContentCopy, null)
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy HF Token")
                                     }
                                     IconButton(onClick = { 
                                         clipboardManager.getText()?.text?.let { tempHfToken = it }
                                     }) {
-                                        Icon(Icons.Default.ContentPaste, null)
+                                        Icon(Icons.Default.ContentPaste, contentDescription = "Paste HF Token")
                                     }
                                 }
                             },
@@ -489,6 +498,28 @@ fun ConfigScreen(
                                 unfocusedBorderColor = Color.Transparent,
                                 focusedBorderColor = MaterialTheme.colorScheme.primary
                             )
+                        )
+
+                        Spacer(Modifier.height(32.dp))
+                        Button(
+                            onClick = { viewModel.revokeAllSessions() },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                contentColor = MaterialTheme.colorScheme.onError
+                            )
+                        ) {
+                            Icon(Icons.Default.Security, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Revoke All Sessions", fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            "Emergency: Rotate API key and disconnect all active remote clients.",
+                            modifier = Modifier.padding(top = 8.dp),
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
@@ -540,11 +571,7 @@ fun ConfigScreen(
                 confirmButton = {
                     TextButton(onClick = { 
                         viewModel.dismissRestartDialog()
-                        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                        val componentName = intent?.component
-                        val mainIntent = Intent.makeRestartActivityTask(componentName)
-                        context.startActivity(mainIntent)
-                        Runtime.getRuntime().exit(0)
+                        (context as? android.app.Activity)?.recreate()
                     }) {
                         Text("OK")
                     }
@@ -627,6 +654,122 @@ fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.Syst
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("1 day", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 Text("30 days", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            }
+        }
+    }
+}
+
+@Composable
+fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel) {
+    val context = LocalContext.current
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val lastSync by viewModel.lastSyncTime.collectAsStateWithLifecycle()
+    
+    var googleAccount by remember { mutableStateOf<com.google.android.gms.auth.api.signin.GoogleSignInAccount?>(null) }
+    
+    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+        .requestEmail()
+        .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
+        .requestScopes(com.google.android.gms.common.api.Scope(com.google.api.services.drive.DriveScopes.DRIVE_APPDATA))
+        .build()
+        
+    val googleSignInClient = remember { com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso) }
+    
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            googleAccount = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+        } catch (e: Exception) {
+            Log.e("ConfigScreen", "Google Sign In failed", e)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        googleAccount = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
+    }
+
+    ChhandaCard {
+        if (googleAccount == null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                Icon(Icons.Default.CloudOff, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                Spacer(Modifier.height(12.dp))
+                Text("Connect to Google Drive", fontWeight = FontWeight.Bold)
+                Text("Sync your chat history securely across devices.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = { launcher.launch(googleSignInClient.signInIntent) },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Sign in with Google")
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AccountCircle, null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(googleAccount?.displayName ?: "Google User", fontWeight = FontWeight.Bold)
+                    Text(googleAccount?.email ?: "", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { 
+                    googleSignInClient.signOut().addOnCompleteListener { googleAccount = null }
+                }) {
+                    Text("Sign Out", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+            
+            Spacer(Modifier.height(24.dp))
+            
+            if (isSyncing) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().clip(CircleShape))
+                Spacer(Modifier.height(8.dp))
+                Text("Synchronizing data...", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { googleAccount?.let { viewModel.backupToCloud(it) } },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Backup")
+                    }
+                    
+                    OutlinedButton(
+                        onClick = { googleAccount?.let { viewModel.restoreFromCloud(it) } },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Restore")
+                    }
+                }
+            }
+            
+            if (lastSync > 0) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Last backup: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(lastSync))}",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(14.dp), tint = Color(0xFF10B981))
+                    Spacer(Modifier.width(8.dp))
+                    Text("E2E Encrypted via Hardware Keystore", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }

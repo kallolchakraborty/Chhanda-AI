@@ -24,4 +24,5 @@ interface IInferenceService {
     
     float getLoadingProgress();
     double getPerformanceMetrics();
+    boolean isMultimodal();
 }

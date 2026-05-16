@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.chhanda.ai.presentation.ui.ModelInfo
 import com.chhanda.ai.presentation.ui.DownloadModelInfo
 import com.chhanda.ai.util.Localization
+import androidx.compose.ui.semantics.*
 
 /**
  * LocalModelItem: UI representation of a model already resident on the device.
@@ -41,7 +42,8 @@ fun LocalModelItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .semantics(mergeDescendants = true) {},
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = RoundedCornerShape(20.dp)
     ) {
@@ -55,7 +57,42 @@ fun LocalModelItem(
             )
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    if (model.isMultimodal) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = Color(0xFF673AB7).copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                Icon(Icons.Default.Visibility, null, modifier = Modifier.size(10.dp), tint = Color(0xFF673AB7))
+                                Spacer(Modifier.width(2.dp))
+                                Text(
+                                    "VISION", 
+                                    fontSize = 8.sp, 
+                                    fontWeight = FontWeight.Black, 
+                                    color = Color(0xFF673AB7)
+                                )
+                            }
+                        }
+                    }
+                    if (model.isActive) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                "ACTIVE", 
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                fontSize = 8.sp, 
+                                fontWeight = FontWeight.Black, 
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
                 Text(
                     model.details + " · " + Localization.getString("ready", appLanguage), 
                     fontSize = 11.sp, 
@@ -70,13 +107,13 @@ fun LocalModelItem(
                 IconButton(onClick = onTryIt) {
                     Icon(Icons.Default.OpenInNew, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 }
-                if (isServerRunning && model.name == "Current Model") { // Simplified logic for demo
+                if (isServerRunning && model.isActive) {
                     IconButton(onClick = onStop) {
                         Icon(Icons.Default.StopCircle, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
                     }
                 } else {
                     IconButton(onClick = onActivate) {
-                        Icon(Icons.Default.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(if (model.isActive) Icons.Default.CheckCircle else Icons.Default.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -109,7 +146,8 @@ fun DownloadableModelItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .semantics(mergeDescendants = true) {},
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(20.dp)
     ) {
@@ -133,6 +171,24 @@ fun DownloadableModelItem(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        if (model.isMultimodal) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                color = Color(0xFF673AB7).copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                    Icon(Icons.Default.Visibility, null, modifier = Modifier.size(10.dp), tint = Color(0xFF673AB7))
+                                    Spacer(Modifier.width(2.dp))
+                                    Text(
+                                        "VISION", 
+                                        fontSize = 8.sp, 
+                                        fontWeight = FontWeight.Black, 
+                                        color = Color(0xFF673AB7)
+                                    )
+                                }
+                            }
+                        }
                         if (model.isRecommended) {
                             Spacer(Modifier.width(8.dp))
                             Surface(

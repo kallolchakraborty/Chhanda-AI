@@ -135,6 +135,39 @@ class SecurityRepository @Inject constructor(
         }
     }
 
+    fun revokeAllSessions() {
+        val newKey = java.util.UUID.randomUUID().toString().replace("-", "").take(12).uppercase()
+        setApiKey(newKey)
+    }
+
+    /**
+     * Encrypts arbitrary data using the hardware-backed MasterKey.
+     */
+    fun encrypt(data: ByteArray): ByteArray {
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, "_androidx_security_master_key_".let { alias ->
+            val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            keyStore.getKey(alias, null) as javax.crypto.SecretKey
+        })
+        val iv = cipher.iv
+        val encrypted = cipher.doFinal(data)
+        return iv + encrypted // Prepend IV for decryption
+    }
+
+    /**
+     * Decrypts data using the hardware-backed MasterKey.
+     */
+    fun decrypt(encryptedDataWithIv: ByteArray): ByteArray {
+        val iv = encryptedDataWithIv.sliceArray(0 until 12)
+        val encrypted = encryptedDataWithIv.sliceArray(12 until encryptedDataWithIv.size)
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, "_androidx_security_master_key_".let { alias ->
+            val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            keyStore.getKey(alias, null) as javax.crypto.SecretKey
+        }, javax.crypto.spec.GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted)
+    }
+
     companion object {
         private const val KEY_HF_TOKEN = "hf_token_v2"
         private const val KEY_API_KEY = "api_key_v2"

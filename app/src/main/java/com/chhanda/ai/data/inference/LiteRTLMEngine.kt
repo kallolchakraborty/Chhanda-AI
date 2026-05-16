@@ -22,7 +22,8 @@ import android.net.Uri
 @Singleton
 class LiteRTLMEngine @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val thermalTracker: ThermalStatusTracker
+    private val thermalTracker: com.chhanda.ai.util.ThermalStatusTracker,
+    private val memoryMonitor: com.chhanda.ai.util.MemoryPressureMonitor
 ) : LLMEngine {
 
     private var engine: Engine? = null
@@ -42,38 +43,49 @@ class LiteRTLMEngine @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
 
     companion object { private const val TAG = "LiteRTLMEngine" }
+    
+    private val initMutex = kotlinx.coroutines.sync.Mutex()
 
     override suspend fun initModel(path: String) {
         if (currentModelPath == path && _isLoaded.value) return
         
-        _isLoading.value = true
-        _loadingProgress.value = 0.1f
+        if (!initMutex.tryLock()) {
+            Log.w(TAG, "Initialization already in progress")
+            return
+        }
         
-        withContext(inferenceDispatcher) {
-            try {
-                _loadingProgress.value = 0.3f
-                // Close any existing engine
-                conversation?.close()
-                conversation = null
-                engine?.close()
-                
-                val config = EngineConfig(modelPath = path)
-                engine = Engine(config)
-                
-                _loadingProgress.value = 0.6f
-                engine!!.initialize()
-                
-                currentModelPath = path
-                _isLoaded.value = true
-                _loadingProgress.value = 1.0f
-                Log.i(TAG, "Model loaded successfully: ${File(path).name}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Model load failed: ${e.message}")
-                _isLoaded.value = false
-                throw e
-            } finally {
-                _isLoading.value = false
+        try {
+            _isLoading.value = true
+            _loadingProgress.value = 0.1f
+            
+            withContext(inferenceDispatcher) {
+                try {
+                    _loadingProgress.value = 0.3f
+                    // Close any existing engine
+                    conversation?.close()
+                    conversation = null
+                    engine?.close()
+                    
+                    val config = EngineConfig(modelPath = path)
+                    engine = Engine(config)
+                    
+                    _loadingProgress.value = 0.6f
+                    engine!!.initialize()
+                    
+                    currentModelPath = path
+                    _isLoaded.value = true
+                    _loadingProgress.value = 1.0f
+                    Log.i(TAG, "Model loaded successfully: ${File(path).name}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Model load failed: ${e.message}")
+                    _isLoaded.value = false
+                    throw e
+                } finally {
+                    _isLoading.value = false
+                }
             }
+        } finally {
+            initMutex.unlock()
         }
     }
 
@@ -97,22 +109,53 @@ class LiteRTLMEngine @Inject constructor(
                 conversation = engine?.createConversation()
             }
 
-            conversation?.let { conv ->
-                // sendMessageAsync(String) returns Flow<Message>
-                conv.sendMessageAsync(prompt).collect { message ->
-                    val text = message.contents.contents
-                        .filterIsInstance<Content.Text>()
-                        .joinToString("") { it.text }
-                        
-                    tokenCount++
-                    val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-                    val tps = if (elapsed > 0) tokenCount / elapsed else 0.0
-                    _performanceMetrics.value = tps
-                    emit(TokenUpdate.Partial(text, tps))
+            // VISION SUPPORT: Package text and images into a multimodal request
+            val contentList = mutableListOf<Content>()
+            contentList.add(Content.Text(prompt))
+            
+            attachments.forEach { uri ->
+                try {
+                    if (isImageUri(uri)) {
+                        val bitmap = loadBitmap(uri)
+                        if (bitmap != null) {
+                            contentList.add(Content.of(bitmap))
+                            Log.d(TAG, "Attached image to inference: $uri")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to process image attachment $uri: ${e.message}")
                 }
             }
-        } catch (e: Exception) {
-            emit(TokenUpdate.Error(e.message ?: "Inference error"))
+
+            var emittedTextLength = 0
+            conversation?.let { conv ->
+                val request = if (contentList.size > 1) Contents.of(contentList) else Contents.of(listOf(Content.Text(prompt)))
+                conv.sendMessageAsync(request).collect { message ->
+                    val fullText = message.contents.contents
+                        .filterIsInstance<Content.Text>()
+                        .joinToString("") { it.text }
+                    
+                    if (fullText.length > emittedTextLength) {
+                        val delta = fullText.substring(emittedTextLength)
+                        emittedTextLength = fullText.length
+                        
+                        tokenCount++
+                        val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+                        val tps = if (elapsed > 0) tokenCount / elapsed else 0.0
+                        _performanceMetrics.value = tps
+                        emit(TokenUpdate.Partial(delta, tps))
+
+                        // ACTIVE THERMAL THROTTLING:
+                        // If system is throttled, insert a delay to let the SoC cool down
+                        if (thermalTracker.thermalStatus.value.isThrottled) {
+                            kotlinx.coroutines.delay(50) 
+                        }
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Inference crash: ${e.message}", e)
+            emit(TokenUpdate.Error(e.localizedMessage ?: "Critical inference error"))
         } finally {
             isGenerating.set(false)
         }
@@ -139,6 +182,11 @@ class LiteRTLMEngine @Inject constructor(
     override fun isModelLoading(): Boolean = _isLoading.value
     override fun getCurrentModelName(): String = currentModelPath?.let { File(it).name } ?: "None"
     
+    override fun isMultimodal(): Boolean {
+        val name = currentModelPath?.lowercase() ?: return false
+        return name.contains("e4b") || name.contains("multimodal") || name.contains("llava") || name.contains("moondream")
+    }
+
     override suspend fun close() {
         withContext(inferenceDispatcher) {
             conversation?.close()
@@ -147,6 +195,47 @@ class LiteRTLMEngine @Inject constructor(
             engine = null
             _isLoaded.value = false
             currentModelPath = null
+        }
+    }
+
+    private fun isImageUri(uri: Uri): Boolean {
+        val type = context.contentResolver.getType(uri)
+        if (type?.startsWith("image/") == true) return true
+        val ext = uri.lastPathSegment?.substringAfterLast('.', "")?.lowercase()
+        return ext in listOf("jpg", "jpeg", "png", "webp", "bmp")
+    }
+
+    private fun loadBitmap(uri: Uri): android.graphics.Bitmap? {
+        return try {
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            context.contentResolver.openInputStream(uri)?.use { 
+                android.graphics.BitmapFactory.decodeStream(it, null, options)
+            }
+            
+            // Scaled loading for memory efficiency
+            // Senior Fix: Adaptive scaling based on memory pressure
+            val isLowMem = memoryMonitor.memoryLevel.value >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+            val targetW = if (isLowMem) 256 else 512
+            val targetH = if (isLowMem) 256 else 512
+            
+            if (isLowMem) Log.w("LiteRTLMEngine", "Low memory detected: Scaling image down to ${targetW}px")
+            
+            var scale = 1
+            while (options.outWidth / scale / 2 >= targetW && options.outHeight / scale / 2 >= targetH) {
+                scale *= 2
+            }
+            
+            val loadOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = scale
+            }
+            context.contentResolver.openInputStream(uri)?.use { 
+                android.graphics.BitmapFactory.decodeStream(it, null, loadOptions)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Bitmap load failed: ${e.message}")
+            null
         }
     }
 }

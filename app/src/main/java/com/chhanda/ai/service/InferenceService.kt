@@ -65,6 +65,7 @@ class InferenceService : Service() {
         override fun isModelLoaded(): Boolean = engine.isModelLoaded()
         override fun isModelLoading(): Boolean = engine.isModelLoading()
         override fun getCurrentModelName(): String = engine.getCurrentModelName()
+        override fun isMultimodal(): Boolean = engine.isMultimodal()
         override fun closeEngine() { serviceScope.launch { try { engine.close() } catch (e: Exception) {} } }
         override fun getLoadingProgress(): Float = cachedLoadingProgress
         override fun getPerformanceMetrics(): Double = cachedPerformanceMetrics

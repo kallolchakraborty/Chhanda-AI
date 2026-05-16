@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.*
 
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
@@ -76,6 +77,7 @@ fun KnowledgeBaseScreen(
         ownedModels.firstOrNull { it.isActive }?.name ?: Localization.getString("no_active_model", appLanguage)
     }
     val context = LocalContext.current
+    val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     
     var showResetDialog by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
@@ -93,7 +95,7 @@ fun KnowledgeBaseScreen(
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
-                            ChhandaLogo(size = 32)
+                            ChhandaLogo(size = 32, modifier = Modifier)
                         }
 
                         Spacer(Modifier.width(12.dp))
@@ -118,17 +120,23 @@ fun KnowledgeBaseScreen(
                     Spacer(Modifier.height(12.dp))
                     UploadRagCard(
                         appLanguage = appLanguage, 
-                        onUpload = { filePickerLauncher.launch(arrayOf(
-                            "application/pdf", 
-                            "image/*", 
-                            "text/plain", 
-                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
-                            "application/msword", // doc
-                            "application/vnd.ms-excel", // xls
-                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
-                            "audio/*"
-                        )) },
-                        onConnectUrl = { showUrlDialog = true }
+                        onUpload = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                            filePickerLauncher.launch(arrayOf(
+                                "application/pdf", 
+                                "image/*", 
+                                "text/plain", 
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+                                "application/msword", // doc
+                                "application/vnd.ms-excel", // xls
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
+                                "audio/*"
+                            )) 
+                        },
+                        onConnectUrl = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                            showUrlDialog = true 
+                        }
                     )
                 }
             }
@@ -139,8 +147,12 @@ fun KnowledgeBaseScreen(
                     Spacer(Modifier.height(12.dp))
                     MemoryImportExportCard(
                         appLanguage = appLanguage,
-                        onImport = { memoryImportLauncher.launch(arrayOf("application/json", "text/plain")) },
+                        onImport = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                            memoryImportLauncher.launch(arrayOf("application/json", "text/plain")) 
+                        },
                         onExport = {
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                             viewModel.exportMemory { file ->
                                 file?.let {
                                     val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -203,6 +215,12 @@ fun KnowledgeBaseScreen(
             
 
             
+            if (isIngesting && allFiles.isEmpty()) {
+                items(3) {
+                    com.chhanda.ai.presentation.ui.components.SkeletonModelItem()
+                }
+            }
+            
             if (allFiles.isNotEmpty()) {
                 item {
                     RecentUploadsSectionHeader(
@@ -218,8 +236,14 @@ fun KnowledgeBaseScreen(
                     val file = displayFiles[index]
                     RagFileItem(
                         file = file, 
-                        onDelete = { viewModel.deleteFiles(listOf(file.id)) },
-                        onClick = { viewModel.openFile(file) }
+                        onDelete = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
+                            viewModel.deleteFiles(listOf(file.id)) 
+                        },
+                        onClick = { 
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                            viewModel.openFile(file) 
+                        }
                     )
                 }
             }
@@ -233,7 +257,7 @@ fun KnowledgeBaseScreen(
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C))
                 ) {
-                    Icon(Icons.Default.DeleteForever, null)
+                    Icon(Icons.Default.DeleteForever, contentDescription = "Wipe Memory")
                     Spacer(Modifier.width(8.dp))
                     Text(Localization.getString("wipe_memory", appLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
@@ -392,7 +416,7 @@ fun KnowledgeBaseScreen(
                 text = { Text("Chhanda will now fetch and index the content from '$urlLink'. This may take a moment depending on the site size.") },
                 confirmButton = {
                     Button(onClick = {
-                        viewModel.processScrapeUrl(urlLink, urlLabel)
+                        viewModel.scrapeUrl(urlLink, label = urlLabel)
                         showUrlScrapingConfirm = false
                         urlLink = ""
                         urlLabel = ""
@@ -409,13 +433,13 @@ fun KnowledgeBaseScreen(
         }
 
         // Background Ingestion Prompt
-        val pendingPrompt = viewModel.pendingBackgroundPrompt
-        if (pendingPrompt != null) {
+        val pendingPrompt by viewModel.pendingBackgroundPrompt.collectAsState()
+        pendingPrompt?.let { task ->
             AlertDialog(
                 onDismissRequest = { viewModel.dismissIngestionPrompt() },
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.HourglassEmpty, null, tint = Color(0xFF2563EB))
+                        Icon(Icons.Default.HourglassEmpty, contentDescription = "Processing", tint = Color(0xFF2563EB))
                         Spacer(Modifier.width(8.dp))
                         Text("Processing Time")
                     }
@@ -426,24 +450,26 @@ fun KnowledgeBaseScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (pendingPrompt.url != null) {
-                                viewModel.processScrapeUrl(pendingPrompt.url, pendingPrompt.label ?: "Website", true)
+                            if (task.url != null) {
+                                viewModel.scrapeUrl(task.url, true, task.label)
                             } else {
-                                viewModel.processIngestDocuments(pendingPrompt.uris, true)
+                                viewModel.ingestDocuments(task.uris ?: emptyList())
                             }
+                            viewModel.dismissIngestionPrompt()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
                     ) {
-                        Text("Run in Background")
+                        Text("Background")
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = {
-                        if (pendingPrompt.url != null) {
-                            viewModel.processScrapeUrl(pendingPrompt.url, pendingPrompt.label ?: "Website", false)
+                        if (task.url != null) {
+                            viewModel.scrapeUrl(task.url, false, task.label)
                         } else {
-                            viewModel.processIngestDocuments(pendingPrompt.uris, false)
+                            viewModel.ingestDocuments(task.uris ?: emptyList())
                         }
+                        viewModel.dismissIngestionPrompt()
                     }) {
                         Text("Foreground")
                     }
@@ -458,7 +484,7 @@ fun KnowledgeBaseScreen(
                 onDismissRequest = { viewModel.clearIngestionError() },
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Error, null, tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.Default.Error, contentDescription = "Error", tint = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.width(8.dp))
                         Text("Ingestion Failed")
                     }
@@ -476,7 +502,7 @@ fun KnowledgeBaseScreen(
         if (showInternetWarning) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissInternetWarning() },
-                icon = { Icon(Icons.Default.SignalWifiOff, null, tint = MaterialTheme.colorScheme.error) },
+                icon = { Icon(Icons.Default.SignalWifiOff, contentDescription = "Offline", tint = MaterialTheme.colorScheme.error) },
                 title = { Text("No Internet Connection") },
                 text = { Text("URL scraping requires an active internet connection. Please turn on your Wi-Fi or Mobile Data to continue.") },
                 confirmButton = {
@@ -504,7 +530,7 @@ fun KnowledgeBaseScreen(
         if (showLlmServerWarning) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissLlmServerWarning() },
-                icon = { Icon(Icons.Default.SmartToy, null, tint = MaterialTheme.colorScheme.primary) },
+                icon = { Icon(Icons.Default.SmartToy, contentDescription = "AI Server", tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Start LLM Server") },
                 text = { Text("Deep scraping/parsing (like Kaggle datasets) requires the on-device AI server to be active. Please start the LLM server from the Dashboard first.") },
                 confirmButton = {
@@ -547,7 +573,7 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         Icons.Default.Upload, 
-                        null, 
+                        contentDescription = "Upload", 
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(32.dp)
                     )
@@ -634,13 +660,16 @@ fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.rep
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = RoundedCornerShape(32.dp),
-        modifier = Modifier.fillMaxWidth().height(160.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp)
+            .semantics(mergeDescendants = true) {}
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Background wave pattern simulation
             Icon(
                 Icons.Default.AutoAwesome, 
-                null, 
+                contentDescription = "Decoration", 
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f), 
                 modifier = Modifier.align(Alignment.BottomEnd).size(120.dp).offset(x = 20.dp, y = 20.dp)
             )
@@ -652,7 +681,7 @@ fun IndexedStatsCard(appLanguage: String, allFiles: List<com.chhanda.ai.data.rep
                     Text(" " + Localization.getString("files", appLanguage), fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 12.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.TrendingUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.TrendingUp, contentDescription = "Growth", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Text(" $growthStr% growth this week", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             }
@@ -670,7 +699,9 @@ fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes:
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
         shape = RoundedCornerShape(32.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {}
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(Localization.getString("vector_storage", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -693,7 +724,7 @@ fun VectorStorageStatusCard(appLanguage: String, totalSize: Long, capacityBytes:
 @Composable
 fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, isExpanded: Boolean, isVisible: Boolean) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp).semantics { heading() },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -701,7 +732,7 @@ fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, i
         if (isVisible) {
             TextButton(onClick = onViewArchive) {
                 Text(if (isExpanded) "Hide Archive" else "View Archive", color = Color(0xFF1967D2), fontWeight = FontWeight.Bold)
-                Icon(if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ArrowForward, null, modifier = Modifier.size(16.dp), tint = Color(0xFF1967D2))
+                Icon(if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ArrowForward, contentDescription = if (isExpanded) "Hide" else "Show", modifier = Modifier.size(16.dp), tint = Color(0xFF1967D2))
             }
         }
     }
@@ -723,7 +754,11 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
     }
 
     Surface(
-        modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth().clickable { onClick() },
+        modifier = Modifier
+            .padding(vertical = 8.dp)
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {}
+            .clickable { onClick() },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(24.dp)
     ) {
@@ -757,7 +792,7 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
                 Text("$sizeStr • $typeLabel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
             IconButton(onClick = { showMenu = true }) { 
-                Icon(androidx.compose.material.icons.Icons.Default.MoreVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "File Options", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(
                         text = { Text("Delete", color = Color.Red) },
@@ -765,7 +800,7 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
                             onDelete()
                             showMenu = false
                         },
-                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) }
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = "Delete File", tint = Color.Red) }
                     )
                 }
             }
@@ -792,7 +827,7 @@ fun RagQualityCard(viewModel: SystemViewModel) {
 @Composable
 fun QualityMetricItem(label: String, value: String, icon: ImageVector) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -863,7 +898,7 @@ fun ReadinessRow(label: String, value: String, icon: ImageVector) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(8.dp))
             Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -881,7 +916,7 @@ fun MemoryImportExportCard(appLanguage: String, onImport: () -> Unit, onExport: 
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.SyncAlt, null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.SyncAlt, contentDescription = "Data Sync", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 Spacer(Modifier.width(16.dp))
@@ -901,7 +936,7 @@ fun MemoryImportExportCard(appLanguage: String, onImport: () -> Unit, onExport: 
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Download, contentDescription = "Import", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                         Text(Localization.getString("import_memory", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -913,7 +948,7 @@ fun MemoryImportExportCard(appLanguage: String, onImport: () -> Unit, onExport: 
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.FileUpload, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.FileUpload, contentDescription = "Export", tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
                         Text(Localization.getString("export_memory", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -927,7 +962,7 @@ fun MemoryImportExportCard(appLanguage: String, onImport: () -> Unit, onExport: 
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(Localization.getString("chatgpt_format", appLanguage), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-                Icon(Icons.Default.KeyboardArrowRight, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Arrow", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                 Text(Localization.getString("perplexity_format", appLanguage), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }
         }

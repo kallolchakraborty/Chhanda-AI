@@ -29,7 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
-import com.chhanda.ai.presentation.viewmodel.LogEntry
+import com.chhanda.ai.domain.model.LogEntry
 import com.chhanda.ai.presentation.ui.components.ChhandaLogo
 import com.chhanda.ai.util.Localization
 

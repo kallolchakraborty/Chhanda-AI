@@ -11,5 +11,6 @@ data class UploadedFileEntity(
     val size: Long,
     val path: String,
     val isDeleted: Boolean = false,
+    val isEnabled: Boolean = true,
     val timestamp: Long = System.currentTimeMillis()
 )

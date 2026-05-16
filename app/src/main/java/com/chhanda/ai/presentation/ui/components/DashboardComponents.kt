@@ -20,7 +20,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.*
+import androidx.compose.ui.semantics.*
 import com.chhanda.ai.util.Localization
+import androidx.compose.ui.semantics.*
 import kotlinx.coroutines.flow.StateFlow
 import com.chhanda.ai.domain.model.HardwareStatus
 
@@ -34,7 +37,7 @@ fun ChhandaSectionHeader(
     badge: String = "",
     badgeColor: Color = MaterialTheme.colorScheme.primary
 ) {
-    Column(modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)) {
+    Column(modifier = Modifier.padding(top = 16.dp, bottom = 4.dp).semantics { heading() }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
@@ -78,7 +81,10 @@ fun StatCard(
     val displayValue by value.collectAsState()
     
     GlassBox(
-        modifier = modifier.height(80.dp).clickable(enabled = onClick != null) { onClick?.invoke() },
+        modifier = modifier
+            .height(80.dp)
+            .semantics(mergeDescendants = true) {}
+            .clickable(enabled = onClick != null) { onClick?.invoke() },
         blurRadius = 20f,
         cornerRadius = 20.dp
     ) {
@@ -129,7 +135,10 @@ fun ActiveModelCard(
         label = "shimmerAlpha"
     )
 
-    val cardModifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(32.dp))
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(32.dp))
+        .semantics(mergeDescendants = true) {}
 
     if (!isRunning) {
         GlassBox(
@@ -295,7 +304,7 @@ private fun ActiveModelContent(
         Surface(
             color = (if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.15f), 
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
@@ -381,5 +390,194 @@ private fun ActiveModelContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * AnalyticsDashboardSection: Provides professional observability and session summaries.
+ */
+@Composable
+fun AnalyticsDashboardSection(
+    tpsHistory: List<Double>,
+    ramHistory: List<Double>,
+    sessionTokens: Long,
+    sessionCostSaved: Double,
+    appLanguage: String = "English"
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        Text(
+            "ENGINE OBSERVABILITY", 
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // TPS Graph
+            TelemetryCard(
+                modifier = Modifier.weight(1f),
+                label = "Performance (TPS)",
+                currentValue = String.format("%.1f", tpsHistory.lastOrNull() ?: 0.0),
+                data = tpsHistory,
+                color = Color(0xFF4ADE80) // Green
+            )
+            // RAM Graph
+            TelemetryCard(
+                modifier = Modifier.weight(1f),
+                label = "Memory (GB)",
+                currentValue = String.format("%.1f", ramHistory.lastOrNull() ?: 0.0),
+                data = ramHistory,
+                color = Color(0xFF60A5FA) // Blue
+            )
+        }
+        
+        Spacer(Modifier.height(12.dp))
+        
+        // Session Summary
+        GlassBox(
+            modifier = Modifier.fillMaxWidth(),
+            blurRadius = 30f,
+            cornerRadius = 24.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Session Summary", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${sessionTokens} Tokens Generated", 
+                        style = MaterialTheme.typography.bodyMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalAlignment = Alignment.End) {
+                        Text("EST. SAVINGS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text(
+                            String.format("$%.2f", sessionCostSaved), 
+                            style = MaterialTheme.typography.bodyLarge, 
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelemetryCard(
+    modifier: Modifier = Modifier,
+    label: String,
+    currentValue: String,
+    data: List<Double>,
+    color: Color
+) {
+    GlassBox(
+        modifier = modifier.height(140.dp),
+        blurRadius = 40f,
+        cornerRadius = 24.dp
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(label.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(currentValue, fontSize = 20.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+            
+            Spacer(Modifier.weight(1f))
+            
+            TelemetryGraph(
+                data = data,
+                color = color,
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun TelemetryGraph(
+    data: List<Double>,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        if (data.isEmpty()) return@Canvas
+        
+        val width = size.width
+        val height = size.height
+        val maxVal = (data.maxOrNull() ?: 1.0).coerceAtLeast(0.1).toFloat()
+        val stepX = width / (data.size - 1).coerceAtLeast(1)
+        
+        val path = androidx.compose.ui.graphics.Path()
+        val fillPath = androidx.compose.ui.graphics.Path()
+        
+        data.forEachIndexed { i, value ->
+            val x = i * stepX
+            val y = height - (value.toFloat() / maxVal * height)
+            
+            if (i == 0) {
+                path.moveTo(x, y)
+                fillPath.moveTo(x, height)
+                fillPath.lineTo(x, y)
+            } else {
+                // Use cubic bezier for smooth curves
+                val prevX = (i - 1) * stepX
+                val prevY = height - (data[i - 1].toFloat() / maxVal * height)
+                path.cubicTo(
+                    prevX + stepX / 2, prevY,
+                    x - stepX / 2, y,
+                    x, y
+                )
+                fillPath.cubicTo(
+                    prevX + stepX / 2, prevY,
+                    x - stepX / 2, y,
+                    x, y
+                )
+            }
+            
+            if (i == data.size - 1) {
+                fillPath.lineTo(x, height)
+                fillPath.close()
+            }
+        }
+        
+        // Draw fill gradient
+        drawPath(
+            path = fillPath,
+            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                colors = listOf(color.copy(alpha = 0.3f), color.copy(alpha = 0f))
+            )
+        )
+        
+        // Draw line
+        drawPath(
+            path = path,
+            color = color,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 3.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round
+            )
+        )
+        
+        // Draw soft glow under the line
+        drawPath(
+            path = path,
+            color = color.copy(alpha = 0.2f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 8.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round
+            )
+        )
     }
 }

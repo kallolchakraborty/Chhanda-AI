@@ -22,15 +22,25 @@ import com.chhanda.ai.presentation.ui.*
 import com.chhanda.ai.presentation.ui.components.ChhandaLogo
 import com.chhanda.ai.presentation.viewmodel.ChatViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.activity.enableEdgeToEdge
 
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
+import com.chhanda.ai.util.NativeLifecycleObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private var systemViewModel: SystemViewModel? = null
+    
+    @javax.inject.Inject
+    lateinit var nativeLifecycleObserver: NativeLifecycleObserver
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        
+        // Register global native lifecycle observer
+        ProcessLifecycleOwner.get().lifecycle.addObserver(nativeLifecycleObserver)
         
 
         setContent {
@@ -54,11 +64,12 @@ class MainActivity : FragmentActivity() {
                 ChhandaApp(vm)
             }
 
-            // PRO FIX: Request Permissions for Foreground Service and Storage
+            // PRO FIX: Request ALL Permissions at startup for smooth UX
             val permissions = mutableListOf<String>()
+            
+            // Core permissions
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
-                // For RAG we often need files, so requesting media permissions is a good first step on API 33+
                 permissions.add(android.Manifest.permission.READ_MEDIA_IMAGES)
                 permissions.add(android.Manifest.permission.READ_MEDIA_VIDEO)
                 permissions.add(android.Manifest.permission.READ_MEDIA_AUDIO)
@@ -67,13 +78,18 @@ class MainActivity : FragmentActivity() {
                 permissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
             
+            // Feature-specific permissions (Camera for QR, Audio for Voice)
+            permissions.add(android.Manifest.permission.RECORD_AUDIO)
+            permissions.add(android.Manifest.permission.CAMERA)
             
             val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
             ) { result ->
                 val denied = result.filter { !it.value }
                 if (denied.isNotEmpty()) {
-                    vm.addLog("SYSTEM", "Some permissions denied. App functionality might be limited.", "WARNING")
+                    vm.addLog("SYSTEM", "Some permissions (${denied.keys.joinToString(", ")}) denied. App functionality might be limited.", "WARNING")
+                } else {
+                    vm.addLog("SYSTEM", "All permissions granted.", "SUCCESS")
                 }
             }
             
@@ -209,6 +225,7 @@ fun ChhandaApp(systemViewModel: SystemViewModel) {
                 }
                 composable(Screen.Settings.route) { ConfigScreen(navController, systemViewModel) }
                 composable(Screen.Logs.route) { LogsScreen(navController, systemViewModel) }
+                composable(Screen.Comparison.route) { ModelComparisonScreen(navController, systemViewModel) }
                 composable(
                     "chat/{modelName}?sessionId={sessionId}&readOnly={readOnly}",
                     arguments = listOf(
@@ -244,4 +261,5 @@ sealed class Screen(val route: String, val translationKey: String, val icon: Ima
     object Models : Screen("models", "models", Icons.Default.List)
     object Settings : Screen("settings", "settings", Icons.Default.Settings)
     object Logs : Screen("logs", "logs", Icons.Default.Code)
+    object Comparison : Screen("comparison", "comparison", Icons.Default.Compare)
 }

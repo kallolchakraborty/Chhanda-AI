@@ -40,33 +40,40 @@ class LocalVectorStore @javax.inject.Inject constructor(
      * Searches the vector store for the top-K most similar chunks to the query embedding.
      * Uses a Min-Heap (PriorityQueue) to ensure O(N log K) complexity.
      */
-    override suspend fun search(query: Embedding, topK: Int, modelId: String): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-        val entities = try { vectorChunkDao.getAllForModel(modelId) } catch (e: Exception) { 
-            android.util.Log.e("LocalVectorStore", "Search failed: ${e.message}")
-            emptyList() 
-        }
+    override suspend fun search(query: Embedding, topK: Int, modelId: String, queryText: String?): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         
-        if (entities.isEmpty()) return@withContext emptyList()
+        // TIER 1: Keyword-based candidate retrieval (BM25)
+        // If queryText is provided, we fetch high-probability candidates using FTS5 first.
+        val candidates = if (!queryText.isNullOrBlank()) {
+            try {
+                // Sanitize query for FTS (remove special characters that break MATCH)
+                val cleanQuery = queryText.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
+                if (cleanQuery.isNotEmpty()) {
+                    vectorChunkDao.searchKeywords("$cleanQuery*")
+                } else {
+                    vectorChunkDao.getAllForModel(modelId)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("LocalVectorStore", "FTS search failed, falling back: ${e.message}")
+                vectorChunkDao.getAllForModel(modelId)
+            }
+        } else {
+            vectorChunkDao.getAllForModel(modelId)
+        }
+
+        if (candidates.isEmpty()) return@withContext emptyList()
 
         val queryVector = query.vector
-        // PRE-COMPUTE: Normalization of query vector outside the loop to avoid O(N) redundant sqrt calls
         val queryNorm = calculateNorm(queryVector)
         if (queryNorm < 1e-8) return@withContext emptyList()
 
-        /** 
-         * Senior Optimization: PriorityQueue (Min-Heap) used to track top results.
-         * Size is capped at topK + 1 to ensure complexity of O(N log K) where N is number of chunks.
-         * This avoids sorting the entire database.
-         */
         val topResults = java.util.PriorityQueue<SearchResult>(topK + 1) { a, b -> a.score.compareTo(b.score) }
 
-        for (entity in entities) {
+        // TIER 2: Quantized Cosine Similarity on candidates only
+        for (entity in candidates) {
             val vectorBytes = entity.embeddingBlob
             if (vectorBytes.size != queryVector.size) continue
             
-            // STEP 2: Fast Quantized Dot Product Calculation
-            // Senior Optimization: We work directly with bytes to avoid de-quantization overhead.
-            // Result is scaled back to float at the end of the loop.
             var dotProductInt = 0
             var vNormSqInt = 0
             for (i in queryVector.indices) {
@@ -76,16 +83,11 @@ class LocalVectorStore @javax.inject.Inject constructor(
                 vNormSqInt += vi * vi
             }
             
-            // STEP 3: Scale back and compute Cosine Similarity
-            // Normalize: (A·B) / (||A|| * ||B||)
-            // Since we scaled by 127, the product was scaled by 127*127.
-            // However, the division (dotProductInt / sqrt(vNormSqInt)) cancels out one 127.
-            // We then divide by queryNorm (which is in float space).
             val vNorm = kotlin.math.sqrt(vNormSqInt.toDouble()).toFloat()
             val score = if (vNorm > 1e-8) (dotProductInt.toFloat() / (queryNorm * 127f * vNorm)) else 0.0f
             
-            // HEURISTIC: Reject noise.
-            if (score < 0.20f) continue 
+            // HEURISTIC: Reject low-quality matches
+            if (score < 0.25f) continue 
 
             val result = SearchResult(
                 text = entity.text, 
@@ -93,14 +95,23 @@ class LocalVectorStore @javax.inject.Inject constructor(
                 metadata = mapOf("source" to entity.source, "type" to entity.type)
             )
             
-            // Maintain heap property
             topResults.add(result)
             if (topResults.size > topK) {
-                topResults.poll() // Remove lowest score to keep only top-K
+                topResults.poll()
             }
         }
         
-        topResults.toList().sortedByDescending { it.score }
+        // CONTEXT PRUNING: Capping result set and sorting
+        val finalResults = topResults.toList().sortedByDescending { it.score }
+        
+        // Final sanity check: if we have too much text, prune to avoid LLM context overflow
+        var totalChars = 0
+        val pruned = finalResults.filter {
+            totalChars += it.text.length
+            totalChars < 8000 // Cap context at ~2000 tokens
+        }
+        
+        pruned
     }
 
     private fun calculateNorm(v: FloatArray): Float {

@@ -50,6 +50,30 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
 
+    val voiceListening by viewModel.voiceListening.collectAsStateWithLifecycle()
+    val voiceResult by viewModel.voiceResult.collectAsStateWithLifecycle()
+    val voiceError by viewModel.voiceError.collectAsStateWithLifecycle()
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.startVoiceInput()
+        }
+    }
+
+    LaunchedEffect(voiceResult) {
+        if (voiceResult.isNotEmpty()) {
+            inputText = voiceResult
+        }
+    }
+
+    LaunchedEffect(voiceError) {
+        voiceError?.let {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        }
+    }
+
     val context = LocalContext.current
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     
@@ -174,7 +198,7 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showCloseConfirm = true }) { Icon(Icons.Default.Close, null) }
+                    IconButton(onClick = { showCloseConfirm = true }) { Icon(Icons.Default.Close, contentDescription = "Close Chat") }
                 }
             )
         }
@@ -186,7 +210,7 @@ fun ChatScreen(
             } else if (!uiState.isModelLoaded) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.Default.Warning, contentDescription = "Warning", tint = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.width(8.dp))
                         Text(Localization.getString("no_active_model", appLanguage), color = MaterialTheme.colorScheme.error, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
@@ -271,7 +295,7 @@ fun ChatScreen(
                         modifier = Modifier.height(36.dp),
                         shape = RoundedCornerShape(18.dp)
                     ) {
-                        Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ArrowDownward, contentDescription = "Scroll to Bottom", modifier = Modifier.size(18.dp))
                         if (unreadCount > 0) {
                             Spacer(Modifier.width(8.dp))
                             Surface(
@@ -329,6 +353,14 @@ fun ChatScreen(
                 onAttach = { viewModel.addFile(it) },
                 onRefine = { viewModel.refineText(inputText); inputText = "" },
                 isGenerating = uiState.isGenerating,
+                isListening = voiceListening,
+                onVoiceClick = {
+                    if (voiceListening) {
+                        viewModel.stopVoiceInput()
+                    } else {
+                        permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }
+                },
                 appLanguage = appLanguage,
                 isReadOnly = isReadOnly
             )

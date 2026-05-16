@@ -19,6 +19,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
 import com.chhanda.ai.util.Localization
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,8 +32,11 @@ fun ChatInput(
     onStop: () -> Unit,
     onAttach: (android.net.Uri) -> Unit,
     onRefine: () -> Unit,
+    isListening: Boolean = false,
+    onVoiceClick: () -> Unit = {},
     appLanguage: String = "English",
-    isReadOnly: Boolean = false
+    isReadOnly: Boolean = false,
+    topContent: @Composable () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
@@ -49,7 +53,9 @@ fun ChatInput(
             }
         }
     } else {
-        Row(
+        Column {
+            topContent()
+            Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -71,7 +77,7 @@ fun ChatInput(
                     TextField(
                         value = text,
                         onValueChange = onTextChange,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag("chat_input_field"),
                         placeholder = { Text(Localization.getString("type_message", appLanguage)) },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
@@ -91,6 +97,17 @@ fun ChatInput(
                             Icon(Icons.Default.AutoAwesome, "Refine", tint = MaterialTheme.colorScheme.secondary)
                         }
                     }
+
+                    IconButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onVoiceClick()
+                    }) {
+                        Icon(
+                            if (isListening) Icons.Default.Mic else Icons.Default.MicNone,
+                            contentDescription = "Voice Input",
+                            tint = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
             
@@ -105,12 +122,14 @@ fun ChatInput(
                         if (isGenerating) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primary,
                         CircleShape
                     )
+                    .testTag("chat_send_button")
             ) {
                 Icon(
                     if (isGenerating) Icons.Default.Stop else Icons.Default.Send,
-                    null,
+                    contentDescription = if (isGenerating) "Stop Inference" else "Send Message",
                     tint = if (isGenerating) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimary
                 )
+            }
             }
         }
     }

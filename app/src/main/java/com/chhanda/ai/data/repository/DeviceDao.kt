@@ -28,4 +28,7 @@ interface DeviceDao {
 
     @Query("UPDATE connected_devices SET isCurrentlyConnected = :status, lastActive = :time WHERE deviceName = :name")
     suspend fun updateDeviceStatus(name: String, status: Boolean, time: Long)
+
+    @Query("UPDATE connected_devices SET isCurrentlyConnected = 0")
+    suspend fun disconnectAllDevices()
 }

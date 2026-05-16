@@ -10,27 +10,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
 
 /**
  * AmbientBackground: A dynamic, animated mesh-gradient background that
- * creates a "breathing" atmosphere for the Chhanda Gateway.
- * It shifts colors based on system theme or active model states.
+ * creates a "breathing" atmosphere. It dynamically shifts its core hue
+ * based on the active AI model to provide visual feedback and a premium feel.
  */
 @Composable
 fun AmbientBackground(
     modifier: Modifier = Modifier,
-    primaryColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-    secondaryColor: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f)
+    baseColor: Color = MaterialTheme.colorScheme.primary
 ) {
+    // Smoothly animate between model colors
+    val animatedBaseColor by animateColorAsState(
+        targetValue = baseColor,
+        animationSpec = tween(1500, easing = FastOutSlowInEasing),
+        label = "baseColorAnimation"
+    )
+
+    val primaryColor = animatedBaseColor.copy(alpha = 0.15f)
+    val secondaryColor = animatedBaseColor.copy(alpha = 0.08f)
+    
     val infiniteTransition = rememberInfiniteTransition(label = "ambient")
     
     val offset1 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 100f,
         animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
+            animation = tween(12000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "offset1"
@@ -40,7 +47,7 @@ fun AmbientBackground(
         initialValue = 0f,
         targetValue = 150f,
         animationSpec = infiniteRepeatable(
-            animation = tween(15000, easing = LinearEasing),
+            animation = tween(18000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "offset2"
@@ -50,19 +57,30 @@ fun AmbientBackground(
         val width = size.width
         val height = size.height
 
+        // Top-Left Glow
         drawRect(
             brush = Brush.radialGradient(
                 colors = listOf(primaryColor, Color.Transparent),
-                center = Offset(width * 0.2f + offset1, height * 0.2f + offset2),
-                radius = width * 0.8f
+                center = Offset(width * 0.1f + offset1, height * 0.1f + offset2),
+                radius = width * 1.2f
             )
         )
 
+        // Bottom-Right Glow
         drawRect(
             brush = Brush.radialGradient(
                 colors = listOf(secondaryColor, Color.Transparent),
-                center = Offset(width * 0.8f - offset2, height * 0.7f - offset1),
-                radius = width * 0.8f
+                center = Offset(width * 0.9f - offset2, height * 0.9f - offset1),
+                radius = width * 1.2f
+            )
+        )
+        
+        // Subtle Center Glow for Depth
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(primaryColor.copy(alpha = 0.05f), Color.Transparent),
+                center = Offset(width * 0.5f, height * 0.5f),
+                radius = width * 0.6f
             )
         )
     }
