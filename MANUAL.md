@@ -368,7 +368,7 @@ If a VPN is detected (TUN/PPP/IPSec interface), a warning banner appears on the 
 |:---|:---|:---|
 | **Dark Mode** | Toggle | Switches between `darkColorScheme()` and `lightColorScheme()` |
 | **Thinking Mode** | Toggle | Show/hide model reasoning traces in chat |
-| **Language** | English, Bengali, Hindi, French, German | Full UI + TTS localization |
+| **Language** | English, Bengali, Hindi | Full UI + TTS localization |
 | **TTS Voice** | Kallol (Indian Male), Chhanda (Indian Female) | AI voice persona with sample preview |
 
 ### 7.2 Network Settings

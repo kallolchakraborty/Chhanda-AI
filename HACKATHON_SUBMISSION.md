@@ -29,7 +29,7 @@ In the **global south** — specifically in rural India and Bangladesh — relia
 | Cloud AI costs money | Excludes low-income users | Free, open-weight Gemma 4 models |
 | Privacy concerns | Sensitive data sent to servers | Zero-cloud architecture — all data stays on device |
 | Single-user devices | One phone, many users | AI Gateway Server — one phone serves 20 clients |
-| English-only AI | Excludes non-English speakers | 5-language support (Bengali, Hindi, French, German, English) |
+| English-only AI | Excludes non-English speakers | 3-language support (English, Hindi, Bengali) |
 
 ---
 
@@ -334,7 +334,7 @@ Healthcare workers in remote clinics can use Chhanda to process medical guidelin
 Chhanda democratizes AI access:
 - **Zero subscription cost** — runs on open-weight Gemma models
 - **Zero internet requirement** — fully offline after initial setup
-- **Multilingual** — Bengali, Hindi, English, French, German
+- **Multilingual** — English, Hindi, Bengali
 - **One-to-many** — A single phone becomes an AI server for a family, office, or school
 
 ### Privacy Sovereignty
@@ -371,7 +371,7 @@ In an era of mass data collection, Chhanda represents a fundamental shift: **you
 | **Multi-Device Serving** | ❌ | ❌ | ✅ Up to 20 clients |
 | **Document Generation** | ❌ | ✅ (Cloud) | ✅ On-device PDF/DOCX/XLSX |
 | **Thermal Auto-Throttle** | ❌ | N/A | ✅ Dynamic context reduction |
-| **Multilingual TTS** | ❌ | ✅ (Cloud) | ✅ 5 languages (on-device) |
+| **Multilingual TTS** | ❌ | ✅ (Cloud) | ✅ 3 languages (on-device) |
 | **Privacy** | ⚠️ Google telemetry | ❌ Cloud-processed | ✅ Zero-cloud, hardware-encrypted |
 | **Cost** | Free | $20/month (Plus) | ✅ Free forever |
 

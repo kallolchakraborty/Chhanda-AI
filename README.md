@@ -107,7 +107,7 @@ This application is named after and dedicated to my mother, **Chhanda Chakrabort
 | **XLSX** | Apache POI `XSSFWorkbook` with auto-sized columns and header styling |
 
 ### 7. Multilingual Support
-Bengali · English · Hindi · French · German — full UI + TTS localization with voice persona system (Kallol Indian Male, Chhanda Indian Female).
+English · Hindi · Bengali — full UI + TTS localization with voice persona system (Kallol Indian Male, Chhanda Indian Female).
 
 ---
 
@@ -430,7 +430,7 @@ chhanda-local LLM/
 | **Multi-Device Serving** | ❌ | ✅ Up to 20 concurrent clients |
 | **Document Generation** | ❌ | ✅ PDF/DOCX/XLSX on-device |
 | **Thermal Auto-Throttle** | ❌ | ✅ Dynamic context reduction |
-| **Multilingual TTS** | ❌ | ✅ 5 languages + persona voices |
+| **Multilingual TTS** | ❌ | ✅ 3 languages + persona voices |
 | **SSH Tunneling** | ❌ | ✅ Zero-config remote access |
 
 ---
