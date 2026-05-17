@@ -115,7 +115,7 @@ class ChatViewModel @Inject constructor(
     fun sendMessage(text: String, isRefinement: Boolean = false) {
         if (text.isBlank() || _isGenerating.value) return
         
-        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.THINKING_START)
 
         if (!llmEngineLazy.get().isModelLoaded.value) {
             _error.value = "No model loaded. Go to Dashboard and activate a model first."
@@ -198,7 +198,7 @@ class ChatViewModel @Inject constructor(
                             _currentRt.value = update.responseTimeMs
                             _currentPartialResponse.value = ""
                             _currentTps.value = 0.0
-
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.MESSAGE_RECEIVED)
                         }
                         is TokenUpdate.Error -> {
                             _error.value = update.message

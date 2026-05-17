@@ -63,6 +63,7 @@ fun ConfigScreen(
     val context = LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
 
     var tempPort by remember(port) { mutableStateOf(port) }
     var tempHfToken by remember(hfToken) { mutableStateOf(hfToken) }
@@ -114,7 +115,10 @@ fun ConfigScreen(
                                 Text(Localization.getString("dark_mode", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text(Localization.getString("dark_mode_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                             }
-                            Switch(checked = isDark, onCheckedChange = { viewModel.toggleDarkMode(it) })
+                            Switch(checked = isDark, onCheckedChange = {
+                                hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                viewModel.toggleDarkMode(it)
+                            })
                         }
                         
                         Spacer(Modifier.height(24.dp))
@@ -134,7 +138,10 @@ fun ConfigScreen(
                             }
                             Switch(
                                 checked = finalThinkingEnabled, 
-                                onCheckedChange = { viewModel.setThinkingModeEnabled(it) },
+                                onCheckedChange = {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                    viewModel.setThinkingModeEnabled(it)
+                                },
                                 enabled = isThinkingSupported
                             )
                         }
@@ -169,6 +176,7 @@ fun ConfigScreen(
                                     DropdownMenuItem(
                                         text = { Text(lang) },
                                         onClick = {
+                                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                                             viewModel.setAppLanguage(lang)
                                             expanded = false
                                         }
@@ -216,7 +224,10 @@ fun ConfigScreen(
                                             ) {
                                                 Text(voice, modifier = Modifier.weight(1f))
                                                 IconButton(
-                                                    onClick = { viewModel.playSample(voice, appLanguage) },
+                                                    onClick = {
+                                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                                                        viewModel.playSample(voice, appLanguage)
+                                                    },
                                                     modifier = Modifier.size(32.dp)
                                                 ) {
                                                     Icon(
@@ -229,6 +240,7 @@ fun ConfigScreen(
                                             }
                                         },
                                         onClick = {
+                                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                                             viewModel.setSelectedVoice(voice)
                                             voiceExpanded = false
                                         }
@@ -264,7 +276,14 @@ fun ConfigScreen(
                         Text(Localization.getString("context_length_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         Slider(
                             value = (ctxLength.toFloat() / 32768f).coerceIn(0f, 1f),
-                            onValueChange = { viewModel.setContextLength((it * 32768).toInt()) }
+                            onValueChange = {
+                                val newLength = (it * 32768).toInt()
+                                val currentInt = ctxLength.toIntOrNull() ?: 2048
+                                if (newLength / 1000 != currentInt / 1000) {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                }
+                                viewModel.setContextLength(newLength)
+                            }
                         )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("102", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
@@ -285,7 +304,10 @@ fun ConfigScreen(
                             }
                             Switch(
                                 checked = turboQuantEnabled,
-                                onCheckedChange = { viewModel.toggleTurboQuant(it) }
+                                onCheckedChange = {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                    viewModel.toggleTurboQuant(it)
+                                }
                             )
                         }
 
@@ -294,7 +316,13 @@ fun ConfigScreen(
                         Text(Localization.getString("max_devices_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         Slider(
                             value = (maxDevices.toFloat() / 20f).coerceIn(0f, 1f),
-                            onValueChange = { viewModel.setMaxDevices((it * 20).toInt().coerceAtLeast(1)) }
+                            onValueChange = {
+                                val newDevices = (it * 20).toInt().coerceAtLeast(1)
+                                if (newDevices != maxDevices) {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                }
+                                viewModel.setMaxDevices(newDevices)
+                            }
                         )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("1", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
@@ -317,7 +345,10 @@ fun ConfigScreen(
                             }
                             Switch(
                                 checked = ragEnabled,
-                                onCheckedChange = { viewModel.toggleRag(it) }
+                                onCheckedChange = {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                    viewModel.toggleRag(it)
+                                }
                             )
                         }
 
@@ -367,7 +398,10 @@ fun ConfigScreen(
                             }
                             Switch(
                                 checked = privacyShieldEnabled,
-                                onCheckedChange = { viewModel.setPrivacyShieldEnabled(it) }
+                                onCheckedChange = {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                    viewModel.setPrivacyShieldEnabled(it)
+                                }
                             )
                         }
 
@@ -384,7 +418,10 @@ fun ConfigScreen(
                             }
                             Switch(
                                 checked = appSecurityEnabled,
-                                onCheckedChange = { viewModel.setAppSecurityEnabled(it) }
+                                onCheckedChange = {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                    viewModel.setAppSecurityEnabled(it)
+                                }
                             )
                         }
                         
@@ -400,16 +437,21 @@ fun ConfigScreen(
                             shape = RoundedCornerShape(12.dp),
                             trailingIcon = { 
                                 Row {
-                                    IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                                    IconButton(onClick = {
+                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                        isKeyVisible = !isKeyVisible
+                                    }) {
                                         Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = if (isKeyVisible) "Hide API Key" else "Show API Key")
                                     }
                                     IconButton(onClick = { 
+                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                                         val newKey = "CH-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
                                         tempApiKey = newKey
                                     }) {
                                         Icon(Icons.Default.Refresh, contentDescription = "Regenerate API Key")
                                     }
                                     IconButton(onClick = { 
+                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempApiKey))
                                     }) {
                                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy API Key")
@@ -438,10 +480,14 @@ fun ConfigScreen(
                             placeholder = { Text("hf_...") },
                             trailingIcon = {
                                 Row {
-                                    IconButton(onClick = { clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempHfToken)) }) {
+                                    IconButton(onClick = {
+                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempHfToken))
+                                    }) {
                                         Icon(Icons.Default.ContentCopy, contentDescription = "Copy HF Token")
                                     }
                                     IconButton(onClick = { 
+                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                                         clipboardManager.getText()?.text?.let { tempHfToken = it }
                                     }) {
                                         Icon(Icons.Default.ContentPaste, contentDescription = "Paste HF Token")
@@ -457,7 +503,10 @@ fun ConfigScreen(
 
                         Spacer(Modifier.height(32.dp))
                         Button(
-                            onClick = { viewModel.revokeAllSessions() },
+                            onClick = {
+                                hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
+                                viewModel.revokeAllSessions()
+                            },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -483,7 +532,10 @@ fun ConfigScreen(
             item {
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { showSaveConfirmDialog = true },
+                    onClick = {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                        showSaveConfirmDialog = true
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
@@ -501,6 +553,7 @@ fun ConfigScreen(
                 text = { Text("Are you sure you want to save the changes?") },
                 confirmButton = {
                     TextButton(onClick = {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.SUCCESS_DOUBLE_TAP)
                         viewModel.setServerPort(tempPort)
                         viewModel.setHfToken(tempHfToken)
                         viewModel.setApiKey(tempApiKey)
@@ -510,7 +563,10 @@ fun ConfigScreen(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showSaveConfirmDialog = false }) {
+                    TextButton(onClick = {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                        showSaveConfirmDialog = false
+                    }) {
                         Text("Cancel")
                     }
                 }
@@ -553,6 +609,8 @@ fun ConfigScreen(
 fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel, appLanguage: String) {
     val autoDeleteDays by viewModel.autoDeleteDays.collectAsStateWithLifecycle()
     val autoDeleteEnabled by viewModel.autoDeleteEnabled.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     
     ChhandaCard {
         Row(
@@ -566,7 +624,10 @@ fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.Syst
             }
             Switch(
                 checked = autoDeleteEnabled,
-                onCheckedChange = { viewModel.setAutoDeleteEnabled(it) }
+                onCheckedChange = {
+                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                    viewModel.setAutoDeleteEnabled(it)
+                }
             )
         }
         
@@ -604,7 +665,13 @@ fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.Syst
             Spacer(Modifier.height(4.dp))
             Slider(
                 value = (autoDeleteDays.toFloat() / 30f).coerceIn(0f, 1f),
-                onValueChange = { viewModel.setAutoDeleteDays((it * 30).toInt().coerceAtLeast(1)) }
+                onValueChange = {
+                    val newDays = (it * 30).toInt().coerceAtLeast(1)
+                    if (newDays != autoDeleteDays) {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                    }
+                    viewModel.setAutoDeleteDays(newDays)
+                }
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("1 day", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
@@ -617,6 +684,7 @@ fun AutoDeleteSettingsCard(viewModel: com.chhanda.ai.presentation.viewmodel.Syst
 @Composable
 fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewModel) {
     val context = LocalContext.current
+    val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val lastSync by viewModel.lastSyncTime.collectAsStateWithLifecycle()
     
@@ -654,7 +722,10 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                 Text("Sync your chat history securely across devices.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { launcher.launch(googleSignInClient.signInIntent) },
+                    onClick = {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                        launcher.launch(googleSignInClient.signInIntent)
+                    },
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("Sign in with Google")
@@ -670,6 +741,7 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                 }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { 
+                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                     googleSignInClient.signOut().addOnCompleteListener { googleAccount = null }
                 }) {
                     Text("Sign Out", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
@@ -685,7 +757,10 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
             } else {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
-                        onClick = { googleAccount?.let { viewModel.backupToCloud(it) } },
+                        onClick = {
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                            googleAccount?.let { viewModel.backupToCloud(it) }
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -695,7 +770,10 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                     }
                     
                     OutlinedButton(
-                        onClick = { googleAccount?.let { viewModel.restoreFromCloud(it) } },
+                        onClick = {
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                            googleAccount?.let { viewModel.restoreFromCloud(it) }
+                        },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     ) {
