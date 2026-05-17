@@ -68,21 +68,12 @@ class ServerOrchestrator @Inject constructor(
                 // Use the persisted active model from settings as the source of truth
                 val selectedModelName = settingsRepository.activeModelFlow.first()
                 val allModels = modelProvisioner.ownedModels.value + modelProvisioner.sharedModels.value
-                var activeModel = allModels.find { it.name == selectedModelName } 
-                    ?: allModels.find { it.isActive } // Fallback to whatever is marked active
-                
-                if (activeModel == null && allModels.isNotEmpty()) {
-                    val fallback = allModels.first()
-                    appLogManager.addLog("SERVER", "Auto-selecting fallback model: ${fallback.name}", "INFO")
-                    settingsRepository.setActiveModel(fallback.name)
-                    modelProvisioner.refreshModelsSync()
-                    activeModel = fallback
-                }
+                val activeModel = allModels.find { it.name == selectedModelName }
 
                 if (activeModel == null) {
                     _isModelLoading.value = false
-                    appLogManager.addLog("SERVER", "Startup failed: No active model selected", "ERROR")
-                    _serverError.value = "No active model"
+                    appLogManager.addLog("SERVER", "Startup aborted: No LLM model has been selected. Please tap a model from the list to activate it.", "ERROR")
+                    _serverError.value = "No model selected. Please select a model."
                     return@launch
                 }
 
