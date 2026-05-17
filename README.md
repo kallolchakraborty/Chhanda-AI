@@ -109,6 +109,20 @@ This application is named after and dedicated to my mother, **Chhanda Chakrabort
 ### 7. Multilingual Support
 English · Hindi · Bengali — full UI + TTS localization with voice persona system (Kallol Indian Male, Chhanda Indian Female).
 
+### 8. Recent Production Hardening & UX Innovations (May 2026)
+| Capability | Details |
+|:---|:---|
+| **Advanced Chat UI Turns** | Copy messages to clipboard, edit submitted queries inline (with trailing turn database pruning), and retry conversational turns. |
+| **In-Context Feedback Optimization** | Thumbs up/down response ratings mapped to Room database. Dynamically retrieves liked/disliked responses to formulate few-shot dynamic prompt learning templates for future inferences. |
+| **Hierarchical Search Priority** | Automatically adjusts search paths based on connectivity: online (RAG → Web → Pretrained parameters) vs. offline (RAG → Pretrained parameters) with real-time UI stage updates. |
+| **Automated Title Generation** | Launches asynchronous model invocation on first turns to synthesize a crisp 3-to-5 word chat title, sorting sessions dynamically by active recency in the sidebar. |
+| **In-Context Read-Only Sessions** | If no active model is running, opening an old chat switches to zero-input read-only banner mode, preserving context safety until a model is restarted. |
+| **Compact Memory & Archives** | Displays the last 10 vector file uploads in high-density layout (scaled icons, tighter padding). Tapping 'View Archives' expands to the full paginated list. |
+| **Hardware-Aware Slider Init** | Analyzes system RAM capacity to initialize default context limits (2GB RAM → 1024, 4GB RAM → 2048, 8GB+ RAM → 4096 tokens). |
+| **HF Authenticated Downloader** | Prompts for a HuggingFace Read-Only API token on download failure, safely storing it inside Android KeyStore Encrypted SharedPreferences for subsequent runs. |
+| **Google Drive Cloud Sync** | Auto-syncs chats offline-to-online daily by default. Supports user configurations (custom schedules, no sync, Google account binding check). |
+| **Hot Model Swapping & Reload** | Swaps active running models directly from the active card. Automatically stops the server, tears down the C++ engine instance, swaps models, and starts back online with zero manual restarts. |
+
 ---
 
 ## 🏗️ High-Level System Architecture
@@ -432,6 +446,13 @@ chhanda-local LLM/
 | **Thermal Auto-Throttle** | ❌ | ✅ Dynamic context reduction |
 | **Multilingual TTS** | ❌ | ✅ 3 languages + persona voices |
 | **SSH Tunneling** | ❌ | ✅ Zero-config remote access |
+| **Google Drive Cloud Sync** | ❌ | ✅ 100% Offline-aware sync scheduler & daily cloud backups |
+| **HF Authenticated Downloader**| ❌ | ✅ Secure TEE-encrypted token validation and retry gate |
+| **Interactive Model Swapping** | ❌ | ✅ Dynamic local hot reloading with safe multi-engine cleanup |
+| **Hierarchical Search Precedence**| ❌ | ✅ Connectivity-aware RAG → Web → Local Param routing |
+| **Few-Shot Prompt Learning** | ❌ | ✅ User bubble feedback loop with real-time prompt injects |
+| **In-Context Read-Only Sessions**| ❌ | ✅ Server-aware security layer for reading session histories |
+| **Offline Hotspot Discovery** | ❌ | ✅ Automated tether settings launcher & join validation |
 
 ---
 

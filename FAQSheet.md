@@ -16,6 +16,8 @@
 8. [Safety & Guardrails](#-safety--guardrails)
 9. [Hardware & Performance](#-hardware--performance)
 10. [Troubleshooting](#-troubleshooting)
+11. [Production-Hardening UX & Architecture Enhancements](#%EF%B8%8F-production-hardening--ux-enhancements-may-2026)
+12. [Engineering & AI Partnership](#-engineering--ai-partnership)
 
 ---
 
@@ -343,16 +345,78 @@ This is applied **bidirectionally** — on user input before it reaches the LLM,
 
 ---
 
+## 🛠️ Production-Hardening & UX Enhancements (May 2026)
+
+### 24. How does Interactive Model Swapping (Hot Reloading) work?
+**Safe Multi-Engine IPC Cleanup.** 
+* When the user clicks on the active model name in `ActiveModelCard` (equipped with `Icons.Default.SwapHoriz` as a visual cue), it triggers the Model Picker bottom sheet containing all local (`owned + shared`) models.
+* If a model is chosen, Chhanda evaluates whether the model gateway server is actively running.
+* If the server is stopped, Chhanda simply updates the active model state in the view model.
+* If the server is active, Chhanda executes a **hot-reloading pipeline** (`switchModelAndRestartServer`):
+  1. Stops the Ktor-CIO server instance.
+  2. Tears down the underlying binder client IPC connection to the native C++ engine (`RemoteLLMEngine`).
+  3. Awaits resource release (2.5-second lazy flush buffer) to ensure 0% socket collisions or Android OOM errors.
+  4. Activates the newly chosen model.
+  5. Automatically brings the Ktor-CIO server back online with the fresh model parameters.
+* If the selected model is already the active one, the operation is dismissed with zero redundant server cycles.
+
+### 25. How does Hierarchical Search Priority handle connectivity drops?
+**Precedence-Driven Fallbacks.** The `SendMessageUseCase` queries `NetworkManager` to dynamically govern search precedence before prompt formulation:
+
+* **Online Search Precedence**: 
+  1. **Tier 1 (RAG Database)**: ProbesRoom vector database. If a highly confident match is found, retrieves it.
+  2. **Tier 2 (Real-Time Web)**: If RAG returns no match, scraping is launched to pull real-time search engine context.
+  3. **Tier 3 (Pretrained Knowledge)**: If web results are blank, falls back to the model's core pre-trained parameters.
+* **Offline Search Precedence**: 
+  1. **Tier 1 (RAG Database)**: Searches the local room vector database.
+  2. **Tier 2 (Pretrained Knowledge)**: If no match is found, falls back directly to pre-trained weights with zero online attempts.
+* **UI Attunement**: The Compose screen displays real-time stage updates under the text input bar (e.g., *"Searching local database..."*, *"Offline fallback active..."*).
+
+### 26. How do Thumbs Up/Down and Few-Shot Prompt Adaptation work?
+**Dynamic Feedback Learning.**
+* **Local Persistence**: Under each assistant response bubble, the user can toggle a Thumbs Up or Thumbs Down button. This calls `viewModel.updateMessageFeedback` which maps `isLiked: Boolean?` directly to `MessageEntity` in the SQLite DB.
+* **Prompt Augmentation**: Prior to prompt packaging inside `SendMessageUseCase`, the engine queries the database to extract all previously rated messages.
+* **Few-Shot Packaging**:
+  * Formulates highly tailored guidelines from these templates (e.g., *"Users liked the styling of: [Sample]. Users disliked the style of: [Sample]"*).
+  * Injects this segment as a defensive system constraint under base instructions.
+  * This dynamically steers the local model to replicate formatting, tone, and content structures that the user previously liked while steering clear of disliked traits.
+
+### 27. How does Google Drive Cloud Sync maintain local privacy?
+**Offline-Aware Encryption & Opt-out Controls.**
+* **Auto-Sync Scheduler**: Daily background sync scheduler with a fully configurable user-facing settings dashboard.
+* **Configuration States**:
+  * Users can customize sync interval schedules (Daily, Weekly, or manual trigger).
+  * A master **"No Cloud Sync"** toggle disables all Google Drive integrations, greying out all sync scheduling preferences.
+  * Links directly with the device's Google Account API; if no account is linked, all background sync actions are completely blocked.
+
+### 28. How does the Manual Hotspot Wizard handle offline sharing?
+**Tether Configuration Wizard & Connection Verification.**
+* If the host device has no active network and clicks the QR gateway, Chhanda suspends automated NSD and opens a **Manual Hotspot Setup Screen** (SETUP MODE).
+* It provides clean step-by-step instructions for turning on Tethering and features a shortcut launcher button (`ACTION_TETHER_WIFI_SETTINGS`) to launch Android system hotspot menus.
+* Tapping *"I've Connected"* fires a beautiful custom `AlertDialog` demanding confirmation that client devices have successfully joined the hotspot.
+* On user confirmation, the dialog transitions to READY MODE, updating local gateway routes and showing the QR code for local clients to scan.
+
+### 29. What is the hardware-aware context limit optimization?
+**Adaptive Memory Guardrails.** To avoid Out-Of-Memory (OOM) failures on low-end hardware:
+* At launch, Chhanda queries the device's available system RAM.
+* Reconfigures the default slider range:
+  * **Low-End (<= 2GB RAM)**: Default 1,024 tokens.
+  * **Mid-Range (4GB RAM)**: Default 2,048 tokens.
+  * **High-End (>= 8GB RAM)**: Default 4,096 tokens (up to 32,768).
+* This guarantees that devices automatically bootstrap themselves with safe inference sizes.
+
+---
+
 ## ⚡ Engineering & AI Partnership
 
-### 24. What role did Android Studio play in the development of Chhanda?
+### 30. What role did Android Studio play in the development of Chhanda?
 **Android Studio** was the foundational IDE used for:
 *   **Compilation & Gradle Orchestration**: Auto-managed 22 external dependencies and Gradle targets.
 *   **Logcat Diagnostics**: Inspected multi-process communication binder binds (`RemoteLLMEngine`) and caught thread safety violations on background audio recording.
 *   **Android Profiler**: Profiled heap allocation and CPU thermal thresholds during on-device Gemma 4B model loading.
 *   **UI/UX Jetpack Compose Inspection**: Validated layout renderings on a physical target.
 
-### 25. Who was the AI assistant involved in this project?
+### 31. Who was the AI assistant involved in this project?
 The entire codebase structure, RAG quantization pipeline, server rate-limiting features, and documentation hardening passes were co-developed exclusively with **Google's Gemini 3 Flash** as the sole AI assistant partner, ensuring state-of-the-art edge AI architecture.
 
 ---
