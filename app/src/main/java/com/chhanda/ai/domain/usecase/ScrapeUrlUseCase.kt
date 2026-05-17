@@ -29,6 +29,45 @@ class ScrapeUrlUseCase @Inject constructor(
             throw Exception("INTERNET_REQUIRED: No active connection detected. Scraping aborted.")
         }
         
+        // 🚀 Intercept GitHub repository links to scrape code recursively
+        val githubRegex = Regex("""https?://(?:www\.)?github\.com/([^/]+)/([^/]+)""")
+        val match = githubRegex.find(url)
+        if (match != null) {
+            val owner = match.groupValues[1]
+            val repo = match.groupValues[2].substringBefore("?").substringBefore(".git")
+            val ignoredKeywords = setOf("trending", "features", "pricing", "marketplace", "explore", "topics", "search", "login", "join", "about", "contact")
+            if (!ignoredKeywords.contains(owner.lowercase()) && !ignoredKeywords.contains(repo.lowercase())) {
+                android.util.Log.i("ScrapeUrl", "GitHub Repo detected: $owner/$repo. Commencing recursive code harvesting...")
+                try {
+                    val zipBytes = downloadZip(owner, repo)
+                    val files = extractCodeFilesFromZip(zipBytes)
+                    if (files.isNotEmpty()) {
+                        val builder = StringBuilder()
+                        builder.append("# GitHub Repository: $owner/$repo\n\n")
+                        builder.append("## Repository Directory Structure\n")
+                        files.keys.sorted().forEach { path ->
+                            builder.append("- `$path`\n")
+                        }
+                        builder.append("\n---\n\n")
+                        
+                        files.forEach { (path, content) ->
+                            val ext = path.substringAfterLast(".", "")
+                            builder.append("### File: `$path`\n")
+                            builder.append("```$ext\n")
+                            builder.append(content)
+                            builder.append("\n```\n\n")
+                        }
+                        android.util.Log.i("ScrapeUrl", "GitHub scraping complete: Indexed ${files.size} code files.")
+                        return@withContext builder.toString()
+                    } else {
+                        android.util.Log.w("ScrapeUrl", "ZIP downloaded but no indexable code files found. Falling back to normal scraper.")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ScrapeUrl", "GitHub repository extraction aborted: ${e.message}", e)
+                }
+            }
+        }
+        
         var lastError: Exception? = null
         
         // 🚀 Senior Strategy: 3-Stage Retry with Identity Stealth
@@ -262,6 +301,89 @@ class ScrapeUrlUseCase @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun downloadZip(owner: String, repo: String): ByteArray = withContext(Dispatchers.IO) {
+        val urls = listOf(
+            "https://github.com/$owner/$repo/archive/refs/heads/main.zip",
+            "https://github.com/$owner/$repo/archive/refs/heads/master.zip",
+            "https://api.github.com/repos/$owner/$repo/zipball"
+        )
+        
+        var lastEx: Exception? = null
+        for (urlString in urls) {
+            try {
+                val url = java.net.URL(urlString)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.instanceFollowRedirects = true
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                
+                val responseCode = conn.responseCode
+                if (responseCode == 200 || responseCode == 302 || responseCode == 301) {
+                    conn.inputStream.use { input ->
+                        return@withContext input.readBytes()
+                    }
+                } else {
+                    throw Exception("HTTP $responseCode from $urlString")
+                }
+            } catch (e: Exception) {
+                lastEx = e
+            }
+        }
+        throw lastEx ?: Exception("Failed to download ZIP for repo $owner/$repo")
+    }
+
+    private fun extractCodeFilesFromZip(zipBytes: ByteArray): Map<String, String> {
+        val fileContents = mutableMapOf<String, String>()
+        val allowedExtensions = setOf(
+            "kt", "java", "py", "js", "ts", "cpp", "h", "c", "cs", "go", "rs", "swift",
+            "md", "txt", "json", "xml", "html", "css", "yaml", "yml", "gradle", "properties", "sql"
+        )
+        
+        try {
+            java.io.ByteArrayInputStream(zipBytes).use { byteStream ->
+                java.util.zip.ZipInputStream(byteStream).use { zipStream ->
+                    var entry = zipStream.nextEntry
+                    while (entry != null) {
+                        if (!entry.isDirectory) {
+                            val name = entry.name
+                            val ext = name.substringAfterLast(".", "").lowercase()
+                            if (allowedExtensions.contains(ext) && !isNoiseFile(name)) {
+                                try {
+                                    val content = zipStream.readBytes().toString(Charsets.UTF_8)
+                                    if (content.isNotBlank()) {
+                                        fileContents[name] = content
+                                    }
+                                } catch (e: Exception) {
+                                    // Skip binary/corrupted files gracefully
+                                }
+                            }
+                        }
+                        zipStream.closeEntry()
+                        entry = zipStream.nextEntry
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ScrapeUrl", "ZIP parsing error: ${e.message}", e)
+        }
+        return fileContents
+    }
+
+    private fun isNoiseFile(path: String): Boolean {
+        val lowercasePath = path.lowercase()
+        return lowercasePath.contains("/.git/") || 
+               lowercasePath.contains("/build/") || 
+               lowercasePath.contains("/node_modules/") || 
+               lowercasePath.contains("/gradle/") ||
+               lowercasePath.contains("/.idea/") ||
+               lowercasePath.contains("/.gradle/") ||
+               lowercasePath.contains("/dist/") ||
+               lowercasePath.contains("package-lock.json") ||
+               lowercasePath.contains("yarn.lock")
     }
 
     private fun isInternetAvailable(): Boolean {
