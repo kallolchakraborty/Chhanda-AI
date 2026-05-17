@@ -81,7 +81,7 @@ fun ChatScreen(
     val ttsLocale = when (appLanguage) {
         "Bengali" -> java.util.Locale("bn", "BD")
         "Hindi" -> java.util.Locale("hi", "IN")
-        else -> java.util.Locale.ENGLISH
+        else -> java.util.Locale("en", "IN")
     }
 
     var activeTtsMessageId by remember { mutableStateOf<String?>(null) }
@@ -258,6 +258,9 @@ fun ChatScreen(
                                     tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, msgIdStr)
                                 }
                             }
+                        },
+                        onSourceClick = { sourceName ->
+                            systemViewModel.openFileByName(sourceName)
                         }
                     )
                 }

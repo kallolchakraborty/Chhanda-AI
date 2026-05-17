@@ -17,9 +17,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository,
     private val responseProcessor: com.chhanda.ai.domain.service.ResponseProcessor,
     private val agenticActionHandler: com.chhanda.ai.domain.service.AgenticActionHandler,
+    private val webSearchUseCase: com.chhanda.ai.domain.usecase.WebSearchUseCase,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
+    
     operator fun invoke(
         userText: String, 
         deviceId: String, 
@@ -60,7 +62,50 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             var hasDbKnowledge = longTermContext.isNotBlank()
             var hasAttachmentKnowledge = false 
-            isContextFound = hasDbKnowledge 
+            
+            // Web Search Fallback if enabled and local database does not yield matches
+            var hasWebKnowledge = false
+            var webContext = ""
+            val retrievedSourcesList = mutableListOf<String>()
+
+            // 1. Gather any sources from local database context
+            if (hasDbKnowledge) {
+                val sourceRegex = """\[Source #\d+:\s*(.*?)\]""".toRegex()
+                sourceRegex.findAll(longTermContext).forEach { match ->
+                    val cleanSrc = match.groupValues[1].trim()
+                    if (cleanSrc.isNotEmpty() && !retrievedSourcesList.contains(cleanSrc)) {
+                        retrievedSourcesList.add(cleanSrc)
+                    }
+                }
+            }
+
+            // 2. Perform web search if local database is empty and RAG is enabled
+            if (ragEnabled && !hasDbKnowledge) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches. Searching the web..."))
+                try {
+                    val searchResults = webSearchUseCase(userText)
+                    if (searchResults.isNotEmpty()) {
+                        hasWebKnowledge = true
+                        webContext = buildString {
+                            append("<retrieved_web_knowledge>\n")
+                            searchResults.forEachIndexed { index, result ->
+                                append("[Source #$index: ${result.title}]\n")
+                                append("URL: ${result.url}\n")
+                                append("Content: ${result.snippet}\n\n")
+                                val combinedSource = "${result.title}|${result.url}"
+                                if (!retrievedSourcesList.contains(combinedSource)) {
+                                    retrievedSourcesList.add(combinedSource)
+                                }
+                            }
+                            append("</retrieved_web_knowledge>")
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
+                }
+            }
+
+            isContextFound = hasDbKnowledge || hasWebKnowledge
 
             if (source.lowercase() != "api") {
                 val attachmentPathsString = if (attachments.isNotEmpty()) attachments.joinToString(",") { it.toString() } else null
@@ -118,9 +163,20 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     append("USER PREFERENCE: The user has requested a compact response. While you can reason internally in <thought> tags if needed, keep the final answer concise and direct.\n")
                 }
 
-                if (isContextFound) {
-                    append("STRICT GROUNDING: The provided context is your SOURCE OF TRUTH. Do not use outside knowledge if it contradicts the context.\n")
-                    append("UNSURE CASE: If the context doesn't contain the answer, say: 'Based on the provided documents, I don't have enough information.'\n")
+                // Senior Ingestion Architecture: Prioritization logic
+                if (hasDbKnowledge) {
+                    append("LOCAL KNOWLEDGE BASE RETRIEVED: Use the provided local database context in the <retrieved_knowledge> section as your primary source of truth. Ground your response heavily in this facts list first.\n")
+                }
+                if (hasWebKnowledge) {
+                    append("WEB SEARCH RESULTS RETRIEVED: Real-time search results are provided in <retrieved_web_knowledge> because no local database matches were found. Use this web context to answer the query accurately.\n")
+                }
+                if (hasAttachmentKnowledge) {
+                    append("ATTACHMENT DATA RETRIEVED: Use the text extracted from the user's uploaded attachment files to answer the query.\n")
+                }
+                if (!hasDbKnowledge && !hasWebKnowledge && !hasAttachmentKnowledge) {
+                    append("NO CONTEXT RETRIEVED: No local knowledge base, web results, or attachments are available. Answer the question using your pre-trained general knowledge base. Be highly helpful and detailed.\n")
+                } else {
+                    append("UNSURE CASE: If the question cannot be answered by the retrieved local documents or web search results, explain what is missing, and then provide a helpful response using your pre-trained parameters, clearly stating that you are falling back to pretrained general intelligence.\n")
                 }
 
                 if (llmEngine.isMultimodal() && attachments.any { it.toString().contains("image") }) {
@@ -156,8 +212,6 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 // Reset stateful conversation to prevent session pollution across independent API calls
                 llmEngine.resetSession(sessionId)
 
-                // Build the user prompt cleanly — do NOT inject Gemma chat template markers.
-                // LiteRT's Conversation.sendMessageAsync() handles chat templating internally.
                 val apiPrompt = buildString {
                     if (history.isNotEmpty()) {
                         append("CONVERSATION HISTORY:\n")
@@ -182,13 +236,17 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         append(longTermContext)
                         append("\n\n")
                     }
+                    if (webContext.isNotBlank()) {
+                        append("Retrieved Web Context:\n")
+                        append(webContext)
+                        append("\n\n")
+                    }
                     append(sanitizedUserText)
                 }
 
-                // Pass conversation history as structured pairs (LiteRT handles turn formatting)
                 Triple(apiPrompt, history, systemInstruction)
             } else {
-                val promptText = if (attachmentContext.isBlank() && longTermContext.isBlank()) {
+                val promptText = if (attachmentContext.isBlank() && longTermContext.isBlank() && webContext.isBlank()) {
                     sanitizedUserText
                 } else {
                     buildString {
@@ -200,6 +258,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         if (longTermContext.isNotBlank()) {
                             append("Retrieved Context:\n")
                             append(longTermContext) 
+                            append("\n\n")
+                        }
+                        if (webContext.isNotBlank()) {
+                            append("Retrieved Web Context:\n")
+                            append(webContext)
                             append("\n\n")
                         }
                         append("User Question: ")
@@ -223,14 +286,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         val cleanedResponse = processed.text
                         val extractedThinking = processed.thinking
 
-                        val sourceTag = when {
-                            hasAttachmentKnowledge && hasDbKnowledge -> "\n\n*(Ref: Multi-Source Context)*"
-                            hasAttachmentKnowledge -> "\n\n*(Ref: Attached Documents)*"
-                            hasDbKnowledge -> "\n\n*(Ref: Local Knowledge Base)*"
-                            else -> ""
+                        // Append sources metadata block at the very end
+                        val sourcesTag = if (retrievedSourcesList.isNotEmpty()) {
+                            "\n\n[Sources: ${retrievedSourcesList.joinToString("||")}]"
+                        } else {
+                            ""
                         }
 
-                        val toSave = cleanedResponse + if (isContextFound) sourceTag else ""
+                        val toSave = cleanedResponse + sourcesTag
 
                         if (toSave.isNotBlank() || !extractedThinking.isNullOrBlank()) {
 
@@ -251,6 +314,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                         hasAttachmentKnowledge && hasDbKnowledge -> "Multi-Source"
                                         hasAttachmentKnowledge -> "Attachment"
                                         hasDbKnowledge -> "Knowledge Base"
+                                        hasWebKnowledge -> "Web Fallback"
                                         else -> null
                                     },
                                     responseTimeMs = update.responseTimeMs,

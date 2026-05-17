@@ -66,7 +66,7 @@ fun cleanTextForTts(text: String): String {
         .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
         .replace(Regex("\\*(.*?)\\*"), "$1")
         .replace(Regex("`(.*?)`"), "$1")
-        .replace(Regex("```[\\s\\S]*?```"), " Please check the code block for details. ")
+        .replace(Regex("```[\\s\\S]*?```"), " Check the code block for reference. ")
         .replace(Regex("\\[CREATE_FILE.*?\\][\\s\\S]*?\\[/CREATE_FILE\\]"), "")
         .replace(Regex("\\[GENERATE_FILE.*?\\][\\s\\S]*?\\[/GENERATE_FILE\\]"), "")
         .replace(Regex("#+\\s+"), "")

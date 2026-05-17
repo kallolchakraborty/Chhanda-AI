@@ -473,7 +473,7 @@ class SystemViewModel @Inject constructor(
             "Hindi" -> Locale("hi", "IN")
             "French" -> Locale.FRENCH
             "German" -> Locale.GERMAN
-            else -> Locale.ENGLISH
+            else -> Locale("en", "IN")
         }
 
         if (sampleTts == null) {
@@ -1042,6 +1042,30 @@ class SystemViewModel @Inject constructor(
             context.startActivity(intent)
         } catch (e: Exception) {
             addLog("STORAGE", "Could not open file: ${file.name}", "ERROR")
+        }
+    }
+
+    fun openFileByName(fileName: String) {
+        try {
+            val trimmedName = fileName.trim()
+            if (trimmedName.startsWith("http://") || trimmedName.startsWith("https://")) {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(trimmedName)).apply {
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                addLog("STORAGE", "Opened scraped web source: $trimmedName", "INFO")
+                return
+            }
+            
+            // Search files list
+            val file = allFiles.value.find { it.name.equals(trimmedName, ignoreCase = true) }
+            if (file != null) {
+                openFile(file)
+            } else {
+                addLog("STORAGE", "Source file not found locally: $trimmedName", "WARNING")
+            }
+        } catch (e: Exception) {
+            addLog("STORAGE", "Could not open file by name ($fileName): ${e.message}", "ERROR")
         }
     }
 

@@ -104,7 +104,8 @@ fun MessageBubble(
     tts: android.speech.tts.TextToSpeech?,
     isActiveTts: Boolean = false,
     isGenerating: Boolean = false,
-    onTtsToggle: () -> Unit = {}
+    onTtsToggle: () -> Unit = {},
+    onSourceClick: (String) -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val isUser = message.role == "user"
@@ -207,11 +208,67 @@ fun MessageBubble(
                     }
                 }
                 
-                if (finalResponse.isNotEmpty()) {
+                var displayText = finalResponse
+                val sourcesList = mutableListOf<Pair<String, String>>()
+                val sourcesMatch = Regex("\\[Sources:\\s*(.*?)\\]$").find(finalResponse)
+                if (sourcesMatch != null) {
+                    displayText = finalResponse.substring(0, sourcesMatch.range.first).trim()
+                    val sourcesStr = sourcesMatch.groupValues[1]
+                    sourcesStr.split("||").forEach { src ->
+                        if (src.contains("|")) {
+                            val parts = src.split("|", limit = 2)
+                            if (parts.size == 2) sourcesList.add(Pair(parts[0], parts[1]))
+                        } else {
+                            sourcesList.add(Pair(src, src))
+                        }
+                    }
+                }
+
+                if (displayText.isNotEmpty()) {
                     MarkdownText(
-                        text = finalResponse,
+                        text = displayText,
                         color = textColor
                     )
+                }
+                
+                if (sourcesList.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Sources:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textColor.copy(alpha = 0.7f))
+                    Spacer(Modifier.height(4.dp))
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        sourcesList.forEach { (title, url) ->
+                            val isWeb = url.startsWith("http://") || url.startsWith("https://")
+                            val icon = if (isWeb) Icons.Default.Public else Icons.Default.Description
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            Surface(
+                                onClick = { 
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (isWeb) {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                        context.startActivity(intent)
+                                    } else {
+                                        onSourceClick(url)
+                                    }
+                                },
+                                color = (if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(icon, null, modifier = Modifier.size(12.dp), tint = textColor)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(title, fontSize = 10.sp, color = textColor, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
