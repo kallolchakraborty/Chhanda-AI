@@ -43,10 +43,12 @@ fun GatewayDialog(
     val hasNetworkState by viewModel.hasNetwork.collectAsState()
     var isSetupConfirmed by remember { mutableStateOf(false) }
     var isApiKeyMasked by remember { mutableStateOf(true) }
+    var showConfirmationPrompt by remember { mutableStateOf(false) }
     val showSetup = !hasNetworkState && !isSetupConfirmed
 
     androidx.compose.ui.window.Dialog(onDismissRequest = { 
         isSetupConfirmed = false
+        showConfirmationPrompt = false
         onDismiss() 
     }) {
         Surface(
@@ -119,11 +121,7 @@ fun GatewayDialog(
                         TextButton(
                             onClick = { 
                                 viewModel.manualRefreshNetwork()
-                                if (hasNetworkState) {
-                                    isSetupConfirmed = true 
-                                } else {
-                                    isSetupConfirmed = true
-                                }
+                                showConfirmationPrompt = true
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -286,6 +284,53 @@ fun GatewayDialog(
                 }
             }
         }
+    }
+
+    if (showConfirmationPrompt) {
+        AlertDialog(
+            onDismissRequest = { showConfirmationPrompt = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Wifi, 
+                        contentDescription = null, 
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Confirm Hotspot Active", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                }
+            },
+            text = {
+                Text(
+                    "Please confirm that the other user has successfully connected to your mobile hotspot.\n\n" +
+                    "Once confirmed, the Node Connectivity window will open, displaying the QR code for them to scan and start chatting.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmationPrompt = false
+                        viewModel.manualRefreshNetwork()
+                        isSetupConfirmed = true
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Confirm & Show QR")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showConfirmationPrompt = false }
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 

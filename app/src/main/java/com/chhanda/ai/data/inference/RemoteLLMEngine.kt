@@ -141,6 +141,7 @@ class RemoteLLMEngine @Inject constructor(
         prompt: String, history: List<Pair<String, String>>, systemInstruction: String?, attachments: List<Uri>, sessionId: String?
     ): Flow<TokenUpdate> = callbackFlow {
         ensureConnected()
+        val startTime = System.currentTimeMillis()
         val callback = object : IInferenceCallback.Stub() {
             private val accumulatedText = StringBuilder()
             private var lastTps = 0.0
@@ -152,7 +153,8 @@ class RemoteLLMEngine @Inject constructor(
             }
             override fun onError(error: String) { trySend(TokenUpdate.Error(error)); close() }
             override fun onComplete() {
-                trySend(TokenUpdate.Final(accumulatedText.toString(), lastTps))
+                val duration = System.currentTimeMillis() - startTime
+                trySend(TokenUpdate.Final(accumulatedText.toString(), lastTps, duration))
                 close()
             }
         }

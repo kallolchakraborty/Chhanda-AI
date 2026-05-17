@@ -222,6 +222,28 @@ class ChatViewModel @Inject constructor(
         _currentTps.value = 0.0
     }
 
+    fun updateMessageFeedback(messageId: Long, isLiked: Boolean?) {
+        viewModelScope.launch {
+            chatDao.updateMessageFeedback(messageId, isLiked)
+        }
+    }
+
+    fun editAndRetryMessage(messageId: Long, newText: String) {
+        viewModelScope.launch {
+            val msg = chatDao.getMessageById(messageId) ?: return@launch
+            chatDao.deleteMessagesAfter(sessionId, msg.timestamp)
+            sendMessage(newText)
+        }
+    }
+
+    fun retryMessage(messageId: Long) {
+        viewModelScope.launch {
+            val msg = chatDao.getMessageById(messageId) ?: return@launch
+            chatDao.deleteMessagesAfter(sessionId, msg.timestamp)
+            sendMessage(msg.text)
+        }
+    }
+
     fun clearHistory() {
         viewModelScope.launch { chatDao.deleteSession(sessionId) }
     }

@@ -106,7 +106,11 @@ fun MessageBubble(
     isGenerating: Boolean = false,
     hapticsEnabled: Boolean = true,
     onTtsToggle: () -> Unit = {},
-    onSourceClick: (String) -> Unit = {}
+    onSourceClick: (String) -> Unit = {},
+    onCopyClick: () -> Unit = {},
+    onEditClick: (String) -> Unit = {},
+    onRetryClick: () -> Unit = {},
+    onLikeClick: (Boolean?) -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val isUser = message.role == "user"
@@ -335,6 +339,73 @@ fun MessageBubble(
             }
         }
         
+        if (isUser && !isGenerating) {
+            var isEditing by remember { mutableStateOf(false) }
+            var editText by remember { mutableStateOf(message.text) }
+
+            Column {
+                if (isEditing) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        TextField(
+                            value = editText,
+                            onValueChange = { editText = it },
+                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent
+                            )
+                        )
+                        IconButton(onClick = {
+                            if (editText.isNotBlank() && editText != message.text) {
+                                onEditClick(editText)
+                            }
+                            isEditing = false
+                        }) {
+                            Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = {
+                            editText = message.text
+                            isEditing = false
+                        }) {
+                            Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.padding(top = 4.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = onCopyClick,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        }
+                        
+                        IconButton(
+                            onClick = { isEditing = true },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        }
+
+                        IconButton(
+                            onClick = onRetryClick,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        }
+                    }
+                }
+            }
+        }
+
         if (!isUser && finalResponse.isNotEmpty() && !isGenerating) {
             val clipboard = LocalClipboardManager.current
             val context = LocalContext.current
@@ -374,6 +445,36 @@ fun MessageBubble(
                         null, 
                         modifier = Modifier.size(14.dp),
                         tint = if (isActiveTts) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+
+                IconButton(
+                    onClick = { 
+                        if (hapticsEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLikeClick(if (message.isLiked == true) null else true)
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ThumbUp,
+                        contentDescription = "Like",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (message.isLiked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    )
+                }
+
+                IconButton(
+                    onClick = { 
+                        if (hapticsEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLikeClick(if (message.isLiked == false) null else false)
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ThumbDown,
+                        contentDescription = "Dislike",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (message.isLiked == false) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                     )
                 }
 

@@ -58,11 +58,43 @@ fun ChatInput(
     if (isReadOnly) {
         Surface(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(24.dp)
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(24.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
         ) {
-            Box(modifier = Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
-                Text("Read Only Chat", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                    shape = CircleShape
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Lock, 
+                            contentDescription = "Read Only", 
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Read-Only Mode", 
+                        fontWeight = FontWeight.Bold, 
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "No active model loaded. Start a model from the Dashboard to continue chatting.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                }
             }
         }
     } else {

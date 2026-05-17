@@ -5,6 +5,12 @@ import androidx.room.Insert
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
+data class SessionTitleInfo(
+    val sessionId: String,
+    val sessionTitle: String?,
+    val timestamp: Long
+)
+
 @Dao
 interface ChatDao {
     @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
@@ -19,10 +25,10 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
     fun getMessagesForSession(sessionId: String): Flow<List<MessageEntity>>
 
-    @Query("SELECT DISTINCT sessionId FROM chat_messages WHERE modelName = :modelName")
+    @Query("SELECT sessionId FROM chat_messages WHERE modelName = :modelName GROUP BY sessionId ORDER BY MAX(timestamp) DESC")
     fun getSessionIdsForModel(modelName: String): Flow<List<String>>
 
-    @Query("SELECT DISTINCT sessionId FROM chat_messages WHERE deviceId = :deviceId")
+    @Query("SELECT sessionId FROM chat_messages WHERE deviceId = :deviceId GROUP BY sessionId ORDER BY MAX(timestamp) DESC")
     fun getSessionIdsForDevice(deviceId: String): Flow<List<String>>
 
     @Query("SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT :limit")
@@ -57,4 +63,25 @@ interface ChatDao {
 
     @Query("DELETE FROM chat_messages WHERE id NOT IN (SELECT id FROM chat_messages ORDER BY timestamp DESC LIMIT :keepLimit)")
     suspend fun pruneMessages(keepLimit: Int)
+
+    @Query("SELECT * FROM chat_messages WHERE id = :messageId")
+    suspend fun getMessageById(messageId: Long): MessageEntity?
+
+    @Query("UPDATE chat_messages SET isLiked = :isLiked WHERE id = :messageId")
+    suspend fun updateMessageFeedback(messageId: Long, isLiked: Boolean?)
+
+    @Query("UPDATE chat_messages SET sessionTitle = :title WHERE sessionId = :sessionId")
+    suspend fun updateSessionTitle(sessionId: String, title: String)
+
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId AND timestamp >= :timestamp")
+    suspend fun deleteMessagesAfter(sessionId: String, timestamp: Long)
+
+    @Query("SELECT sessionId, MAX(sessionTitle) as sessionTitle, MAX(timestamp) as timestamp FROM chat_messages WHERE modelName = :modelName GROUP BY sessionId ORDER BY timestamp DESC")
+    fun getSessionsForModelWithTitle(modelName: String): Flow<List<SessionTitleInfo>>
+
+    @Query("SELECT * FROM chat_messages WHERE isLiked = 1 ORDER BY timestamp DESC LIMIT 5")
+    suspend fun getLikedMessagesGlobal(): List<MessageEntity>
+
+    @Query("SELECT * FROM chat_messages WHERE isLiked = 0 ORDER BY timestamp DESC LIMIT 5")
+    suspend fun getDislikedMessagesGlobal(): List<MessageEntity>
 }

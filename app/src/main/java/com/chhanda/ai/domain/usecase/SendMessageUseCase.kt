@@ -19,6 +19,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val responseProcessor: com.chhanda.ai.domain.service.ResponseProcessor,
     private val agenticActionHandler: com.chhanda.ai.domain.service.AgenticActionHandler,
     private val webSearchUseCase: com.chhanda.ai.domain.usecase.WebSearchUseCase,
+    private val networkManager: com.chhanda.ai.data.repository.NetworkManager,
     private val ingestDocumentUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.IngestDocumentUseCase>,
     private val uploadedFileDaoLazy: dagger.Lazy<com.chhanda.ai.data.repository.UploadedFileDao>,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
@@ -46,11 +47,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         var isContextFound = false
 
         try {
+            val isInternetPresent = networkManager.isConnected.value
             val isQrRequest = source.lowercase() == "qr"
             val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest
-            if (ragEnabled) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Searching local knowledge base..."))
-            }
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
@@ -76,6 +75,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val contextBudget = (remainingBudget * 0.45).toInt().coerceAtLeast(1000)
             val singleContextLimit = (contextBudget / 3).coerceAtLeast(400)
 
+            if (ragEnabled) {
+                if (isInternetPresent) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Online mode active: Searching local database..."))
+                } else {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Offline mode active: Searching local database..."))
+                }
+            }
+
             // Process RAG long-term context
             val longTermContext = if (ragEnabled && longTermContextRaw.isNotBlank()) {
                 val sourceSegments = longTermContextRaw
@@ -84,10 +91,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     .split("\n\n")
                     .filter { it.isNotBlank() }
                 
-                if (sourceSegments.isNotEmpty()) {
+                val distinctSegments = deduplicateContexts(sourceSegments)
+                if (distinctSegments.isNotEmpty()) {
                     buildString {
                         append("<retrieved_knowledge>\n")
-                        sourceSegments.take(3).forEach { segment ->
+                        distinctSegments.take(3).forEach { segment ->
                             val lines = segment.trim().lines()
                             val header = lines.firstOrNull() ?: ""
                             val content = lines.drop(1).joinToString("\n")
@@ -106,13 +114,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             var hasDbKnowledge = longTermContext.isNotBlank()
             var hasAttachmentKnowledge = false 
             
-            // Web Search Fallback if enabled and local database does not yield matches
+            // Web Search Fallback if enabled, internet is present, and local database does not yield matches
             var hasWebKnowledge = false
             var webContext = ""
             val retrievedSourcesList = mutableListOf<String>()
 
             // Gather any sources from local database context
             if (hasDbKnowledge) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Local database context found. Formulating grounded response..."))
                 val sourceRegex = """\[Source #\d+:\s*(.*?)\]""".toRegex()
                 sourceRegex.findAll(longTermContext).forEach { match ->
                     val cleanSrc = match.groupValues[1].trim()
@@ -120,61 +129,72 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         retrievedSourcesList.add(cleanSrc)
                     }
                 }
-            }
-
-            // Perform web search if local database is empty and RAG is enabled
-            if (ragEnabled && !hasDbKnowledge) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches. Searching the web..."))
-                try {
-                    val searchResults = webSearchUseCase(userText)
-                    if (searchResults.isNotEmpty()) {
-                        hasWebKnowledge = true
-                        webContext = buildString {
-                            append("<retrieved_web_knowledge>\n")
-                            searchResults.take(3).forEachIndexed { index, result ->
-                                val combinedSource = "${result.title}|${result.url}"
-                                if (!retrievedSourcesList.contains(combinedSource)) {
-                                    retrievedSourcesList.add(combinedSource)
-                                }
-                                val rawSnippet = result.snippet
-                                val cappedSnippet = if (rawSnippet.length > singleContextLimit) {
-                                    rawSnippet.take(singleContextLimit) + "... [truncated]"
-                                } else {
-                                    rawSnippet
-                                }
-                                append("[Source #$index: ${result.title}]\n")
-                                append("URL: ${result.url}\n")
-                                append("Content: $cappedSnippet\n\n")
-                            }
-                            append("</retrieved_web_knowledge>")
-                        }
-                        
-                        // Ingest the search results to the vector database for later use in the background
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            try {
-                                searchResults.forEach { result ->
-                                    val resultText = "Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}"
-                                    val finalLabel = result.title.ifBlank { result.url }.take(50).trim()
-                                    val existing = uploadedFileDao.findByNameAndSize(finalLabel, resultText.length.toLong())
-                                    if (existing == null) {
-                                        ingestDocumentUseCase.ingestScrapedText(resultText, result.url, finalLabel)
-                                        uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
-                                            id = java.util.UUID.randomUUID().toString(),
-                                            name = finalLabel,
-                                            format = "WEB_URL",
-                                            size = resultText.length.toLong(),
-                                            path = result.url,
-                                            timestamp = System.currentTimeMillis()
-                                        ))
+            } else if (ragEnabled) {
+                if (isInternetPresent) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches. Searching the web for real-time answers..."))
+                    try {
+                        val searchResults = webSearchUseCase(userText)
+                        if (searchResults.isNotEmpty()) {
+                            val snippetsList = searchResults.map { it.snippet }
+                            val distinctSnippets = deduplicateContexts(snippetsList)
+                            val filteredResults = searchResults.filter { distinctSnippets.contains(it.snippet) }
+                            
+                            if (filteredResults.isNotEmpty()) {
+                                hasWebKnowledge = true
+                                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web matches found. Synthesizing real-time information..."))
+                                webContext = buildString {
+                                    append("<retrieved_web_knowledge>\n")
+                                    filteredResults.take(3).forEachIndexed { index, result ->
+                                        val combinedSource = "${result.title}|${result.url}"
+                                        if (!retrievedSourcesList.contains(combinedSource)) {
+                                            retrievedSourcesList.add(combinedSource)
+                                        }
+                                        val rawSnippet = result.snippet
+                                        val cappedSnippet = if (rawSnippet.length > singleContextLimit) {
+                                            rawSnippet.take(singleContextLimit) + "... [truncated]"
+                                        } else {
+                                            rawSnippet
+                                        }
+                                        append("[Source #$index: ${result.title}]\n")
+                                        append("URL: ${result.url}\n")
+                                        append("Content: $cappedSnippet\n\n")
                                     }
+                                    append("</retrieved_web_knowledge>")
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("SendMessageUseCase", "Failed to ingest web search results: ${e.message}")
                             }
+                            
+                            // Ingest the search results to the vector database for later use in the background
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                try {
+                                    searchResults.forEach { result ->
+                                        val resultText = "Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}"
+                                        val finalLabel = result.title.ifBlank { result.url }.take(50).trim()
+                                        val existing = uploadedFileDao.findByNameAndSize(finalLabel, resultText.length.toLong())
+                                        if (existing == null) {
+                                            ingestDocumentUseCase.ingestScrapedText(resultText, result.url, finalLabel)
+                                            uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                                                id = java.util.UUID.randomUUID().toString(),
+                                                name = finalLabel,
+                                                format = "WEB_URL",
+                                                size = resultText.length.toLong(),
+                                                path = result.url,
+                                                timestamp = System.currentTimeMillis()
+                                            ))
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SendMessageUseCase", "Failed to ingest web search results: ${e.message}")
+                                }
+                            }
+                        } else {
+                            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search returned no matches. Answering from pre-trained knowledge..."))
                         }
+                    } catch (e: Exception) {
+                        android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
+                        emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search error. Answering from pre-trained knowledge..."))
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
+                } else {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
                 }
             }
 
@@ -194,7 +214,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // 3. Process conversation history (cap at historyBudget)
             val historyBudget = (remainingBudget * 0.30).toInt().coerceAtLeast(800)
             var currentHistorySize = 0
-            val prunedHistory = (externalHistory ?: dbHistory).takeLast(4).filter {
+            val compactedHistory = (externalHistory ?: dbHistory).map { (role, msg) ->
+                role to compactPastMessage(msg)
+            }
+            val prunedHistory = compactedHistory.takeLast(6).filter {
                 currentHistorySize += it.second.length
                 currentHistorySize < historyBudget
             }
@@ -225,6 +248,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             } else ""
 
             val isApiRequest = source.lowercase() == "api"
+
+            val likedResponses = try { chatDao.getLikedMessagesGlobal() } catch (e: Exception) { emptyList() }
+            val dislikedResponses = try { chatDao.getDislikedMessagesGlobal() } catch (e: Exception) { emptyList() }
 
             val baseInstructions = buildString {
                 val role = when (source) {
@@ -295,6 +321,23 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     else -> {
                         append("  * Tone: Professional, structured, direct, concise.\n")
                         append("  * Style: Organized, clear, objective, and highly professional.\n")
+                    }
+                }
+
+                if (likedResponses.isNotEmpty()) {
+                    append("\nUSER PREFERENCES (LIKED RESPONSES):\n")
+                    append("The user previously liked these responses. Analyze their structure, detail, or formatting, and continue to produce responses of similar high quality:\n")
+                    likedResponses.forEachIndexed { i, msg ->
+                        append("- Feedback Sample #${i + 1}:\n")
+                        append("  Response: \"${msg.text.take(300)}\"\n")
+                    }
+                }
+                if (dislikedResponses.isNotEmpty()) {
+                    append("\nUSER PREFERENCES (DISLIKED RESPONSES):\n")
+                    append("The user disliked these previous responses. Make sure to improve and avoid repeating these mistakes:\n")
+                    dislikedResponses.forEachIndexed { i, msg ->
+                        append("- Disliked Sample #${i + 1}:\n")
+                        append("  Avoid this style/content: \"${msg.text.take(300)}\"\n")
                     }
                 }
             }
@@ -421,31 +464,67 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                 filePath = null
                             }
 
-                            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
-                                text = toSave, 
-                                role = "model", 
-                                deviceId = deviceId, 
-                                modelName = modelName, 
-                                sessionId = sessionId, 
-                                tps = update.tps, 
-                                isRagUsed = isContextFound, 
-                                contextSource = when {
-                                    hasAttachmentKnowledge && hasDbKnowledge -> "Multi-Source"
-                                    hasAttachmentKnowledge -> "Attachment"
-                                    hasDbKnowledge -> "Knowledge Base"
-                                    hasWebKnowledge -> "Web Fallback"
-                                    else -> null
-                                },
-                                responseTimeMs = update.responseTimeMs,
-                                generatedFilePath = filePath,
-                                source = source,
-                                thinking = extractedThinking
-                            ))
-                            saved = true
-                            contextManager.maintainMemoryHygiene()
-                        }
-                        emit(update)
-                    }
+                             chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
+                                 text = toSave, 
+                                 role = "model", 
+                                 deviceId = deviceId, 
+                                 modelName = modelName, 
+                                 sessionId = sessionId, 
+                                 tps = update.tps, 
+                                 isRagUsed = isContextFound, 
+                                 contextSource = when {
+                                     hasAttachmentKnowledge && hasDbKnowledge -> "Multi-Source"
+                                     hasAttachmentKnowledge -> "Attachment"
+                                     hasDbKnowledge -> "Knowledge Base"
+                                     hasWebKnowledge -> "Web Fallback"
+                                     else -> null
+                                 },
+                                 responseTimeMs = update.responseTimeMs,
+                                 generatedFilePath = filePath,
+                                 source = source,
+                                 thinking = extractedThinking
+                             ))
+                             saved = true
+                             contextManager.maintainMemoryHygiene()
+
+                             // Asynchronously generate session title on the first conversation turn
+                             val titleScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+                             titleScope.launch {
+                                 try {
+                                     val currentMessages = chatDao.getRecentMessagesForSession(sessionId, 5)
+                                     val hasTitle = currentMessages.any { !it.sessionTitle.isNullOrBlank() }
+                                     if (!hasTitle && currentMessages.isNotEmpty()) {
+                                         // Retrieve the first user message
+                                         val firstUserMessage = currentMessages.firstOrNull { it.role == "user" }?.text ?: userText
+                                         val titlePrompt = """
+                                             Generate an extremely brief chat title (3 to 5 words max) in the language of the query that summarizes the following user question. Do not use quotes, punctuation, or any introductory text. Output only the title.
+                                             
+                                             USER QUESTION: "$firstUserMessage"
+                                         """.trimIndent()
+                                         
+                                         var generatedTitle = ""
+                                         llmEngine.generateResponse(titlePrompt, emptyList(), "Title Generator Mode. Output 3-5 words title only.", emptyList(), "title_gen_$sessionId").collect { titleUpdate ->
+                                             if (titleUpdate is com.chhanda.ai.domain.model.TokenUpdate.Partial) {
+                                                 generatedTitle += titleUpdate.text
+                                             } else if (titleUpdate is com.chhanda.ai.domain.model.TokenUpdate.Final) {
+                                                 val cleanTitle = generatedTitle.trim()
+                                                     .replace("^[\"']|[\"']$".toRegex(), "") // remove leading/trailing quotes
+                                                     .replace("[.#?]$".toRegex(), "") // remove trailing punctuation
+                                                     .trim()
+                                                 if (cleanTitle.isNotBlank() && cleanTitle.length < 50) {
+                                                     chatDao.updateSessionTitle(sessionId, cleanTitle)
+                                                     android.util.Log.i("SendMessageUseCase", "Generated session title for $sessionId: $cleanTitle")
+                                                 }
+                                             }
+                                         }
+                                     }
+                                 } catch (e: Exception) {
+                                     android.util.Log.e("SendMessageUseCase", "Failed to generate session title: ${e.message}")
+                                 }
+                             }
+                         }
+                         emit(update)
+                     }
                     is com.chhanda.ai.domain.model.TokenUpdate.Status -> emit(update)
                     is com.chhanda.ai.domain.model.TokenUpdate.Error -> {
                         emit(update)
@@ -460,6 +539,36 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(text = partialAccumulated.trim(), role = "model", deviceId = deviceId, modelName = modelName, sessionId = sessionId, isRagUsed = isContextFound))
                     contextManager.maintainMemoryHygiene()
                 }
+            }
+        }
+    }
+
+    private fun compactPastMessage(text: String): String {
+        val codeRegex = "(?s)```.*?```".toRegex()
+        return text.replace(codeRegex) { match ->
+            val code = match.value
+            if (code.length > 250) {
+                "```\n[Code block truncated for efficiency]\n```"
+            } else {
+                code
+            }
+        }
+    }
+
+    private fun deduplicateContexts(contexts: List<String>): List<String> {
+        val seen = mutableSetOf<String>()
+        return contexts.map { it.trim() }.filter { ctx ->
+            if (ctx.isEmpty()) return@filter false
+            val normalized = ctx.lowercase().replace("\\s+".toRegex(), "")
+            val isDuplicate = seen.any { prev -> 
+                prev.contains(normalized) || normalized.contains(prev) || 
+                (prev.length > 30 && normalized.length > 30 && prev.take(30) == normalized.take(30)) 
+            }
+            if (!isDuplicate) {
+                seen.add(normalized)
+                true
+            } else {
+                false
             }
         }
     }

@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [MessageEntity::class, DeviceEntity::class, VectorChunkEntity::class, VectorChunkFtsEntity::class, UploadedFileEntity::class], 
-    version = 17, 
+    version = 18, 
     exportSchema = true,
     autoMigrations = [
         // Future migrations will go here

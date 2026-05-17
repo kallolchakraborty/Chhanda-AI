@@ -120,6 +120,18 @@ fun DashboardScreen(
     var modelToDelete by remember { mutableStateOf<String?>(null) }
     var showBackgroundExitDialog by remember { mutableStateOf(false) }
     var modelToSwitchAndRun by remember { mutableStateOf<String?>(null) }
+    var showHfTokenPromptForModel by remember { mutableStateOf<com.chhanda.ai.presentation.ui.DownloadModelInfo?>(null) }
+
+    LaunchedEffect(downloadStatus, downloadableModels) {
+        downloadStatus.forEach { (modelName, status) ->
+            if (status.isFailed) {
+                val matchingModel = downloadableModels.find { it.name == modelName }
+                if (matchingModel != null && showHfTokenPromptForModel?.name != modelName) {
+                    showHfTokenPromptForModel = matchingModel
+                }
+            }
+        }
+    }
 
     // Detect exit/background state
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -646,7 +658,7 @@ fun DashboardScreen(
 
     if (showHistorySheet && selectedModelForHistory != null) {
         val modelName = selectedModelForHistory!!
-        val sessions by viewModel.getSessionsForModel(modelName).collectAsState(initial = emptyList())
+        val sessionsWithTitle by viewModel.getSessionsForModelWithTitle(modelName).collectAsState(initial = emptyList())
 
         ModalBottomSheet(
             onDismissRequest = { showHistorySheet = false },
@@ -707,7 +719,7 @@ fun DashboardScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                if (sessions.isEmpty()) {
+                if (sessionsWithTitle.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(20.dp),
                         contentAlignment = Alignment.Center
@@ -718,7 +730,8 @@ fun DashboardScreen(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(sessions) { sessionId ->
+                        items(sessionsWithTitle) { sessionInfo ->
+                            val sessionId = sessionInfo.sessionId
                             val isSelected = selectedSessions.contains(sessionId)
                             Surface(
                                 modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
@@ -729,7 +742,8 @@ fun DashboardScreen(
                                         if (isSelected) selectedSessions.remove(sessionId) else selectedSessions.add(sessionId)
                                     } else {
                                         showHistorySheet = false
-                                        navController.navigate("chat/$modelName?sessionId=$sessionId")
+                                        val isModelActive = isServerRunning && isModelLoaded
+                                        navController.navigate("chat/$modelName?sessionId=$sessionId&readOnly=${!isModelActive}")
                                     }
                                 }
                             ) {
@@ -747,7 +761,7 @@ fun DashboardScreen(
                                     Icon(Icons.Default.Chat, contentDescription = "Chat Session", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.width(12.dp))
                                     Text(
-                                        text = "Session: ${sessionId.take(8)}...", // Show short ID
+                                        text = sessionInfo.sessionTitle ?: "Session: ${sessionId.take(8)}...",
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -1073,6 +1087,77 @@ fun DashboardScreen(
         activeModelName = activeModelName
     )
 
+
+    showHfTokenPromptForModel?.let { model ->
+        var enteredToken by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showHfTokenPromptForModel = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = "Hugging Face Access Token",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Hugging Face Authentication",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "The download of ${model.name} failed or is restricted. Some gated models require a Hugging Face read-only API token. Please enter your Hugging Face API token:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = enteredToken,
+                        onValueChange = { enteredToken = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        placeholder = { Text("hf_...") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+                        )
+                    )
+                    Text(
+                        text = "Your token will be saved securely and can be viewed or modified in Settings.",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.SUCCESS_DOUBLE_TAP)
+                        viewModel.setHfToken(enteredToken)
+                        showHfTokenPromptForModel = null
+                        // Auto-retry download with the new token
+                        viewModel.downloadModel(model)
+                    }
+                ) {
+                    Text("Save & Retry", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHfTokenPromptForModel = null }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
 
     if (showStorageManager) {
         val storageSummary by viewModel.storageSummary.collectAsStateWithLifecycle()

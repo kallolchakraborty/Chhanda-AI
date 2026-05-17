@@ -225,6 +225,8 @@ class SystemViewModel @Inject constructor(
 
     fun getSessionsForModel(modelName: String): Flow<List<String>> = chatDao.getSessionIdsForModel(modelName)
 
+    fun getSessionsForModelWithTitle(modelName: String): Flow<List<com.chhanda.ai.data.repository.SessionTitleInfo>> = chatDao.getSessionsForModelWithTitle(modelName)
+
     fun deleteSessions(sessionIds: List<String>) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -237,10 +239,12 @@ class SystemViewModel @Inject constructor(
     }
 
     val darkMode = settingsRepository.darkModeFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val cloudSyncFrequency = settingsRepository.cloudSyncFrequencyFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "daily")
     val hapticsEnabled = settingsRepository.hapticsEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val hfToken = securityRepository.hfToken.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val serverPort = settingsRepository.serverPortFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "8080")
     val contextLength = settingsRepository.contextLengthFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "2048")
+    val contextRecommendation = settingsRepository.getHardwareRecommendationDetails()
     val maxDevices = settingsRepository.maxDevicesFlow.stateIn(viewModelScope, SharingStarted.Eagerly, 5)
     val apiKey = securityRepository.apiKey.stateIn(viewModelScope, SharingStarted.Eagerly, "Initializing...")
     val publicUrl = settingsRepository.publicUrlFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "")
@@ -755,6 +759,18 @@ class SystemViewModel @Inject constructor(
         }
     }
 
+    fun setCloudSyncFrequency(frequency: String) {
+        viewModelScope.launch {
+            settingsRepository.setCloudSyncFrequency(frequency)
+            addLog("CONFIG", "Cloud sync frequency updated to: $frequency", "INFO")
+            // Trigger rescheduling of WorkManager if logged in
+            val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
+            if (account != null) {
+                rescheduleCloudSync(frequency)
+            }
+        }
+    }
+
     fun setHfToken(token: String) {
         viewModelScope.launch {
             securityRepository.setHfToken(token)
@@ -1228,14 +1244,55 @@ class SystemViewModel @Inject constructor(
         }
     }
 
+    fun rescheduleCloudSync(frequency: String) {
+        viewModelScope.launch {
+            try {
+                workManager.cancelUniqueWork("cloud_sync_periodic")
+                if (frequency == "none" || frequency == "no_sync") {
+                    addLog("CLOUD", "Cloud sync deactivated.", "INFO")
+                    return@launch
+                }
 
+                val repeatIntervalHours = when (frequency) {
+                    "hourly" -> 1L
+                    "6hours" -> 6L
+                    "12hours" -> 12L
+                    "daily" -> 24L
+                    "weekly" -> 24L * 7L
+                    else -> 24L // Default to daily
+                }
+
+                // Minimum interval for WorkManager periodic work is 15 minutes, which fits our hourly+ requirements perfectly.
+                val syncRequest = androidx.work.PeriodicWorkRequestBuilder<com.chhanda.ai.service.CloudSyncWorker>(
+                    repeatIntervalHours, java.util.concurrent.TimeUnit.HOURS
+                )
+                    .setConstraints(
+                        androidx.work.Constraints.Builder()
+                            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                            .build()
+                    )
+                    .build()
+
+                workManager.enqueueUniquePeriodicWork(
+                    "cloud_sync_periodic",
+                    androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+                    syncRequest
+                )
+                addLog("CLOUD", "Rescheduled cloud sync to run every $repeatIntervalHours hours", "INFO")
+            } catch (e: Exception) {
+                addLog("CLOUD", "Failed to reschedule cloud sync: ${e.message}", "ERROR")
+            }
+        }
+    }
 }
 
 data class DownloadStatus(
     val progress: Float,
     val speedBytesPerSec: Long,
     val downloadedBytes: Long,
-    val totalBytes: Long
+    val totalBytes: Long,
+    val isFailed: Boolean = false,
+    val errorMessage: String? = null
 )
 
 @kotlinx.serialization.Serializable

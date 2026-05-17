@@ -300,6 +300,32 @@ fun ConfigScreen(
                         Spacer(Modifier.height(24.dp))
                         Text(Localization.getString("context_length", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         Text(Localization.getString("context_length_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        Spacer(Modifier.height(6.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Hardware Capacity Info",
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = viewModel.contextRecommendation,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
                         Slider(
                             value = (ctxLength.toFloat() / 32768f).coerceIn(0f, 1f),
                             onValueChange = {
@@ -713,6 +739,7 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
     val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val lastSync by viewModel.lastSyncTime.collectAsStateWithLifecycle()
+    val syncFrequency by viewModel.cloudSyncFrequency.collectAsStateWithLifecycle()
     
     var googleAccount by remember { mutableStateOf<com.google.android.gms.auth.api.signin.GoogleSignInAccount?>(null) }
     
@@ -729,15 +756,33 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
     ) { result ->
         val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
-            googleAccount = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+            val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+            googleAccount = account
+            if (account != null) {
+                viewModel.rescheduleCloudSync(syncFrequency)
+            }
         } catch (e: Exception) {
             Log.e("ConfigScreen", "Google Sign In failed", e)
         }
     }
 
     LaunchedEffect(Unit) {
-        googleAccount = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
+        val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(context)
+        googleAccount = account
+        if (account != null) {
+            viewModel.rescheduleCloudSync(syncFrequency)
+        }
     }
+
+    val frequencies = listOf(
+        "hourly" to "Hourly",
+        "6hours" to "Every 6 Hours",
+        "12hours" to "Every 12 Hours",
+        "daily" to "Daily (Default)",
+        "weekly" to "Weekly",
+        "none" to "No Cloud Sync"
+    )
+    val syncDisabled = syncFrequency == "none" || googleAccount == null
 
     ChhandaCard {
         if (googleAccount == null) {
@@ -768,7 +813,10 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { 
                     hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
-                    googleSignInClient.signOut().addOnCompleteListener { googleAccount = null }
+                    googleSignInClient.signOut().addOnCompleteListener { 
+                        googleAccount = null 
+                        viewModel.rescheduleCloudSync("none") // cancel active periodic work on logout!
+                    }
                 }) {
                     Text("Sign Out", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
@@ -788,7 +836,8 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                             googleAccount?.let { viewModel.backupToCloud(it) }
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !syncDisabled
                     ) {
                         Icon(Icons.Default.Upload, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
@@ -801,7 +850,8 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                             googleAccount?.let { viewModel.restoreFromCloud(it) }
                         },
                         modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !syncDisabled
                     ) {
                         Icon(Icons.Default.Download, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
@@ -818,17 +868,82 @@ fun CloudSyncCard(viewModel: com.chhanda.ai.presentation.viewmodel.SystemViewMod
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Spacer(Modifier.height(16.dp))
+        
+        var dropdownExpanded by remember { mutableStateOf(false) }
+        val currentFreqName = frequencies.find { it.first == syncFrequency }?.second ?: "Daily (Default)"
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Cloud Sync Frequency",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                color = if (googleAccount == null) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(4.dp))
             
-            Spacer(Modifier.height(16.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(14.dp), tint = Color(0xFF10B981))
-                    Spacer(Modifier.width(8.dp))
-                    Text("E2E Encrypted via Hardware Keystore", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box {
+                Surface(
+                    onClick = { 
+                        if (googleAccount != null) {
+                            dropdownExpanded = true 
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = if (googleAccount == null) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = googleAccount != null
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (googleAccount == null) "Sign in to configure sync" else currentFreqName,
+                            fontSize = 12.sp,
+                            color = if (googleAccount == null) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = if (googleAccount == null) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+                
+                DropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                ) {
+                    frequencies.forEach { (key, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label, fontSize = 12.sp) },
+                            onClick = {
+                                hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                viewModel.setCloudSyncFrequency(key)
+                                dropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(14.dp), tint = Color(0xFF10B981))
+                Spacer(Modifier.width(8.dp))
+                Text("E2E Encrypted via Hardware Keystore", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

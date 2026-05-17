@@ -231,11 +231,12 @@ fun KnowledgeBaseScreen(
                     )
                 }
                 
-                val displayFiles = if (showAllFiles || allFiles.size <= 10) allFiles else allFiles.take(3)
+                val displayFiles = if (showAllFiles) allFiles else allFiles.take(10)
                 items(count = displayFiles.size) { index ->
                     val file = displayFiles[index]
                     RagFileItem(
                         file = file, 
+                        compact = !showAllFiles,
                         onDelete = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.ERROR_PULSE)
                             viewModel.deleteFiles(listOf(file.id)) 
@@ -739,7 +740,12 @@ fun RecentUploadsSectionHeader(appLanguage: String, onViewArchive: () -> Unit, i
 }
 
 @Composable
-fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelete: () -> Unit, onClick: () -> Unit) {
+fun RagFileItem(
+    file: com.chhanda.ai.data.repository.UploadedFileEntity, 
+    compact: Boolean = false,
+    onDelete: () -> Unit, 
+    onClick: () -> Unit
+) {
     var showMenu by remember { mutableStateOf(false) }
     val format = file.format.uppercase().trim()
     val (icon, color, typeLabel) = when {
@@ -753,21 +759,27 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
         else -> Triple(Icons.Default.Description, Color(0xFF94A3B8), file.format)
     }
 
+    val verticalPadding = if (compact) 4.dp else 8.dp
+    val rowPadding = if (compact) 10.dp else 16.dp
+    val iconSize = if (compact) 36.dp else 48.dp
+    val iconInnerPadding = if (compact) 8.dp else 12.dp
+    val cardShape = if (compact) RoundedCornerShape(16.dp) else RoundedCornerShape(24.dp)
+
     Surface(
         modifier = Modifier
-            .padding(vertical = 8.dp)
+            .padding(vertical = verticalPadding)
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {}
             .clickable { onClick() },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        shape = RoundedCornerShape(24.dp)
+        shape = cardShape
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(rowPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(iconSize),
                 color = color.copy(alpha = 0.2f),
                 shape = androidx.compose.foundation.shape.CircleShape
             ) {
@@ -775,21 +787,26 @@ fun RagFileItem(file: com.chhanda.ai.data.repository.UploadedFileEntity, onDelet
                     imageVector = icon, 
                     contentDescription = typeLabel, 
                     tint = color, 
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier.padding(iconInnerPadding)
                 )
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(if (compact) 12.dp else 16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = file.name, 
                     fontWeight = FontWeight.Bold, 
                     color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = if (compact) 14.sp else 16.sp,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 val context = LocalContext.current
                 val sizeStr = android.text.format.Formatter.formatFileSize(context, file.size)
-                Text("$sizeStr • $typeLabel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(
+                    text = "$sizeStr • $typeLabel", 
+                    fontSize = if (compact) 11.sp else 12.sp, 
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
             }
             IconButton(onClick = { showMenu = true }) { 
                 Icon(androidx.compose.material.icons.Icons.Default.MoreVert, contentDescription = "File Options", tint = MaterialTheme.colorScheme.onSurfaceVariant)

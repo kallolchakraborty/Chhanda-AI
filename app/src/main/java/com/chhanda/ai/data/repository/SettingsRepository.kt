@@ -42,18 +42,67 @@ class SettingsRepository @Inject constructor(
         val ACTIVE_MODEL = stringPreferencesKey("active_model")
         val APP_SECURITY_ENABLED = booleanPreferencesKey("app_security_enabled")
         val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
+        val CLOUD_SYNC_FREQUENCY = stringPreferencesKey("cloud_sync_frequency")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.DARK_MODE] ?: true
     }
 
+    val cloudSyncFrequencyFlow: Flow<String> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.CLOUD_SYNC_FREQUENCY] ?: "daily"
+    }
+
     val serverPortFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.PORT] ?: "8888"
     }
 
+    fun getDefaultContextLength(): String {
+        return try {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val memoryInfo = android.app.ActivityManager.MemoryInfo()
+            if (activityManager != null) {
+                activityManager.getMemoryInfo(memoryInfo)
+                val totalMemoryGB = memoryInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                when {
+                    totalMemoryGB >= 12.0 -> "8192"
+                    totalMemoryGB >= 8.0 -> "4096"
+                    totalMemoryGB >= 6.0 -> "2048"
+                    else -> "1024"
+                }
+            } else {
+                "2048"
+            }
+        } catch (e: Exception) {
+            "2048"
+        }
+    }
+
+    fun getHardwareRecommendationDetails(): String {
+        return try {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+            val memoryInfo = android.app.ActivityManager.MemoryInfo()
+            if (activityManager != null) {
+                activityManager.getMemoryInfo(memoryInfo)
+                val totalMemoryGB = memoryInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val totalGBFormatted = String.format(java.util.Locale.US, "%.1f GB", totalMemoryGB)
+                val recommended = when {
+                    totalMemoryGB >= 12.0 -> "8192 (High-End)"
+                    totalMemoryGB >= 8.0 -> "4096 (Mid-High)"
+                    totalMemoryGB >= 6.0 -> "2048 (Standard)"
+                    else -> "1024 (Power Saving)"
+                }
+                "System RAM: $totalGBFormatted | Recommended: $recommended tokens"
+            } else {
+                "Recommended: 2048 tokens"
+            }
+        } catch (e: Exception) {
+            "Recommended: 2048 tokens"
+        }
+    }
+
     val contextLengthFlow: Flow<String> = dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.CONTEXT_LENGTH] ?: "2048"
+        preferences[PreferencesKeys.CONTEXT_LENGTH] ?: getDefaultContextLength()
     }
 
     val maxDevicesFlow: Flow<Int> = dataStore.data.map { preferences ->
@@ -215,6 +264,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setAppSecurityEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.APP_SECURITY_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setCloudSyncFrequency(frequency: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CLOUD_SYNC_FREQUENCY] = frequency
         }
     }
 }

@@ -183,15 +183,27 @@ class ModelProvisioner @Inject constructor(
                     val downloaded = workInfo.progress.getLong("bytes_downloaded", 0L)
                     val total = workInfo.progress.getLong("bytes_total", 0L)
                     
-                    _downloadStatus.update { it + (modelName to DownloadStatus(progress, speed, downloaded, total)) }
+                    val isFailed = workInfo.state == androidx.work.WorkInfo.State.FAILED
+                    val errorMsg = if (isFailed) {
+                        workInfo.outputData.getString("status") ?: "Hugging Face download failed. Authentication token might be needed."
+                    } else null
+
+                    _downloadStatus.update { 
+                        it + (modelName to DownloadStatus(progress, speed, downloaded, total, isFailed = isFailed, errorMessage = errorMsg)) 
+                    }
                     
                     if (workInfo.state.isFinished) {
                         if (workInfo.state == androidx.work.WorkInfo.State.SUCCEEDED) {
                             refreshModels()
+                            delay(2000)
+                            _downloadStatus.update { it - modelName }
+                        } else if (isFailed) {
+                            delay(15000)
+                            _downloadStatus.update { it - modelName }
+                        } else {
+                            delay(2000)
+                            _downloadStatus.update { it - modelName }
                         }
-                        // Remove status after a delay or on completion
-                        delay(2000)
-                        _downloadStatus.update { it - modelName }
                     }
                 }
             }

@@ -49,6 +49,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
 
@@ -265,6 +266,21 @@ fun ChatScreen(
                         },
                         onSourceClick = { sourceName ->
                             systemViewModel.openFileByName(sourceName)
+                        },
+                        onCopyClick = {
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(message.text))
+                            if (hapticsEnabled) {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            }
+                        },
+                        onEditClick = { newText ->
+                            viewModel.editAndRetryMessage(message.id, newText)
+                        },
+                        onRetryClick = {
+                            viewModel.retryMessage(message.id)
+                        },
+                        onLikeClick = { isLiked ->
+                            viewModel.updateMessageFeedback(message.id, isLiked)
                         }
                     )
                 }
