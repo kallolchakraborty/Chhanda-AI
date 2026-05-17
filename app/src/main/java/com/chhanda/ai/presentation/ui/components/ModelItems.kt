@@ -97,32 +97,24 @@ fun LocalModelItem(
                         }
                     }
                     if (model.isActive) {
-                        val badgeText = when {
-                            isServerRunning && isModelLoading -> "LOADING"
-                            isServerRunning && isModelLoaded -> "RUNNING"
-                            else -> "SELECTED"
-                        }
-                        val badgeBgColor = when (badgeText) {
-                            "RUNNING" -> Color(0xFF4ADE80).copy(alpha = 0.15f)
-                            "LOADING" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                            else -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
-                        }
-                        val badgeTextColor = when (badgeText) {
-                            "RUNNING" -> Color(0xFF22C55E)
-                            "LOADING" -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.secondary
-                        }
                         Spacer(Modifier.width(8.dp))
-                        Surface(
-                            color = badgeBgColor,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                badgeText, 
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 8.sp, 
-                                fontWeight = FontWeight.Black, 
-                                color = badgeTextColor
+                        if (isServerRunning && isModelLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            val tintColor = if (isServerRunning && isModelLoaded) {
+                                Color(0xFF22C55E) // Bright green for running
+                            } else {
+                                MaterialTheme.colorScheme.primary // Primary/indigo for selected
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "Active Model",
+                                tint = tintColor,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
