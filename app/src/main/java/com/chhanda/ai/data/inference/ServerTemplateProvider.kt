@@ -115,6 +115,9 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
 .ctrl-select:hover{border-color:var(--p)}
 .starter-chip{background:rgba(138,180,248,0.05);border:1px solid var(--bd);color:var(--p);padding:8px 14px;border-radius:16px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;display:inline-block}
 .starter-chip:hover{background:rgba(138,180,248,0.12);border-color:var(--p);color:#fff;transform:translateY(-1px)}
+.persona-chip{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:var(--tx2);padding:6px 12px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;display:inline-block;flex-shrink:0}
+.persona-chip:hover{background:rgba(255,255,255,0.08);color:#fff}
+.persona-chip.active{background:rgba(138,180,248,0.1);border-color:rgba(138,180,248,0.3);color:var(--p)}
 
 /* Name Overlay Modal style */
 #nameModal{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;z-index:99999}
@@ -200,17 +203,16 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
         </div>
 
         <div id="ctrls" style="display:flex;gap:12px;margin-bottom:10px;align-items:center;padding:0 4px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:0.3px">PERSONA:</span>
-            <select id="pers" class="ctrl-select">
-              <option value="Default">Default</option>
-              <option value="Senior Teacher">Senior Teacher</option>
-              <option value="Senior Software Engineer">Senior Software Engineer</option>
-              <option value="Friend">Friend</option>
-              <option value="General Companion">General Companion</option>
-            </select>
+          <div style="display:flex;align-items:center;gap:6px;overflow-x:auto;white-space:nowrap;padding-bottom:4px;flex:1" id="persona-scroller">
+            <span style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:0.3px;margin-right:4px;flex-shrink:0">PERSONA:</span>
+            <div class="persona-chip active" onclick="setPers('Default', this)">Default</div>
+            <div class="persona-chip" onclick="setPers('Senior Teacher', this)">Senior Teacher</div>
+            <div class="persona-chip" onclick="setPers('Senior Software Engineer', this)">Senior Software Engineer</div>
+            <div class="persona-chip" onclick="setPers('Friend', this)">Friend</div>
+            <div class="persona-chip" onclick="setPers('General Companion', this)">General Companion</div>
+            <input type="hidden" id="pers" value="Default">
           </div>
-          <div style="display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             <span style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:0.3px">LANG:</span>
             <select id="lang" class="ctrl-select">
               <option value="en">English</option>
@@ -242,6 +244,12 @@ let currentSessionId = 'session_' + Date.now();
 let sessionsList = [...savedSessions];
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+function setPers(val, el) {
+  document.getElementById('pers').value = val;
+  document.querySelectorAll('.persona-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
 
 function md(src){
 src=src.replace(/\r\n/g,'\n');
