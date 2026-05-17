@@ -58,6 +58,7 @@ fun ConfigScreen(
     val maxDevices by viewModel.maxDevices.collectAsStateWithLifecycle()
     val turboQuantEnabled by viewModel.turboQuantEnabled.collectAsStateWithLifecycle()
     val ragEnabled by viewModel.ragEnabled.collectAsStateWithLifecycle()
+    val webSearchEnabled by viewModel.webSearchEnabled.collectAsStateWithLifecycle()
     val privacyShieldEnabled by viewModel.privacyShieldEnabled.collectAsStateWithLifecycle()
     val appSecurityEnabled by viewModel.appSecurityEnabled.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
@@ -411,6 +412,25 @@ fun ConfigScreen(
                             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(12.dp)) {
                                 Text(String.format(java.util.Locale.US, "Current Limit: %.1f GB", capacityGb), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Internet Search Capability", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Text("Allow the LLM to search the web as a fallback when no relevant vector memory matches are found.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(
+                                checked = webSearchEnabled,
+                                onCheckedChange = {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                    viewModel.toggleWebSearch(it)
+                                }
+                            )
                         }
                     }
                 }

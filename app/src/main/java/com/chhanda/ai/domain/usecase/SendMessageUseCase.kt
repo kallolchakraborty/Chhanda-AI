@@ -50,6 +50,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val isInternetPresent = networkManager.isConnected.value
             val isQrRequest = source.lowercase() == "qr"
             val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest
+            val webSearchEnabled = settingsRepository.webSearchEnabledFlow.first() && !isQrRequest
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
@@ -130,7 +131,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     }
                 }
             } else if (ragEnabled) {
-                if (isInternetPresent) {
+                if (isInternetPresent && webSearchEnabled) {
                     emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches. Searching the web for real-time answers..."))
                     try {
                         val searchResults = webSearchUseCase(userText)
@@ -193,6 +194,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
                         emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search error. Answering from pre-trained knowledge..."))
                     }
+                } else if (isInternetPresent && !webSearchEnabled) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches & web search disabled. Answering from pre-trained knowledge..."))
                 } else {
                     emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
                 }

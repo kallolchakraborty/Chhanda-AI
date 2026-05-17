@@ -37,6 +37,7 @@ class SettingsRepository @Inject constructor(
         val TURBOQUANT_ENABLED = booleanPreferencesKey("turboquant_enabled")
         val SELECTED_VOICE = stringPreferencesKey("selected_voice")
         val RAG_ENABLED = booleanPreferencesKey("rag_enabled")
+        val WEB_SEARCH_ENABLED = booleanPreferencesKey("web_search_enabled")
         val THINKING_MODE_ENABLED = booleanPreferencesKey("thinking_mode_enabled")
         val PRIVACY_SHIELD_ENABLED = booleanPreferencesKey("privacy_shield_enabled")
         val ACTIVE_MODEL = stringPreferencesKey("active_model")
@@ -141,6 +142,10 @@ class SettingsRepository @Inject constructor(
         preferences[PreferencesKeys.RAG_ENABLED] ?: true
     }
 
+    val webSearchEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.WEB_SEARCH_ENABLED] ?: true
+    }
+
     val thinkingModeEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.THINKING_MODE_ENABLED] ?: true
     }
@@ -236,6 +241,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setRagEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.RAG_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setWebSearchEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.WEB_SEARCH_ENABLED] = enabled
         }
     }
 
