@@ -188,7 +188,6 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
           </select>
         </div>
         <div style="flex:1"></div>
-        <button class="ib" onclick="newChat()" title="New Chat"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         <button class="ib" onclick="closeSession()" title="Close Session" style="color:var(--r);background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);margin-left:8px">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
