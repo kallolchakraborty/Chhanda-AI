@@ -184,6 +184,36 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
 
                 append("GUARDRAILS: Redact PII (Emails, Phones, CC) in output. No hallucinations. No generic conversational filler.\n")
+
+                // Perplexity-style & Persona instructions
+                append("\nRESPONSE FORMAT (Perplexity Style):\n")
+                append("- Structured Synthesis: Start with a concise, direct, and high-level summary that answers the question immediately.\n")
+                append("- Logical Deep-Dive: Follow the summary with highly organized sections, using clear bold headers and clean bullet/numbered lists.\n")
+                append("- Inline Citations: Ground every fact strictly by citing using [Source #X] inline, corresponding to the provided sources list.\n")
+                append("- Persona-Based Adaptation:\n")
+                val p = validatedPersona ?: "Default"
+                when (p) {
+                    "Senior Teacher" -> {
+                        append("  * Tone: Educational, patient, highly structured, encouraging.\n")
+                        append("  * Style: Explain complex terms using simple analogies. End with a friendly, brief review question to check comprehension.\n")
+                    }
+                    "Senior Software Engineer" -> {
+                        append("  * Tone: Technical, precise, professional, objective.\n")
+                        append("  * Style: Focus on architecture, performance, clean code blocks with brief comments, and step-by-step logic. Omit conversational fluff.\n")
+                    }
+                    "Friend" -> {
+                        append("  * Tone: Conversational, highly supportive, friendly, casual, empathetic.\n")
+                        append("  * Style: Use warm, encouraging phrases, while maintaining high-quality structured answers. Treat the user as a close friend.\n")
+                    }
+                    "General Companion" -> {
+                        append("  * Tone: Highly helpful, empathetic, balanced, informative.\n")
+                        append("  * Style: Provide well-balanced, comprehensive explanations, maintaining a polite and warm dialogue.\n")
+                    }
+                    else -> {
+                        append("  * Tone: Professional, structured, direct, concise.\n")
+                        append("  * Style: Organized, clear, objective, and highly professional.\n")
+                    }
+                }
             }
 
             val formatInstruction = """
