@@ -132,6 +132,62 @@ English · Hindi · Bengali — full UI + TTS localization with voice persona sy
 
 ---
 
+## 📱 Application UI Layout
+
+To provide a visual walkthrough of the production-hardened **Chhanda AI & RAG Ecosystem**, here are the on-device layouts captured across the core functional tabs of the Android application:
+
+### 1. Gateway Control Center & Server Lifecycle
+<p align="center">
+  <img src="Presentation/Screenshot_20260518_040328_Chhanda.jpg" width="24%" alt="Stopped Dashboard" />
+  <img src="Presentation/Screenshot_20260518_040351_Chhanda.jpg" width="24%" alt="Loading Engine State" />
+  <img src="Presentation/Screenshot_20260518_040401_Chhanda.jpg" width="24%" alt="Connected Gateway" />
+  <img src="Presentation/Screenshot_20260518_041100_Chhanda.jpg" width="24%" alt="Chat History Card" />
+</p>
+<p align="center"><i>Left to Right: Stopped state dashboard with model stats; transition screen showing dynamic engine initialization; active Ktor-CIO local server running online with real-time temperature, memory, and IP parameters; dashboard showing conversational session history listings.</i></p>
+
+### 2. Node Connectivity, Client Integration & Model Management
+<p align="center">
+  <img src="Presentation/Screenshot_20260518_041024_Chhanda.jpg" width="24%" alt="Offline Hotspot Wizard" />
+  <img src="Presentation/Screenshot_20260518_041045_Chhanda.jpg" width="24%" alt="API Client Config" />
+  <img src="Presentation/Screenshot_20260518_040342_Chhanda.jpg" width="24%" alt="Model Management Tab" />
+  <img src="Presentation/Screenshot_20260518_041343_Chhanda.jpg" width="24%" alt="Real-Time Logging Console" />
+</p>
+<p align="center"><i>Left to Right: Tethering configuration guide for sharing gateway API offline; Node Connectivity Continue config dialog with copyable YAML block; local model organizer with recommended sizes; system log console offering real-time structured debugging feeds.</i></p>
+
+### 3. Knowledge Base & Vector Memory (RAG Ingestion)
+<p align="center">
+  <img src="Presentation/Screenshot_20260518_041133_Chhanda.jpg" width="24%" alt="Data Ingestion Dashboard" />
+  <img src="Presentation/Screenshot_20260518_041145_Chhanda.jpg" width="24%" alt="External Sync" />
+  <img src="Presentation/Screenshot_20260518_041202_Chhanda.jpg" width="24%" alt="RAG Quality & recall" />
+  <img src="Presentation/Screenshot_20260518_041214_Chhanda.jpg" width="24%" alt="Production Tail Latency" />
+</p>
+<p align="center"><i>Left to Right: Ingestion control supporting standard and custom offline datasets (PDF, Word, Excel, OCR, links); external memory backup sync tool; vector storage and recall metric trackers; production latency and compute statistics showing sub-millisecond costs.</i></p>
+
+### 4. Customization, Cloud Sync & Core Settings
+<p align="center">
+  <img src="Presentation/Screenshot_20260518_041230_Chhanda.jpg" width="19%" alt="Appearance Settings" />
+  <img src="Presentation/Screenshot_20260518_041241_Chhanda.jpg" width="19%" alt="Port Parameters" />
+  <img src="Presentation/Screenshot_20260518_041256_Chhanda.jpg" width="19%" alt="Vector Retention Limits" />
+  <img src="Presentation/Screenshot_20260518_041316_Chhanda.jpg" width="19%" alt="Sync scheduler" />
+  <img src="Presentation/Screenshot_20260518_041332_Chhanda.jpg" width="19%" alt="TEE Biometric Lock" />
+</p>
+<p align="center"><i>Left to Right: Theme toggling and TTS localized voice selector; network ports and context sliders (up to 32,768 tokens); vector DB thresholds and automated retention filters; secure daily Google Drive sync scheduler; biometrics encryption shield & HuggingFace token controls.</i></p>
+
+### 5. Conversational Live Chat UI
+<p align="center">
+  <img src="Presentation/Screenshot_20260518_041119_Chhanda.jpg" width="35%" alt="Real-Time Streaming Chat" />
+</p>
+<p align="center"><i>Real-time streaming conversation interface showing response bubbles accompanied by performance micro-indicators (token speeds, latency values, generation counts).</i></p>
+
+### 6. Client Integrations & Multi-Device Web Portal
+<p align="center">
+  <img src="Presentation/Screenshot_20260518_044236_Continue.png" width="58%" alt="VS Code Continue Integration" />
+  <img src="Presentation/Screenshot_20260518_044400_WebPortal.png" width="37%" alt="Mobile Web Chat Portal" />
+</p>
+<p align="center"><i>Left: Full desktop integration showcasing Code-Insiders utilizing the Continue extension. The configuration YAML is directed at Chhanda's local gateway server at port 8888, highlighting real-time structured synthesis and offline coding assistant capabilities. Right: Mobile web chat portal served natively by Chhanda's embedded Ktor-CIO server, allowing zero-install, multi-device LAN chat access with customizable persona routing controls.</i></p>
+
+---
+
 ## 🏗️ High-Level System Architecture
 
 ```mermaid
