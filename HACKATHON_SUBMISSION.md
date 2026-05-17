@@ -48,6 +48,7 @@ Chhanda is a **production-hardened AI gateway** built solo on Android, leveragin
 | **Development Time** | Solo developer, 3 weeks |
 | **IDE & Development Environment** | **Android Studio** (for build engineering, UI layouts, profiling, device logs, and package compilation) + **Antigravity IDE** |
 | **AI Assistant** | **Google Gemini 3 Flash** (Exclusive AI assistant for RAG design, thread-safety, API integration, and codebase security) |
+| **UI/UX Mockups** | Google Stitch |
 
 ---
 
@@ -385,5 +386,5 @@ With **14,500+ lines of production-hardened Kotlin**, a **3-layer security model
 
 ---
 
-Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for compilation, build orchestration, UI layouts, profiling, and diagnostics, **Google's Antigravity** as the agentic codebase orchestration platform, and **Google Gemini 3 Flash** as the exclusive AI development assistant.
+Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for compilation, build orchestration, UI layouts, profiling, and diagnostics, **Google's Antigravity** as the agentic codebase orchestration platform, **Google Gemini 3 Flash** as the exclusive AI development assistant, and **Google Stitch** for base UI mockups.
 Dedicated to **Chhanda Chakraborty**.

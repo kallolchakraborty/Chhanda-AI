@@ -438,4 +438,4 @@ chhanda-local LLM/
 ## 📜 License & Credits
 
 Dedicated to **Chhanda Chakraborty**.
-Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for Android integration and Gradle building, **Google's Antigravity** as the agentic codebase orchestration platform, and **Google Gemini 3 Flash** as the exclusive AI development assistant.
+Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for Android integration and Gradle building, **Google's Antigravity** as the agentic codebase orchestration platform, **Google Gemini 3 Flash** as the exclusive AI development assistant, and **Google Stitch** for the base UI mockups.
