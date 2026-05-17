@@ -383,13 +383,19 @@ class ChhandaServer @Inject constructor(
                 }
                 get("/ping") { call.respondText("pong") }
 
+                val normalizeIp: (String) -> String = { ip ->
+                    if (ip.startsWith("::ffff:")) ip.substring(7) else ip
+                }
+
                 val isLocalRequest: (String) -> Boolean = { host ->
-                    host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true) ||
-                    host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172.")
+                    val cleanHost = normalizeIp(host)
+                    cleanHost == "127.0.0.1" || cleanHost == "0:0:0:0:0:0:0:1" || cleanHost == "::1" || cleanHost.equals("localhost", ignoreCase = true) ||
+                    cleanHost.startsWith("192.168.") || cleanHost.startsWith("10.") || cleanHost.startsWith("172.")
                 }
 
                 val validateAuth: suspend (io.ktor.server.application.ApplicationCall) -> Boolean = validateAuth@{ call ->
-                    val remoteHost = call.request.local.remoteHost
+                    val rawHost = call.request.local.remoteHost
+                    val remoteHost = normalizeIp(rawHost)
                     
                     // Allow local loopback always, but restrict subnet if tunnel is inactive
                     if (!tunnelActive && !isLocalRequest(remoteHost)) {
@@ -408,7 +414,8 @@ class ChhandaServer @Inject constructor(
                     Log.d(TAG, "API Gateway auth attempt: provided='$providedKey', actual='$actualKey'")
                     
                     val isLoopback: (String) -> Boolean = { host ->
-                        host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true)
+                        val cleanHost = normalizeIp(host)
+                        cleanHost == "127.0.0.1" || cleanHost == "0:0:0:0:0:0:0:1" || cleanHost == "::1" || cleanHost.equals("localhost", ignoreCase = true)
                     }
 
                     val isKeyValid = providedKey != null && try {
@@ -437,7 +444,8 @@ class ChhandaServer @Inject constructor(
                     if (!validateAuth(call)) return@post
                     try {
                         val req = call.receive<RegisterRequest>()
-                        val ip = call.request.local.remoteHost
+                        val rawIp = call.request.local.remoteHost
+                        val ip = normalizeIp(rawIp)
                         
                         val activeDevices = deviceDao.getActiveConnections().filter { it.connectionType == "SHARED" }
                         val alreadyConnected = activeDevices.any { it.deviceName == req.name || it.ipAddress == ip }
@@ -471,7 +479,8 @@ class ChhandaServer @Inject constructor(
 
                 post("/v1/chat/completions") {
                     if (!validateAuth(call)) return@post
-                    val remoteIp = call.request.local.remoteHost
+                    val rawRemoteIp = call.request.local.remoteHost
+                    val remoteIp = normalizeIp(rawRemoteIp)
                     val now = System.currentTimeMillis()
                     val lastRequest = clientRequestWindow[remoteIp] ?: 0L
                     if (now - lastRequest < RATE_LIMIT_MS) {
@@ -700,7 +709,8 @@ class ChhandaServer @Inject constructor(
 
                 post("/chat") {
                     if (!validateAuth(call)) return@post
-                    val remoteIp = call.request.local.remoteHost
+                    val rawRemoteIp = call.request.local.remoteHost
+                    val remoteIp = normalizeIp(rawRemoteIp)
 
                     // Receive message body first to extract sessionId for precise, session-isolated rate-limiting
                     val msg = call.receive<WebMessage>()
@@ -774,11 +784,13 @@ class ChhandaServer @Inject constructor(
                 }
 
                 get("/") {
-                    val remoteHost = call.request.local.remoteHost
+                    val rawHost = call.request.local.remoteHost
+                    val remoteHost = normalizeIp(rawHost)
                     val scanToken = call.request.queryParameters["scan_token"]
 
                     val isLoopback: (String) -> Boolean = { host ->
-                        host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true)
+                        val cleanHost = normalizeIp(host)
+                        cleanHost == "127.0.0.1" || cleanHost == "0:0:0:0:0:0:0:1" || cleanHost == "::1" || cleanHost.equals("localhost", ignoreCase = true)
                     }
 
                     if (!isLoopback(remoteHost)) {
@@ -832,7 +844,8 @@ class ChhandaServer @Inject constructor(
                 post("/disconnect") {
                     if (!validateAuth(call)) return@post
                     try {
-                        val ip = call.request.local.remoteHost
+                        val rawIp = call.request.local.remoteHost
+                        val ip = normalizeIp(rawIp)
                         authorizedQrIps.remove(ip)
                         val active = deviceDao.getActiveConnections().filter { it.ipAddress == ip && it.isCurrentlyConnected }
                         active.forEach { device ->

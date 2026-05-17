@@ -1189,6 +1189,7 @@ fun DashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        viewModel.manualRefreshNetwork()
                         showNoNetworkHotspotPrompt = false
                         forceShowQr = true
                         showQrDialog = true

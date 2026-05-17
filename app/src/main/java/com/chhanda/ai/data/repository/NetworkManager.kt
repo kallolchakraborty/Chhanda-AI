@@ -47,9 +47,7 @@ class NetworkManager @Inject constructor(
     }
 
     init {
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
+        val request = NetworkRequest.Builder().build()
         connectivityManager.registerNetworkCallback(request, networkCallback)
         updateNetworkInfo()
     }

@@ -214,11 +214,11 @@ fun GatewayDialog(
                             border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
                         ) {
                             Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(16.dp)) {
-                                val qrIp = when {
-                                    networkIps.any { it.startsWith("192.168.43.") || it.startsWith("192.168.44.") } -> {
-                                        networkIps.find { it.endsWith(".1") } ?: networkIps.find { it.startsWith("192.168.43.") } ?: networkIps.first()
-                                    }
-                                    else -> currentIp
+                                val qrIp = remember(networkIps, currentIp) {
+                                    networkIps.find { it.endsWith(".1") && it != "127.0.0.1" && it != "0.0.0.0" }
+                                        ?: networkIps.find { (it.startsWith("192.168.") || it.startsWith("172.") || it.startsWith("10.")) && it != "127.0.0.1" }
+                                        ?: networkIps.find { it != "127.0.0.1" && it != "0.0.0.0" }
+                                        ?: currentIp
                                 }
                                 val chatUrl = remember(qrIp, displayPort, apiKey) {
                                     viewModel.getQrCodeUrl(qrIp, displayPort)
