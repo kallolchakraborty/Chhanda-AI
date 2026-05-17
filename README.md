@@ -344,7 +344,7 @@ chhanda-local LLM/
 │           │       ├── AppDatabase.kt              # Room DB (4 DAOs)
 │           │       ├── ChatDao.kt                  # Chat history persistence
 │           │       ├── DeviceDao.kt                # Connected device tracking
- Wel          │       ├── VectorChunkDao.kt           # Int8 vector BLOB storage
+│           │       ├── VectorChunkDao.kt           # Int8 vector BLOB storage
 │           │       ├── UploadedFileDao.kt           # File metadata tracking
 │           │       ├── LocalVectorStore.kt          # Min-Heap similarity search
 │           │       └── SettingsRepository.kt        # Encrypted prefs + DataStore
