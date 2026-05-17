@@ -58,7 +58,10 @@ class TurnContextIngestor @Inject constructor(
                         Log.e("TurnContextIngestor", "Failed to persist attachment: ${e.message}")
                     }
                     
-                    append("--- ATTACHMENT: $fileName (${type.name}) ---\n$rawText\n\n")
+                    val promptText = if (rawText.length > 2000) {
+                        rawText.take(2000) + "\n\n...[Content Truncated due to size limits. Full content is stored in the local vector knowledge base.]"
+                    } else rawText
+                    append("--- ATTACHMENT: $fileName (${type.name}) ---\n$promptText\n\n")
                 } catch (e: Exception) {
                     append("Error processing ${uri.lastPathSegment}: ${e.localizedMessage}\n\n")
                 }
