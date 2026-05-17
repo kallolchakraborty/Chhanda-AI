@@ -24,7 +24,7 @@ class TurnContextIngestor @Inject constructor(
                     val uriString = uri.toString()
                     val fileName = uri.lastPathSegment ?: "file"
                     val (rawText, type) = when {
-                        uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") -> 
+                        uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") || uriString.endsWith(".webp") -> 
                             ingestor.ingestImage(uri) to DocType.IMAGE
                         uriString.endsWith(".pdf") -> 
                             ingestor.ingestPdf(uri).joinToString("\n") to DocType.PDF
@@ -38,6 +38,14 @@ class TurnContextIngestor @Inject constructor(
                             ingestor.ingestJson(uri) to DocType.JSON
                         uriString.endsWith(".csv") -> 
                             ingestor.ingestCsv(uri) to DocType.CSV
+                        uriString.endsWith(".tsv") || uriString.endsWith(".tab") -> 
+                            ingestor.ingestTsv(uri) to DocType.TSV
+                        uriString.endsWith(".xml") -> 
+                            ingestor.ingestXml(uri) to DocType.XML
+                        uriString.endsWith(".html") || uriString.endsWith(".htm") -> 
+                            ingestor.ingestHtml(uri) to DocType.HTML
+                        uriString.endsWith(".md") -> 
+                            ingestor.ingestMd(uri) to DocType.MD
                         else -> ingestor.ingestTxt(uri) to DocType.TXT
                     }
                     

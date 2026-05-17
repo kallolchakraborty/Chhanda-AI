@@ -154,7 +154,7 @@ class SystemViewModel @Inject constructor(
 
     val allFiles = ingestionManager.uploadedFiles
 
-    val recentFiles = allFiles.map { it.take(10) }
+    val recentFiles = allFiles.map { it.take(5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     fun setShowAllFiles(show: Boolean) {
@@ -199,18 +199,36 @@ class SystemViewModel @Inject constructor(
 
 
 
+    private fun getFileName(uri: android.net.Uri): String? {
+        return try {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val index = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) it.getString(index) else null
+                } else null
+            }
+        } catch (e: Exception) { null }
+    }
+
     private fun getDocType(uri: android.net.Uri): com.chhanda.ai.domain.usecase.DocType {
         val mimeType = context.contentResolver.getType(uri)
+        val fileName = getFileName(uri)?.lowercase() ?: ""
         return when {
-            mimeType?.startsWith("image/") == true -> com.chhanda.ai.domain.usecase.DocType.IMAGE
-            mimeType == "application/pdf" -> com.chhanda.ai.domain.usecase.DocType.PDF
-            mimeType == "text/plain" -> com.chhanda.ai.domain.usecase.DocType.TXT
+            mimeType?.startsWith("image/") == true || fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || fileName.endsWith(".webp") -> com.chhanda.ai.domain.usecase.DocType.IMAGE
+            mimeType == "application/pdf" || fileName.endsWith(".pdf") -> com.chhanda.ai.domain.usecase.DocType.PDF
             mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || 
-            mimeType == "application/msword" -> com.chhanda.ai.domain.usecase.DocType.WORD
+            mimeType == "application/msword" || fileName.endsWith(".docx") || fileName.endsWith(".doc") -> com.chhanda.ai.domain.usecase.DocType.WORD
             mimeType == "application/vnd.ms-excel" || 
-            mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> com.chhanda.ai.domain.usecase.DocType.EXCEL
-            mimeType == "application/json" -> com.chhanda.ai.domain.usecase.DocType.JSON
-            mimeType?.startsWith("audio/") == true -> com.chhanda.ai.domain.usecase.DocType.AUDIO
+            mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+            fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> com.chhanda.ai.domain.usecase.DocType.EXCEL
+            mimeType == "application/json" || fileName.endsWith(".json") -> com.chhanda.ai.domain.usecase.DocType.JSON
+            mimeType == "text/csv" || mimeType == "text/comma-separated-values" || fileName.endsWith(".csv") -> com.chhanda.ai.domain.usecase.DocType.CSV
+            mimeType == "text/tab-separated-values" || fileName.endsWith(".tsv") || fileName.endsWith(".tab") -> com.chhanda.ai.domain.usecase.DocType.TSV
+            mimeType == "text/xml" || mimeType == "application/xml" || fileName.endsWith(".xml") -> com.chhanda.ai.domain.usecase.DocType.XML
+            mimeType == "text/html" || fileName.endsWith(".html") || fileName.endsWith(".htm") -> com.chhanda.ai.domain.usecase.DocType.HTML
+            mimeType == "text/markdown" || fileName.endsWith(".md") -> com.chhanda.ai.domain.usecase.DocType.MD
+            mimeType?.startsWith("audio/") == true || fileName.endsWith(".mp3") || fileName.endsWith(".wav") || fileName.endsWith(".m4a") -> com.chhanda.ai.domain.usecase.DocType.AUDIO
             else -> com.chhanda.ai.domain.usecase.DocType.TXT
         }
     }

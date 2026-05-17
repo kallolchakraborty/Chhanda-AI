@@ -417,25 +417,140 @@ class AndroidMultimodalIngestor @Inject constructor(
     }
 
     override suspend fun ingestCsv(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val stringBuilder = StringBuilder()
         try {
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                inputStream.bufferedReader().use { reader ->
-                    var lineCount = 0
-                    reader.forEachLine { line ->
-                        if (lineCount < 5000) { // Safety cap for mobile
-                            val cells = line.split(",").joinToString(" | ")
-                            stringBuilder.append(cells).append("\n")
-                        }
-                        lineCount++
-                    }
-                }
-            }
+            parseDelimited(uri, ',')
         } catch (e: Exception) {
             android.util.Log.e("Ingestor", "CSV extraction failed: ${e.message}")
             throw Exception("Failed to extract text from CSV file: ${e.message}")
         }
+    }
+
+    override suspend fun ingestTsv(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            parseDelimited(uri, '\t')
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "TSV extraction failed: ${e.message}")
+            throw Exception("Failed to extract text from TSV file: ${e.message}")
+        }
+    }
+
+    override suspend fun ingestXml(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val stringBuilder = java.lang.StringBuilder()
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val parser = android.util.Xml.newPullParser()
+                parser.setInput(inputStream, null)
+                var eventType = parser.eventType
+                val tagStack = java.util.Stack<String>()
+                while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                    when (eventType) {
+                        org.xmlpull.v1.XmlPullParser.START_TAG -> {
+                            tagStack.push(parser.name)
+                        }
+                        org.xmlpull.v1.XmlPullParser.TEXT -> {
+                            val text = parser.text?.trim() ?: ""
+                            if (text.isNotBlank() && tagStack.isNotEmpty()) {
+                                val path = tagStack.joinToString(" > ")
+                                stringBuilder.append("$path: $text\n")
+                            }
+                        }
+                        org.xmlpull.v1.XmlPullParser.END_TAG -> {
+                            if (tagStack.isNotEmpty()) tagStack.pop()
+                        }
+                    }
+                    eventType = parser.next()
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "XML extraction failed: ${e.message}")
+            try {
+                context.contentResolver.openInputStream(uri)?.use { fallbackStream ->
+                    stringBuilder.setLength(0)
+                    stringBuilder.append(fallbackStream.bufferedReader().readText())
+                }
+            } catch (inner: Exception) {}
+        }
         stringBuilder.toString().trim()
+    }
+
+    override suspend fun ingestHtml(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val html = inputStream.bufferedReader().readText()
+                val doc = org.jsoup.Jsoup.parse(html)
+                doc.select("script, style, iframe, noscript, header, footer, nav").remove()
+                doc.body().text()
+            } ?: throw Exception("Failed to open HTML stream")
+        } catch (e: Exception) {
+            android.util.Log.e("Ingestor", "HTML extraction failed: ${e.message}")
+            throw Exception("Failed to extract text from HTML: ${e.message}")
+        }
+    }
+
+    override suspend fun ingestMd(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            inputStream.bufferedReader().use { it.readText() }
+        } ?: throw Exception("Failed to open input stream for MD")
+    }
+
+    private fun parseDelimited(uri: Uri, delimiter: Char): String {
+        val stringBuilder = java.lang.StringBuilder()
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            inputStream.bufferedReader().use { reader ->
+                val rows = mutableListOf<List<String>>()
+                var lineCount = 0
+                reader.forEachLine { line ->
+                    if (lineCount < 5000) {
+                        val row = parseCsvRow(line, delimiter)
+                        if (row.isNotEmpty()) {
+                            rows.add(row)
+                        }
+                    }
+                    lineCount++
+                }
+                
+                if (rows.isNotEmpty()) {
+                    val headers = rows.first()
+                    for (i in 1 until rows.size) {
+                        val row = rows[i]
+                        stringBuilder.append("### Record ${i} ###\n")
+                        for (j in 0 until headers.size) {
+                            val colName = headers.getOrNull(j) ?: "Column_$j"
+                            val colVal = row.getOrNull(j) ?: ""
+                            stringBuilder.append("$colName: $colVal\n")
+                        }
+                        stringBuilder.append("\n")
+                    }
+                }
+            }
+        }
+        return stringBuilder.toString().trim()
+    }
+
+    private fun parseCsvRow(line: String, delimiter: Char): List<String> {
+        val result = mutableListOf<String>()
+        var curVal = java.lang.StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            if (c == '"') {
+                if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                    curVal.append('"')
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            } else if (c == delimiter && !inQuotes) {
+                result.add(curVal.toString().trim())
+                curVal = java.lang.StringBuilder()
+            } else {
+                curVal.append(c)
+            }
+            i++
+        }
+        result.add(curVal.toString().trim())
+        return result
     }
     /**
      * Senior Semantic Chunking:

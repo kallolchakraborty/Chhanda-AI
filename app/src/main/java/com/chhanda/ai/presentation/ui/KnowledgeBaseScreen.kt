@@ -130,6 +130,14 @@ fun KnowledgeBaseScreen(
                                 "application/msword", // doc
                                 "application/vnd.ms-excel", // xls
                                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
+                                "application/json",
+                                "text/csv",
+                                "text/comma-separated-values",
+                                "text/tab-separated-values",
+                                "text/xml",
+                                "application/xml",
+                                "text/html",
+                                "text/markdown",
                                 "audio/*"
                             )) 
                         },
@@ -227,11 +235,11 @@ fun KnowledgeBaseScreen(
                         appLanguage = appLanguage, 
                         onViewArchive = { showAllFiles = !showAllFiles }, 
                         isExpanded = showAllFiles,
-                        isVisible = allFiles.size > 10
+                        isVisible = allFiles.size > 5
                     )
                 }
                 
-                val displayFiles = if (showAllFiles) allFiles else allFiles.take(10)
+                val displayFiles = if (showAllFiles) allFiles else allFiles.take(5)
                 items(count = displayFiles.size) { index ->
                     val file = displayFiles[index]
                     RagFileItem(
@@ -754,6 +762,12 @@ fun RagFileItem(
         format == "AUDIO" || format.contains("MP3") || format.contains("WAV") -> Triple(Icons.Default.Mic, Color(0xFF3B82F6), "Audio Clip")
         format == "WORD" || format.contains("DOC") -> Triple(Icons.Default.Description, Color(0xFF3B82F6), "Word Document")
         format == "EXCEL" || format.contains("XLS") || format.contains("SHEET") -> Triple(Icons.Default.TableChart, Color(0xFF10B981), "Excel Sheet")
+        format == "CSV" -> Triple(Icons.Default.TableChart, Color(0xFF10B981), "CSV Dataset")
+        format == "TSV" -> Triple(Icons.Default.TableChart, Color(0xFF0EA5E9), "TSV Dataset")
+        format == "XML" -> Triple(Icons.Default.Code, Color(0xFFF43F5E), "XML File")
+        format == "HTML" -> Triple(Icons.Default.Code, Color(0xFFF97316), "HTML Document")
+        format == "MD" -> Triple(Icons.Default.Description, Color(0xFF94A3B8), "Markdown File")
+        format == "JSON" -> Triple(Icons.Default.Code, Color(0xFFEC4899), "JSON File")
         format == "WEB_URL" || format.contains("WEB") || format.contains("URL") -> Triple(Icons.Default.Public, Color(0xFFF97316), "Website")
         format == "TXT" || format.contains("TEXT") -> Triple(Icons.Default.Description, Color(0xFF94A3B8), "Text File")
         else -> Triple(Icons.Default.Description, Color(0xFF94A3B8), file.format)

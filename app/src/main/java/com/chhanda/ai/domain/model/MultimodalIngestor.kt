@@ -14,6 +14,10 @@ interface MultimodalIngestor {
     suspend fun ingestExcel(uri: Uri): String
     suspend fun ingestJson(uri: Uri): String
     suspend fun ingestCsv(uri: Uri): String
+    suspend fun ingestTsv(uri: Uri): String
+    suspend fun ingestXml(uri: Uri): String
+    suspend fun ingestHtml(uri: Uri): String
+    suspend fun ingestMd(uri: Uri): String
 }
 
 /**

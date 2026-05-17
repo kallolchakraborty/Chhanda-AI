@@ -66,7 +66,7 @@ After the recent hardening pass, the permission set has been minimized:
 ```mermaid
 graph TD
     subgraph "Ingestion Layer"
-        A["Files: PDF/DOCX/XLSX/IMG/URL"] --> B["MultimodalIngestor<br/>(Format Detection)"]
+        A["Files: PDF/DOCX/XLSX/CSV/TSV/XML/HTML/MD/JSON/IMG/URL"] --> B["MultimodalIngestor<br/>(Format Detection)"]
         B --> C["TextChunker<br/>(Paragraph-First, 500 chars max)"]
         C --> D["EmbeddingEngine<br/>(MediaPipe 512-dim)"]
         D --> E["Int8 Quantizer<br/>(float × 127 → byte)"]

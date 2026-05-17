@@ -269,7 +269,13 @@ sequenceDiagram
 | **DOC** | Apache POI `HWPFDocument` (Scratchpad) | 📝 |
 | **XLSX** | Apache POI `XSSFWorkbook` | 📊 |
 | **XLS** | Apache POI `HSSFWorkbook` (Scratchpad) | 📊 |
-| **TXT / CSV** | Direct text read | 📃 |
+| **CSV** | Robust state-machine RFC 4180-compliant parser (key-value formatted) | 📊 |
+| **TSV / TAB** | Robust state-machine tab-separated parser (key-value formatted) | 📊 |
+| **XML** | Hierarchical tag-path preserving XML context parser | 💻 |
+| **HTML** | Jsoup HTML body text extractor with script/style removal | 🌐 |
+| **MD** | Raw Markdown with outline headers preserved | 📃 |
+| **JSON** | Adaptively streamed JSON semantic tree parser | 💻 |
+| **TXT** | Direct text read | 📃 |
 | **Images** | Google ML Kit Text Recognition v16 | 🖼️ |
 | **Websites** | Jsoup HTML extraction | 🌐 |
 
@@ -297,7 +303,7 @@ flowchart TD
 ```
 
 ### 5.6 File Management
-- **Recent Files**: Shows last 10 ingested files
+- **Recent Files**: Shows last 5 ingested files
 - **All Files**: Full list with timestamps
 - **Delete**: Select files → Delete removes from disk, DB, and vector store
 - **Auto-Delete**: Enable in Settings → files older than N days are auto-purged

@@ -250,16 +250,22 @@ class IngestionManager @Inject constructor(
     }
     private fun determineDocType(uri: Uri): DocType {
         val mimeType = context.contentResolver.getType(uri)
+        val fileName = getFileName(uri)?.lowercase() ?: ""
         return when {
-            mimeType?.startsWith("image/") == true -> DocType.IMAGE
-            mimeType == "application/pdf" -> DocType.PDF
-            mimeType == "text/plain" -> DocType.TXT
+            mimeType?.startsWith("image/") == true || fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || fileName.endsWith(".webp") -> DocType.IMAGE
+            mimeType == "application/pdf" || fileName.endsWith(".pdf") -> DocType.PDF
             mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || 
-            mimeType == "application/msword" -> DocType.WORD
+            mimeType == "application/msword" || fileName.endsWith(".docx") || fileName.endsWith(".doc") -> DocType.WORD
             mimeType == "application/vnd.ms-excel" || 
-            mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> DocType.EXCEL
-            mimeType == "application/json" -> DocType.JSON
-            mimeType?.startsWith("audio/") == true -> DocType.AUDIO
+            mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+            fileName.endsWith(".xlsx") || fileName.endsWith(".xls") -> DocType.EXCEL
+            mimeType == "application/json" || fileName.endsWith(".json") -> DocType.JSON
+            mimeType == "text/csv" || mimeType == "text/comma-separated-values" || fileName.endsWith(".csv") -> DocType.CSV
+            mimeType == "text/tab-separated-values" || fileName.endsWith(".tsv") || fileName.endsWith(".tab") -> DocType.TSV
+            mimeType == "text/xml" || mimeType == "application/xml" || fileName.endsWith(".xml") -> DocType.XML
+            mimeType == "text/html" || fileName.endsWith(".html") || fileName.endsWith(".htm") -> DocType.HTML
+            mimeType == "text/markdown" || fileName.endsWith(".md") -> DocType.MD
+            mimeType?.startsWith("audio/") == true || fileName.endsWith(".mp3") || fileName.endsWith(".wav") || fileName.endsWith(".m4a") -> DocType.AUDIO
             else -> DocType.TXT
         }
     }

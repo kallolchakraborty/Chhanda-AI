@@ -390,7 +390,7 @@ In an era of mass data collection, Chhanda represents a fundamental shift: **you
 |:---|:---|:---|:---|
 | **Fully Offline** | ⚠️ Partial | ❌ Requires internet | ✅ 100% offline |
 | **RAG Pipeline** | ❌ | ❌ | ✅ Int8 Quantized |
-| **Document Ingestion** | ❌ | ⚠️ Cloud-based | ✅ PDF/DOCX/XLSX/OCR/Web |
+| **Document Ingestion** | ❌ | ⚠️ Cloud-based | ✅ PDF/DOCX/XLSX/CSV/TSV/XML/HTML/MD/JSON/OCR/Web |
 | **Network Gateway** | ❌ | ❌ | ✅ Multi-client server |
 | **API Compatibility** | ❌ | ✅ (Cloud) | ✅ OpenAI-compatible (Local) |
 | **Rate Limiting** | ❌ | ✅ (Server-side) | ✅ On-device Leaky Bucket |

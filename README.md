@@ -62,7 +62,7 @@ This application is named after and dedicated to my mother, **Chhanda Chakrabort
 ### 2. Adaptive Multimodal RAG Pipeline
 | Capability | Details |
 |:---|:---|
-| **Supported Formats** | PDF, DOCX, DOC, XLSX, XLS, TXT, HTML, Images (OCR via ML Kit) |
+| **Supported Formats** | PDF, DOCX, DOC, XLSX, XLS, CSV, TSV (Tab-delimited), XML, HTML, MD (Markdown), JSON, Images (OCR via ML Kit) |
 | **Web Scraping** | Jsoup-based HTML extraction with depth-first link following |
 | **Embedding** | On-device MediaPipe `tasks-text` with 512-dim vectors |
 | **Quantization** | Int8 byte-space quantization — **75% storage reduction** vs Float32 |

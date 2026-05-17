@@ -28,6 +28,10 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
             DocType.EXCEL -> ingestor.ingestExcel(uri)
             DocType.JSON -> ingestor.ingestJson(uri)
             DocType.CSV -> ingestor.ingestCsv(uri)
+            DocType.TSV -> ingestor.ingestTsv(uri)
+            DocType.XML -> ingestor.ingestXml(uri)
+            DocType.HTML -> ingestor.ingestHtml(uri)
+            DocType.MD -> ingestor.ingestMd(uri)
         }
         processRawText(rawText, uri.toString(), type.name, modelId, onProgress)
     }
@@ -84,5 +88,5 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
 }
 
 enum class DocType {
-    PDF, IMAGE, AUDIO, TXT, WORD, EXCEL, JSON, CSV
+    PDF, IMAGE, AUDIO, TXT, WORD, EXCEL, JSON, CSV, TSV, XML, HTML, MD
 }
