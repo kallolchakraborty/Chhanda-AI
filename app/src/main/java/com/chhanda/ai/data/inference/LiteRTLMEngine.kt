@@ -41,7 +41,10 @@ class LiteRTLMEngine @Inject constructor(
     override val loadingProgress: Flow<Float> = _loadingProgress.asStateFlow()
 
     private val _isLoaded = MutableStateFlow(false)
+    override val isModelLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
+    override val isModelLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     companion object { private const val TAG = "LiteRTLMEngine" }
     
@@ -71,7 +74,26 @@ class LiteRTLMEngine @Inject constructor(
                     engine = Engine(config)
                     
                     _loadingProgress.value = 0.6f
-                    engine!!.initialize()
+                    try {
+                        engine!!.initialize()
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "Failed to initialize engine, deleting cache and retrying: ${e.message}")
+                        try {
+                            val modelDir = File(path).parentFile
+                            modelDir?.listFiles()?.forEach { file ->
+                                if (file.name.contains(".xnnpack_cache")) {
+                                    file.delete()
+                                }
+                            }
+                            // Re-initialize engine
+                            engine?.close()
+                            engine = Engine(config)
+                            engine!!.initialize()
+                        } catch (retryEx: Throwable) {
+                            Log.e(TAG, "Retry initialization failed", retryEx)
+                            throw retryEx
+                        }
+                    }
                     
                     currentModelPath = path
                     _isLoaded.value = true
@@ -139,6 +161,8 @@ class LiteRTLMEngine @Inject constructor(
             }
 
             var emittedTextLength = 0
+            var finalFullText = ""
+            var finalTps = 0.0
             conversation?.let { conv ->
                 val request = if (contentList.size > 1) Contents.of(contentList) else Contents.of(listOf(Content.Text(prompt)))
                 conv.sendMessageAsync(request).collect { message ->
@@ -146,6 +170,7 @@ class LiteRTLMEngine @Inject constructor(
                         .filterIsInstance<Content.Text>()
                         .joinToString("") { it.text }
                     
+                    finalFullText = fullText
                     if (fullText.length > emittedTextLength) {
                         val delta = fullText.substring(emittedTextLength)
                         emittedTextLength = fullText.length
@@ -154,6 +179,7 @@ class LiteRTLMEngine @Inject constructor(
                         val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
                         val tps = if (elapsed > 0) tokenCount / elapsed else 0.0
                         _performanceMetrics.value = tps
+                        finalTps = tps
                         emit(TokenUpdate.Partial(delta, tps))
 
                         // ACTIVE THERMAL THROTTLING:
@@ -164,6 +190,8 @@ class LiteRTLMEngine @Inject constructor(
                     }
                 }
             }
+            val duration = System.currentTimeMillis() - startTime
+            emit(TokenUpdate.Final(finalFullText, finalTps, duration))
         } catch (e: Throwable) {
             Log.e(TAG, "Inference crash: ${e.message}", e)
             emit(TokenUpdate.Error(e.localizedMessage ?: "Critical inference error"))
@@ -189,13 +217,11 @@ class LiteRTLMEngine @Inject constructor(
         }
     }
     
-    override fun isModelLoaded(): Boolean = _isLoaded.value
-    override fun isModelLoading(): Boolean = _isLoading.value
     override fun getCurrentModelName(): String = currentModelPath?.let { File(it).name } ?: "None"
     
     override fun isMultimodal(): Boolean {
         val name = currentModelPath?.lowercase() ?: return false
-        return name.contains("e4b") || name.contains("multimodal") || name.contains("llava") || name.contains("moondream")
+        return name.contains("multimodal") || name.contains("llava") || name.contains("moondream")
     }
 
     override suspend fun close() {

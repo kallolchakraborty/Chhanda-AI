@@ -39,13 +39,12 @@ fun LocalModelItem(
     onDelete: () -> Unit,
     appLanguage: String = "English"
 ) {
-    Surface(
+    GlassBox(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .semantics(mergeDescendants = true) {},
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(20.dp)
+        cornerRadius = 24.dp
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -100,20 +99,72 @@ fun LocalModelItem(
                 )
             }
             
-            Row {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.DeleteOutline, null, tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-                }
-                IconButton(onClick = onTryIt) {
-                    Icon(Icons.Default.OpenInNew, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                }
-                if (isServerRunning && model.isActive) {
-                    IconButton(onClick = onStop) {
-                        Icon(Icons.Default.StopCircle, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Delete Button
+                Surface(
+                    onClick = onDelete,
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.DeleteOutline, 
+                            null, 
+                            tint = MaterialTheme.colorScheme.error, 
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
-                } else {
-                    IconButton(onClick = onActivate) {
-                        Icon(if (model.isActive) Icons.Default.CheckCircle else Icons.Default.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
+
+                // Chat/Try It Button
+                Surface(
+                    onClick = onTryIt,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Chat, 
+                            null, 
+                            tint = MaterialTheme.colorScheme.primary, 
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Run/Activate or Stop Button
+                val buttonColor = when {
+                    isServerRunning && model.isActive -> MaterialTheme.colorScheme.error
+                    model.isActive -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                }
+                val iconVector = when {
+                    isServerRunning && model.isActive -> Icons.Default.Stop
+                    else -> Icons.Default.PlayArrow
+                }
+                val iconTint = when {
+                    model.isActive -> MaterialTheme.colorScheme.onPrimary
+                    else -> MaterialTheme.colorScheme.primary
+                }
+
+                Surface(
+                    onClick = if (isServerRunning && model.isActive) onStop else onActivate,
+                    color = buttonColor,
+                    shape = CircleShape,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            iconVector, 
+                            null, 
+                            tint = iconTint, 
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -143,13 +194,12 @@ fun DownloadableModelItem(
         label = "DownloadProgress"
     )
 
-    Surface(
+    GlassBox(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .semantics(mergeDescendants = true) {},
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        shape = RoundedCornerShape(20.dp)
+        cornerRadius = 24.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -229,11 +279,17 @@ fun DownloadableModelItem(
                 } else {
                     Button(
                         onClick = onDownload,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.height(36.dp)
                     ) {
-                        Text(Localization.getString("download", appLanguage), fontSize = 11.sp)
+                        Icon(Icons.Default.CloudDownload, null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(Localization.getString("download", appLanguage), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -258,62 +314,90 @@ fun DownloadableModelItem(
                 Spacer(Modifier.height(12.dp))
                 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Status Badge
-                    Surface(
-                        color = (if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary).copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp)
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    
+                    val pct = (animatedProgress * 100).toInt()
+                    val speedStr = if (status != null && status.speedBytesPerSec > 0) {
+                        android.text.format.Formatter.formatFileSize(context, status.speedBytesPerSec) + "/s"
+                    } else {
+                        "-- B/s"
+                    }
+                    
+                    val downloadedStr = if (status != null) {
+                        android.text.format.Formatter.formatFileSize(context, status.downloadedBytes)
+                    } else {
+                        "0 B"
+                    }
+                    
+                    val totalStr = if (status != null && status.totalBytes > 0) {
+                        android.text.format.Formatter.formatFileSize(context, status.totalBytes)
+                    } else {
+                        model.size
+                    }
+
+                    // 1. Percentage
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Icon(
+                            imageVector = if (isPaused) Icons.Default.Pause else Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+                        )
                         Text(
-                            if (isPaused) Localization.getString("paused", appLanguage).uppercase()
-                            else "${(progress * 100).toInt()}% " + Localization.getString("downloading", appLanguage).uppercase(),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black,
+                            text = if (isPaused) "Paused" else "$pct%",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
                             color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
                         )
                     }
 
-                    // Telemetry Row (Speed and Size)
+                    // 2. Speed (Only if not paused)
                     if (!isPaused) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            val speedStr = if (status != null && status.speedBytesPerSec > 0) {
-                                android.text.format.Formatter.formatFileSize(context, status.speedBytesPerSec) + "/s"
-                            } else {
-                                "-- B/s"
-                            }
-                            
-                            val downloadedStr = if (status != null) {
-                                android.text.format.Formatter.formatFileSize(context, status.downloadedBytes)
-                            } else {
-                                "0 B"
-                            }
-                            
-                            val totalStr = if (status != null && status.totalBytes > 0) {
-                                android.text.format.Formatter.formatFileSize(context, status.totalBytes)
-                            } else {
-                                model.size
-                            }
-
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    speedStr,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "$downloadedStr / $totalStr",
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FlashOn,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = Color(0xFFFFB300) // Beautiful gold yellow
+                            )
+                            Text(
+                                text = speedStr,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
+                    }
+
+                    // 3. Storage / Progress Bytes
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storage,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                        Text(
+                            text = "$downloadedStr / $totalStr",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

@@ -92,6 +92,7 @@ fun DashboardScreen(
     val vectorDbCapacityBytes by viewModel.vectorDbCapacityBytes.collectAsStateWithLifecycle()
     val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val appSecurityEnabled by viewModel.appSecurityEnabled.collectAsStateWithLifecycle()
 
     // --- Analytics Dashboard State ---
     val tpsHistory by viewModel.tpsHistory.collectAsStateWithLifecycle()
@@ -103,24 +104,28 @@ fun DashboardScreen(
     val context = LocalContext.current
     val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
     val activity = context as? androidx.fragment.app.FragmentActivity
-    var isUnlocked by remember { mutableStateOf(true) }
+    var isUnlocked by remember(appSecurityEnabled) { mutableStateOf(!appSecurityEnabled) }
     var authError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        if (activity != null && com.chhanda.ai.util.BiometricAuthenticator.canAuthenticate(context)) {
-            com.chhanda.ai.util.BiometricAuthenticator.authenticate(
-                activity = activity,
-                onResult = { success, error ->
-                    if (success) {
-                        isUnlocked = true
-                        authError = null
-                    } else {
-                        authError = error ?: "Authentication failed"
+    LaunchedEffect(appSecurityEnabled) {
+        if (appSecurityEnabled) {
+            if (activity != null && com.chhanda.ai.util.BiometricAuthenticator.canAuthenticate(context)) {
+                isUnlocked = false
+                com.chhanda.ai.util.BiometricAuthenticator.authenticate(
+                    activity = activity,
+                    onResult = { success, error ->
+                        if (success) {
+                            isUnlocked = true
+                            authError = null
+                        } else {
+                            authError = error ?: "Authentication failed"
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                isUnlocked = true
+            }
         } else {
-            // No biometrics available, allow access or fallback
             isUnlocked = true
         }
     }
@@ -216,8 +221,12 @@ fun DashboardScreen(
     var showHistorySheet by remember { mutableStateOf(false) }
     var selectedModelForHistory by remember { mutableStateOf<String?>(null) }
     val selectedSessions = remember { mutableStateListOf<String>() }
-    val activeModelName = remember(ownedModels, sharedModels) {
-        (ownedModels + sharedModels).firstOrNull { it.isActive }?.name ?: "No Active Model"
+    val activeModelName = remember(ownedModels, sharedModels, isServerRunning) {
+        if (isServerRunning) {
+            (ownedModels + sharedModels).firstOrNull { it.isActive }?.name ?: "No Active Model"
+        } else {
+            "No Active Model"
+        }
     }
     val anyActiveModel = remember(ownedModels, sharedModels) {
         (ownedModels + sharedModels).any { it.isActive }
@@ -392,24 +401,6 @@ fun DashboardScreen(
 
 
             item {
-                if (isVpnActive) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = "Security Warning", tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                Localization.getString("vpn_warning", appLanguage),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
                 ActiveModelCard(
                     modelName = activeModelName,
                     isRunning = isServerRunning,

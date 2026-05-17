@@ -41,7 +41,15 @@ class ResponseProcessor @Inject constructor(
                         internalBuffer.setLength(0)
                     }
                 }
-                else -> emit(update)
+                else -> {
+                    if (!includeThinking && internalBuffer.isNotEmpty() && !isThinking) {
+                        val remaining = internalBuffer.toString()
+                        val safeText = if (privacyShieldEnabled) PrivacyGuard.redact(remaining) else remaining
+                        emit(TokenUpdate.Partial(safeText, 0.0))
+                        internalBuffer.setLength(0)
+                    }
+                    emit(update)
+                }
             }
         }
     }

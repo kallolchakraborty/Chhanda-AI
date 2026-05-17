@@ -306,32 +306,34 @@ private fun ActiveModelContent(
             modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), 
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 // IP Address
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Link, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                    Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(" $ipAddress", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
                 
                 // Port
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Dns, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                    Text(" $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(" $port", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
                 
                 // Temperature
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Thermostat, null, tint = thermalColor, modifier = Modifier.size(12.dp))
-                    Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(" ${temperature.toInt()}°C", color = thermalColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
                 
                 // RAM
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Memory, null, tint = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(12.dp))
-                    Text(" $ramUsage", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(" $ramUsage", color = if(isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -404,35 +406,6 @@ fun AnalyticsDashboardSection(
     appLanguage: String = "English"
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-        Text(
-            "ENGINE OBSERVABILITY", 
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // TPS Graph
-            TelemetryCard(
-                modifier = Modifier.weight(1f),
-                label = "Performance (TPS)",
-                currentValue = String.format("%.1f", tpsHistory.lastOrNull() ?: 0.0),
-                data = tpsHistory,
-                color = Color(0xFF4ADE80) // Green
-            )
-            // RAM Graph
-            TelemetryCard(
-                modifier = Modifier.weight(1f),
-                label = "Memory (GB)",
-                currentValue = String.format("%.1f", ramHistory.lastOrNull() ?: 0.0),
-                data = ramHistory,
-                color = Color(0xFF60A5FA) // Blue
-            )
-        }
-        
-        Spacer(Modifier.height(12.dp))
-        
         // Session Summary
         GlassBox(
             modifier = Modifier.fillMaxWidth(),
@@ -440,7 +413,7 @@ fun AnalyticsDashboardSection(
             cornerRadius = 24.dp
         ) {
             Row(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {

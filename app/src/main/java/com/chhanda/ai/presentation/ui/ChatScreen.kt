@@ -160,7 +160,7 @@ fun ChatScreen(
     var unreadCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(totalItems) { 
-        if (isAtBottom) {
+        if (isAtBottom && totalItems > 0) {
             listState.animateScrollToItem(totalItems - 1)
             lastSeenCount = totalItems
             unreadCount = 0

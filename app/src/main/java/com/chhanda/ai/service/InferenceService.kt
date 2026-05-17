@@ -35,7 +35,13 @@ class InferenceService : Service() {
 
     private val binder = object : IInferenceService.Stub() {
         override fun initModel(path: String) {
-            serviceScope.launch { try { engine.initModel(path) } catch (e: Exception) { Log.e("InferenceService", "initModel error: ${e.message}") } }
+            runBlocking {
+                try {
+                    engine.initModel(path)
+                } catch (e: Exception) {
+                    Log.e("InferenceService", "initModel error: ${e.message}")
+                }
+            }
         }
 
         override fun generateResponse(
@@ -62,8 +68,12 @@ class InferenceService : Service() {
         override fun resetSession() { serviceScope.launch { try { engine.resetSession() } catch (e: Exception) {} } }
         override fun isSessionActive(): Boolean = engine.isSessionActive()
         override fun stopInference() { engine.stopInference() }
-        override fun isModelLoaded(): Boolean = engine.isModelLoaded()
-        override fun isModelLoading(): Boolean = engine.isModelLoading()
+        override fun isModelLoaded(): Boolean {
+            val loaded = engine.isModelLoaded.value
+            Log.v("InferenceService", "AIDL isModelLoaded: $loaded")
+            return loaded
+        }
+        override fun isModelLoading(): Boolean = engine.isModelLoading.value
         override fun getCurrentModelName(): String = engine.getCurrentModelName()
         override fun isMultimodal(): Boolean = engine.isMultimodal()
         override fun closeEngine() { serviceScope.launch { try { engine.close() } catch (e: Exception) {} } }

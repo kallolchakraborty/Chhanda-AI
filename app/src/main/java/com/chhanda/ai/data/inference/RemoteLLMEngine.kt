@@ -36,6 +36,12 @@ class RemoteLLMEngine @Inject constructor(
     private val _loadingProgress = MutableStateFlow(0f)
     override val loadingProgress: Flow<Float> = _loadingProgress.asStateFlow()
 
+    private val _isLoaded = MutableStateFlow(false)
+    override val isModelLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    override val isModelLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     companion object { private const val TAG = "RemoteLLMEngine" }
 
     init {
@@ -49,9 +55,23 @@ class RemoteLLMEngine @Inject constructor(
             while (isActive) {
                 if (connectionState.value) {
                     try {
-                        _loadingProgress.value = remoteService?.loadingProgress ?: 0f
-                        _performanceMetrics.value = remoteService?.performanceMetrics ?: 0.0
-                    } catch (e: Exception) { Log.w(TAG, "Telemetry poll failed: ${e.message}") }
+                        val progress = remoteService?.getLoadingProgress() ?: 0f
+                        val tps = remoteService?.getPerformanceMetrics() ?: 0.0
+                        val isLoaded = remoteService?.isModelLoaded() ?: false
+                        val isLoading = remoteService?.isModelLoading() ?: false
+                        
+                        if (_isLoaded.value != isLoaded) {
+                            Log.i(TAG, "Sync: isModelLoaded changed to $isLoaded")
+                        }
+                        
+                        _loadingProgress.value = progress
+                        _performanceMetrics.value = tps
+                        _isLoaded.value = isLoaded
+                        _isLoading.value = isLoading
+                    } catch (e: Exception) { 
+                        Log.w(TAG, "Telemetry poll failed: ${e.message}") 
+                        // connectionState.value = false // Let onServiceDisconnected handle it
+                    }
                 }
                 delay(500)
             }
@@ -114,9 +134,19 @@ class RemoteLLMEngine @Inject constructor(
     ): Flow<TokenUpdate> = callbackFlow {
         ensureConnected()
         val callback = object : IInferenceCallback.Stub() {
-            override fun onToken(text: String, tps: Double) { trySend(TokenUpdate.Partial(text, tps)) }
+            private val accumulatedText = StringBuilder()
+            private var lastTps = 0.0
+
+            override fun onToken(text: String, tps: Double) {
+                accumulatedText.append(text)
+                lastTps = tps
+                trySend(TokenUpdate.Partial(text, tps))
+            }
             override fun onError(error: String) { trySend(TokenUpdate.Error(error)); close() }
-            override fun onComplete() { close() }
+            override fun onComplete() {
+                trySend(TokenUpdate.Final(accumulatedText.toString(), lastTps))
+                close()
+            }
         }
         val roles = history.map { it.first }; val texts = history.map { it.second }
         val attachmentUris = attachments.map { it.toString() }
@@ -128,8 +158,6 @@ class RemoteLLMEngine @Inject constructor(
     override suspend fun resetSession() { try { remoteService?.resetSession() } catch (e: Exception) {} }
     override fun isSessionActive(): Boolean = try { remoteService?.isSessionActive ?: false } catch (e: Exception) { false }
     override fun stopInference() { try { remoteService?.stopInference() } catch (e: Exception) {} }
-    override fun isModelLoaded(): Boolean = try { remoteService?.isModelLoaded ?: false } catch (e: Exception) { false }
-    override fun isModelLoading(): Boolean = try { remoteService?.isModelLoading ?: false } catch (e: Exception) { false }
     override fun getCurrentModelName(): String = try { remoteService?.currentModelName ?: "None" } catch (e: Exception) { "None" }
     override fun isMultimodal(): Boolean = try { remoteService?.isMultimodal ?: false } catch (e: Exception) { false }
     override suspend fun close() { try { remoteService?.closeEngine() } catch (e: Exception) {} }

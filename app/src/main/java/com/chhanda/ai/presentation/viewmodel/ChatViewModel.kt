@@ -84,7 +84,8 @@ class ChatViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val uiState: StateFlow<ChatUiState> = combine(
-        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error, _selectedPersona, _agentStatus
+        messages, _isGenerating, _currentPartialResponse, _currentTps, _currentRt, _error, _selectedPersona, _agentStatus,
+        llmEngineLazy.get().isModelLoaded, llmEngineLazy.get().isModelLoading
     ) { args: Array<Any?> ->
         ChatUiState(
             messages = args[0] as List<com.chhanda.ai.data.repository.MessageEntity>,
@@ -95,8 +96,8 @@ class ChatViewModel @Inject constructor(
             error = args[5] as String?,
             selectedPersona = args[6] as String?,
             agentStatus = args[7] as String?,
-            isModelLoaded = llmEngine.isModelLoaded(),
-            isModelLoading = llmEngine.isModelLoading()
+            isModelLoaded = args[8] as Boolean,
+            isModelLoading = args[9] as Boolean
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatUiState())
 
@@ -116,7 +117,7 @@ class ChatViewModel @Inject constructor(
         
         hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
 
-        if (!llmEngine.isModelLoaded()) {
+        if (!llmEngineLazy.get().isModelLoaded.value) {
             _error.value = "No model loaded. Go to Dashboard and activate a model first."
             return
         }
@@ -166,7 +167,12 @@ class ChatViewModel @Inject constructor(
                 persona = _selectedPersona.value,
                 includeThinking = thinkingMode
             )
-                .onCompletion { _isGenerating.value = false }
+                .onCompletion { 
+                    _isGenerating.value = false 
+                    _currentPartialResponse.value = ""
+                    _currentTps.value = 0.0
+                    _agentStatus.value = null
+                }
                 .collect { update ->
                     when (update) {
                         is TokenUpdate.Partial -> {

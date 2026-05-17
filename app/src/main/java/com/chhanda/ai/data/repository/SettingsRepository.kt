@@ -40,6 +40,7 @@ class SettingsRepository @Inject constructor(
         val THINKING_MODE_ENABLED = booleanPreferencesKey("thinking_mode_enabled")
         val PRIVACY_SHIELD_ENABLED = booleanPreferencesKey("privacy_shield_enabled")
         val ACTIVE_MODEL = stringPreferencesKey("active_model")
+        val APP_SECURITY_ENABLED = booleanPreferencesKey("app_security_enabled")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -100,6 +101,10 @@ class SettingsRepository @Inject constructor(
 
     val activeModelFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[PreferencesKeys.ACTIVE_MODEL]
+    }
+
+    val appSecurityEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.APP_SECURITY_ENABLED] ?: false
     }
 
     suspend fun setDarkMode(enabled: Boolean) {
@@ -193,6 +198,12 @@ class SettingsRepository @Inject constructor(
             } else {
                 preferences[PreferencesKeys.ACTIVE_MODEL] = modelName
             }
+        }
+    }
+
+    suspend fun setAppSecurityEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.APP_SECURITY_ENABLED] = enabled
         }
     }
 }

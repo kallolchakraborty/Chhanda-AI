@@ -69,7 +69,7 @@ class ModelProvisioner @Inject constructor(
                         name = it.name, 
                         details = "${it.length() / 1024 / 1024} MB", 
                         isActive = it.name == activeTarget,
-                        isMultimodal = it.name.contains("E4B", ignoreCase = true) || it.name.contains("multimodal", ignoreCase = true)
+                        isMultimodal = it.name.contains("multimodal", ignoreCase = true)
                     )
                 }
                 
@@ -78,16 +78,22 @@ class ModelProvisioner @Inject constructor(
                         name = it.name, 
                         details = "Shared Local Model", 
                         isActive = it.name == activeTarget,
-                        isMultimodal = it.name.contains("E4B", ignoreCase = true) || it.name.contains("multimodal", ignoreCase = true)
+                        isMultimodal = it.name.contains("multimodal", ignoreCase = true)
                     )
                 }
 
                 _ownedModels.value = owned
                 _sharedModels.value = shared
                 
+                val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                activityManager.getMemoryInfo(memoryInfo)
+                val totalRamGb = memoryInfo.totalMem / (1024.0 * 1024 * 1024)
+                val recommendedName = if (totalRamGb >= 6.5) "Gemma-4-E4B-IT" else "Gemma-4-E2B-IT"
+
                 _downloadableModels.value = listOf(
-                    DownloadModelInfo("Gemma-4-E2B-IT", "Google's 2B parameter evolutionary model optimized for on-device reasoning.", "2.4 GB", isRecommended = true),
-                    DownloadModelInfo("Gemma-4-E4B-IT", "Enhanced 4B parameter model with superior multimodal understanding.", "3.4 GB", isRecommended = true, isMultimodal = true)
+                    DownloadModelInfo("Gemma-4-E2B-IT", "Google's 2B parameter evolutionary model optimized for on-device reasoning.", "2.4 GB", isRecommended = recommendedName == "Gemma-4-E2B-IT"),
+                    DownloadModelInfo("Gemma-4-E4B-IT", "Enhanced 4B parameter model with superior multimodal understanding.", "3.4 GB", isRecommended = recommendedName == "Gemma-4-E4B-IT", isMultimodal = false)
                 ).filter { model -> !owned.any { it.name.contains(model.name, ignoreCase = true) } }
 
             } finally {

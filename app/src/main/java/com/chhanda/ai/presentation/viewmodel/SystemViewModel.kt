@@ -248,6 +248,7 @@ class SystemViewModel @Inject constructor(
     val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val thinkingModeEnabled = settingsRepository.thinkingModeEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val privacyShieldEnabled = settingsRepository.privacyShieldEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val appSecurityEnabled = settingsRepository.appSecurityEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val vectorDbCapacityBytes = hardwareMonitor.storageMetrics.map { 
         val dynamicLimit = (it.deviceAvailableBytes * 0.15).toLong()
         maxOf(1024L * 1024 * 1024, dynamicLimit)
@@ -268,6 +269,10 @@ class SystemViewModel @Inject constructor(
 
     fun setPrivacyShieldEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setPrivacyShieldEnabled(enabled) }
+    }
+
+    fun setAppSecurityEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAppSecurityEnabled(enabled) }
     }
 
     fun exportMemory(onResult: (File?) -> Unit) {
@@ -552,6 +557,15 @@ class SystemViewModel @Inject constructor(
                 delay(500)
                 checkAndPerformCleanup()
                 setupSystem()
+                
+                // Dynamically detect hardware capability to recommend model
+                val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                activityManager.getMemoryInfo(memoryInfo)
+                val totalRamGb = memoryInfo.totalMem / (1024.0 * 1024 * 1024)
+                val recModel = if (totalRamGb >= 6.5) "Gemma-4-E4B-IT" else "Gemma-4-E2B-IT"
+                _recommendedModel.value = recModel
+                addLog("SYSTEM", "Device RAM detected: ${"%.1f".format(totalRamGb)} GB. Recommended: $recModel", "INFO")
             } catch (e: Throwable) {
                 Log.e("SystemViewModel", "CRITICAL: Initialization failure detected", e)
             }

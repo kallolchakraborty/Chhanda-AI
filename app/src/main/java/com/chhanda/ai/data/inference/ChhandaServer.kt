@@ -210,11 +210,11 @@ class ChhandaServer @Inject constructor(
         _serverErrorFlow.value = null
         for (port in requestedPort..requestedPort + 10) {
             try {
-                val sslPort = port + 1 // Use next port for SSL
+                // val sslPort = port + 1 // HTTPS disabled due to CIO engine limitations on Android
                 
-                // PRO FIX: Verify ports are free before attempting bind
-                if (!isPortFree(port) || !isPortFree(sslPort)) {
-                    Log.w(TAG, "Ports $port or $sslPort are occupied, trying next...")
+                // PRO FIX: Verify port is free before attempting bind
+                if (!isPortFree(port)) {
+                    Log.w(TAG, "Port $port is occupied, trying next...")
                     continue
                 }
 
@@ -228,16 +228,6 @@ class ChhandaServer @Inject constructor(
                         this.port = port
                     }
                     
-                    sslConnector(
-                        keyStore = sslConfig.keyStore,
-                        keyAlias = sslConfig.keyAlias,
-                        keyStorePassword = sslConfig.jksPassword,
-                        privateKeyPassword = sslConfig.keyPassword
-                    ) {
-                        this.host = "0.0.0.0"
-                        this.port = sslPort
-                    }
-                    
                     module {
                         configureEngine(this, port)
                     }
@@ -249,7 +239,7 @@ class ChhandaServer @Inject constructor(
                 boundPort = port
                 _boundPortFlow.value = port
                 startReaper()
-                Log.i(TAG, "Server started: HTTP on $port, HTTPS on $sslPort")
+                Log.i(TAG, "Server started: HTTP on $port")
                 return
             } catch (e: Exception) {
                 Log.w(TAG, "Port binding failed at $port: ${e.message}")
@@ -275,6 +265,7 @@ class ChhandaServer @Inject constructor(
     }
 
     fun stop() {
+        val wasRunning = server != null
         reaperJob?.cancel()
         reaperJob = null
         stopTunnel()
@@ -284,8 +275,10 @@ class ChhandaServer @Inject constructor(
         _boundPortFlow.value = -1
         
         // Unload the engine to free memory and clear dashboard status
-        serverScope.launch {
-            try { llmEngine.close() } catch (e: Exception) { Log.w(TAG, "Engine close failed: ${e.message}") }
+        if (wasRunning) {
+            serverScope.launch {
+                try { llmEngine.close() } catch (e: Exception) { Log.w(TAG, "Engine close failed: ${e.message}") }
+            }
         }
     }
 
@@ -337,16 +330,7 @@ class ChhandaServer @Inject constructor(
         app.apply {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true; coerceInputValues = true; encodeDefaults = true }) }
             install(CORS) {
-                // Restrict CORS to local subnet patterns and loopback
-                allowHost("localhost")
-                allowHost("127.0.0.1")
-                allowHost("0:0:0:0:0:0:0:1")
-                
-                // Allow private subnet patterns (Heuristic for common home/office networks)
-                allowHost("192.168.*.*", schemes = listOf("http", "https"))
-                allowHost("10.*.*.*", schemes = listOf("http", "https"))
-                allowHost("172.*.*.*", schemes = listOf("http", "https"))
-
+                anyHost() // Use anyHost() and rely on X-API-KEY for security
                 allowHeader("X-API-KEY")
                 allowHeader("Content-Type")
                 allowMethod(io.ktor.http.HttpMethod.Options)
@@ -355,7 +339,7 @@ class ChhandaServer @Inject constructor(
             }
             routing {
                 get("/status") {
-                    val loaded = llmEngine.isModelLoaded()
+                    val loaded = llmEngine.isModelLoaded.value
                     val uptime = (System.currentTimeMillis() - startTime) / 1000
                     val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
                     call.respondText("""{"ok":true,"modelLoaded":$loaded,"uptime":$uptime,"thinkingMode":$thinkingMode}""", io.ktor.http.ContentType.Application.Json)
@@ -416,7 +400,7 @@ class ChhandaServer @Inject constructor(
                     clientRequestWindow[remoteIp] = now
                     
                     // Wake on Demand: Ensure model is loaded
-                    if (!llmEngine.isModelLoaded() && !llmEngine.isModelLoading()) {
+                    if (!llmEngine.isModelLoaded.value && !llmEngine.isModelLoading.value) {
                         val lastModel = settingsRepository.activeModelFlow.firstOrNull()
                         if (lastModel != null) {
                             Log.i(TAG, "Wake on Demand: Auto-loading model $lastModel")
@@ -494,7 +478,7 @@ class ChhandaServer @Inject constructor(
                     clientRequestWindow[remoteIp] = now
 
                     // Wake on Demand: Ensure model is loaded
-                    if (!llmEngine.isModelLoaded() && !llmEngine.isModelLoading()) {
+                    if (!llmEngine.isModelLoaded.value && !llmEngine.isModelLoading.value) {
                         val lastModel = settingsRepository.activeModelFlow.firstOrNull()
                         if (lastModel != null) {
                             Log.i(TAG, "Wake on Demand: Auto-loading model $lastModel")

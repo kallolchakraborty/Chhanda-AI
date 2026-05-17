@@ -25,7 +25,7 @@ class SystemHealthViewModel @Inject constructor(
     private val thermalStatusTracker: ThermalStatusTracker
 ) : ViewModel() {
 
-    private val _ramUsage = MutableStateFlow("0 MB / 0 MB")
+    private val _ramUsage = MutableStateFlow("Calculating...")
     val ramUsage: StateFlow<String> = _ramUsage.asStateFlow()
 
     private val _appStorageUsage = MutableStateFlow("Calculating...")
@@ -36,6 +36,9 @@ class SystemHealthViewModel @Inject constructor(
     val deviceTemperature: StateFlow<Double> = _deviceTemperature.asStateFlow()
 
     init {
+        updateRamUsage()
+        updateStorageUsage()
+        updateTemperature()
         startMonitoring()
     }
 
@@ -75,8 +78,19 @@ class SystemHealthViewModel @Inject constructor(
 
             val usedGb = (memoryInfo.totalMem - memoryInfo.availMem) / (1024.0 * 1024.0 * 1024.0)
             val totalGb = memoryInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
+            val physicalGb = when {
+                totalGb <= 2.0 -> 2
+                totalGb <= 3.0 -> 3
+                totalGb <= 4.0 -> 4
+                totalGb <= 6.0 -> 6
+                totalGb <= 8.0 -> 8
+                totalGb <= 12.0 -> 12
+                totalGb <= 16.0 -> 16
+                totalGb <= 24.0 -> 24
+                else -> Math.ceil(totalGb).toInt()
+            }
             
-            _ramUsage.value = String.format("%.1f GB / %.1f GB", usedGb, totalGb)
+            _ramUsage.value = String.format(java.util.Locale.US, "%.1f GB / %d GB", usedGb, physicalGb)
             
             // Log for debugging if it's still failing for the user
             android.util.Log.d("SystemHealth", "RAM Update: ${_ramUsage.value}")

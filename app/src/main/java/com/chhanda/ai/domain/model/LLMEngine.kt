@@ -54,7 +54,7 @@ interface LLMEngine {
     /**
      * Checks if the model is currently loaded in memory.
      */
-    fun isModelLoaded(): Boolean
+    val isModelLoaded: kotlinx.coroutines.flow.StateFlow<Boolean>
 
     /**
      * Gets the name of the currently loaded model.
@@ -64,7 +64,7 @@ interface LLMEngine {
     /**
      * Checks if the model is currently being loaded.
      */
-    fun isModelLoading(): Boolean
+    val isModelLoading: kotlinx.coroutines.flow.StateFlow<Boolean>
 
     /**
      * Real-time loading progress (0.0 to 1.0).

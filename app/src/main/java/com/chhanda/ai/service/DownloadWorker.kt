@@ -31,7 +31,8 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val filename = inputData.getString(KEY_FILENAME) ?: return Result.failure()
         val token = inputData.getString(KEY_TOKEN) ?: ""
 
-        val dir = applicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+        val dir = File(applicationContext.getExternalFilesDir(null), "models")
+        if (!dir.exists()) dir.mkdirs()
         val file = File(dir, filename)
         val tempFile = File(dir, "$filename.download")
 

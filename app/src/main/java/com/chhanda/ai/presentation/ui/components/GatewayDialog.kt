@@ -163,14 +163,39 @@ fun GatewayDialog(
                         (lowerName.contains("e2b") || lowerName.contains("e4b"))
 
                     val continueConfig = """
-                    |{
-                    |  "name": "Chhanda: $activeModelName",
-                    |  "provider": "openai",
-                    |  "model": "$modelId",
-                    |  "apiBase": "$baseServerUrl/v1",
-                    |  "apiKey": "$apiKey",
-                    |  "template": "$template"
-                    |}
+                    |name: Local Config
+                    |version: 1.0.0
+                    |schema: v1
+                    |
+                    |models:
+                    |  - name: "Chhanda: $activeModelName"
+                    |    provider: "openai"
+                    |    model: "$modelId"
+                    |    apiBase: "$baseServerUrl/v1"
+                    |    apiKey: "$apiKey"
+                    |    template: "$template"
+                    |    useToolCalling: $useToolCalling  # Enables file creation/edits
+                    |
+                    |tabAutocompleteModel:
+                    |  name: "Chhanda Autocomplete"
+                    |  provider: "openai"
+                    |  model: "$modelId"
+                    |  apiBase: "$baseServerUrl/v1"
+                    |  apiKey: "$apiKey"
+                    |
+                    |contextProviders:
+                    |  - name: "code"
+                    |  - name: "docs"
+                    |  - name: "diff"
+                    |  - name: "terminal"
+                    |
+                    |slashCommands:
+                    |  - name: "edit"
+                    |    description: "Edit selected code"
+                    |  - name: "explain"
+                    |    description: "Explain selected code"
+                    |  - name: "comment"
+                    |    description: "Write comments for selected code"
                     """.trimMargin("|")
 
                     Column(
@@ -179,7 +204,7 @@ fun GatewayDialog(
                     ) {
                         // QR Code Section
                         Surface(
-                            modifier = Modifier.size(180.dp),
+                            modifier = Modifier.size(140.dp),
                             color = Color.White,
                             shape = RoundedCornerShape(20.dp),
                             border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
@@ -230,7 +255,7 @@ fun GatewayDialog(
                         Spacer(Modifier.height(16.dp))
                         
                         CredentialSection(
-                            title = "CONTINUE.DEV JSON",
+                            title = "CONTINUE CONFIG (YAML)",
                             value = continueConfig,
                             verticalBarColor = Color(0xFF2196F3),
                             isCode = true,
@@ -310,15 +335,19 @@ fun CredentialSection(
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1f).heightIn(min = 44.dp)
+                modifier = if (isCode) {
+                    Modifier.weight(1f).height(180.dp)
+                } else {
+                    Modifier.weight(1f).heightIn(min = 44.dp)
+                }
             ) {
                 Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Text(
                         if (isMasked) "••••••••••••••••" else value,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        lineHeight = 16.sp,
-                        maxLines = if (isCode) 5 else 2,
+                        lineHeight = 15.sp,
+                        maxLines = if (isCode) Int.MAX_VALUE else 2,
                         modifier = if (isCode) Modifier.verticalScroll(rememberScrollState()) else Modifier
                     )
                 }
