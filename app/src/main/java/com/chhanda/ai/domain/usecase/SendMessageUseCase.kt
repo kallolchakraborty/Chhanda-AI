@@ -76,7 +76,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             }
 
             if (history.isEmpty()) {
-                llmEngine.resetSession()
+                llmEngine.resetSession(sessionId)
             }
 
             emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Applying safety guardrails..."))
@@ -154,7 +154,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             val (promptToUse, historyToUse, systemInstructionToUse) = if (isApiRequest) {
                 // Reset stateful conversation to prevent session pollution across independent API calls
-                llmEngine.resetSession()
+                llmEngine.resetSession(sessionId)
 
                 // Build the user prompt cleanly — do NOT inject Gemma chat template markers.
                 // LiteRT's Conversation.sendMessageAsync() handles chat templating internally.
@@ -210,7 +210,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             }
 
             emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Orchestrating model response..."))
-            val responseFlow = llmEngine.generateResponse(promptToUse, historyToUse, systemInstructionToUse, attachments)
+            val responseFlow = llmEngine.generateResponse(promptToUse, historyToUse, systemInstructionToUse, attachments, sessionId)
             
             responseProcessor.processStream(responseFlow, includeThinking).collect { update ->
                 when (update) {

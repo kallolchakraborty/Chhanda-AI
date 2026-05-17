@@ -23,18 +23,19 @@ interface LLMEngine {
         prompt: String, 
         history: List<Pair<String, String>> = emptyList(),
         systemInstruction: String? = null,
-        attachments: List<android.net.Uri> = emptyList()
+        attachments: List<android.net.Uri> = emptyList(),
+        sessionId: String? = null
     ): Flow<TokenUpdate>
 
     /**
      * Resets the current chat session (clears history).
      */
-    suspend fun resetSession()
+    suspend fun resetSession(sessionId: String? = null)
     
     /**
      * Returns true if a persistent native session is already active.
      */
-    fun isSessionActive(): Boolean
+    fun isSessionActive(sessionId: String? = null): Boolean
 
     /**
      * Cancels the current inference task and releases associated resources.

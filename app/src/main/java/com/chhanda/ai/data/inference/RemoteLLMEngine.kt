@@ -138,7 +138,7 @@ class RemoteLLMEngine @Inject constructor(
     }
 
     override fun generateResponse(
-        prompt: String, history: List<Pair<String, String>>, systemInstruction: String?, attachments: List<Uri>
+        prompt: String, history: List<Pair<String, String>>, systemInstruction: String?, attachments: List<Uri>, sessionId: String?
     ): Flow<TokenUpdate> = callbackFlow {
         ensureConnected()
         val callback = object : IInferenceCallback.Stub() {
@@ -163,8 +163,8 @@ class RemoteLLMEngine @Inject constructor(
         awaitClose { }
     }
 
-    override suspend fun resetSession() { try { remoteService?.resetSession() } catch (e: Exception) {} }
-    override fun isSessionActive(): Boolean = try { remoteService?.isSessionActive ?: false } catch (e: Exception) { false }
+    override suspend fun resetSession(sessionId: String?) { try { remoteService?.resetSession() } catch (e: Exception) {} }
+    override fun isSessionActive(sessionId: String?): Boolean = try { remoteService?.isSessionActive ?: false } catch (e: Exception) { false }
     override fun stopInference() { try { remoteService?.stopInference() } catch (e: Exception) {} }
     override fun getCurrentModelName(): String = try { remoteService?.currentModelName ?: "None" } catch (e: Exception) { "None" }
     override fun isMultimodal(): Boolean = try { remoteService?.isMultimodal ?: false } catch (e: Exception) { false }

@@ -15,6 +15,8 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import java.io.File
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -30,9 +32,12 @@ class LiteRTLMEngine @Inject constructor(
 ) : LLMEngine {
 
     private var engine: Engine? = null
-    private var conversation: Conversation? = null
+    private val activeConversations = java.util.concurrent.ConcurrentHashMap<String, Conversation>()
     private var currentModelPath: String? = null
-    private val isGenerating = AtomicBoolean(false)
+    
+    // Google Senior Architect Dynamic Concurrency Scheduler structures
+    private val concurrencySemaphore = kotlinx.coroutines.sync.Semaphore(1)
+    private val criticalInferenceMutex = kotlinx.coroutines.sync.Mutex()
     
     private val inferenceDispatcher = Dispatchers.IO.limitedParallelism(1)
     
@@ -68,8 +73,8 @@ class LiteRTLMEngine @Inject constructor(
                 try {
                     _loadingProgress.value = 0.3f
                     // Close any existing engine
-                    conversation?.close()
-                    conversation = null
+                    activeConversations.values.forEach { it.close() }
+                    activeConversations.clear()
                     engine?.close()
                     
                     // PROACTIVE FIX: Delete stale/corrupted xnnpack_cache files to prevent silent token corruption (such as generating "Hiowpy" for "Hi").
@@ -136,110 +141,180 @@ class LiteRTLMEngine @Inject constructor(
     }
 
     override fun generateResponse(
-        prompt: String, history: List<Pair<String, String>>, systemInstruction: String?, attachments: List<Uri>
+        prompt: String, history: List<Pair<String, String>>, systemInstruction: String?, attachments: List<Uri>, sessionId: String?
     ): Flow<TokenUpdate> = flow {
         if (!_isLoaded.value) { emit(TokenUpdate.Error("Model not loaded")); return@flow }
-        if (isGenerating.getAndSet(true)) { emit(TokenUpdate.Error("Engine busy")); return@flow }
+        val sessionKey = sessionId ?: "default_session"
+        
+        emit(TokenUpdate.Status("Acquiring inference engine slot..."))
+        
+        val thermal = thermalTracker.thermalStatus.value
+        val isLowMem = memoryMonitor.isLowMemory.value
+        val isCritical = thermal == com.chhanda.ai.domain.model.HardwareStatus.Critical || isLowMem
+        
+        if (isCritical) {
+            emit(TokenUpdate.Status("System resources constrained. Queuing request exclusively..."))
+        }
 
+        concurrencySemaphore.acquire()
         try {
-            val startTime = System.currentTimeMillis()
-            var tokenCount = 0
-            
-            // Thermal-aware adaptive sampling
-            val thermal = thermalTracker.thermalStatus.value
-            if (thermal.isThrottled) {
-                Log.w(TAG, "Thermal throttling active ($thermal), reducing inference load")
+            if (isCritical) {
+                criticalInferenceMutex.lock()
             }
-            
-            // Reuse existing conversation for stateful on-device chat to preserve native multi-turn history.
-            // Stateless API calls invoke resetSession() first, which sets conversation to null, ensuring clean sessions.
-            if (conversation == null) {
-                val samplerConfig = SamplerConfig(
-                    topK = 40,
-                    topP = 0.95,
-                    temperature = 0.7
-                )
-                val config = if (systemInstruction != null && systemInstruction.isNotBlank()) {
-                    ConversationConfig(
-                        systemInstruction = Contents.of(listOf(Content.Text(systemInstruction))),
-                        samplerConfig = samplerConfig
+            try {
+                val startTime = System.currentTimeMillis()
+                var tokenCount = 0
+                
+                // Thermal-aware adaptive sampling
+                if (thermal.isThrottled) {
+                    Log.w(TAG, "Thermal throttling active ($thermal), reducing inference load")
+                }
+                
+                // Retrieve or initialize conversation for this specific session
+                var isNewConv = false
+                var conv = activeConversations[sessionKey]
+                if (conv == null) {
+                    // Close all other conversation sessions to prevent JNI FAILED_PRECONDITION
+                    if (activeConversations.isNotEmpty()) {
+                        Log.i(TAG, "Context switch detected from previous active conversations. Closing existing native JNI sessions to free resources.")
+                        activeConversations.values.forEach { staleConv ->
+                            try { staleConv.close() } catch (e: Exception) { Log.e(TAG, "Error closing stale conversation session", e) }
+                        }
+                        activeConversations.clear()
+                    }
+
+                    val samplerConfig = SamplerConfig(
+                        topK = 40,
+                        topP = 0.95,
+                        temperature = 0.7
                     )
+                    val config = if (systemInstruction != null && systemInstruction.isNotBlank()) {
+                        ConversationConfig(
+                            systemInstruction = Contents.of(listOf(Content.Text(systemInstruction))),
+                            samplerConfig = samplerConfig
+                        )
+                    } else {
+                        ConversationConfig(samplerConfig = samplerConfig)
+                    }
+                    conv = engine?.createConversation(config)
+                    if (conv != null) {
+                        activeConversations[sessionKey] = conv
+                        isNewConv = true
+                    }
+                }
+
+                if (conv == null) {
+                    emit(TokenUpdate.Error("Failed to initialize conversation session"))
                 } else {
-                    ConversationConfig(samplerConfig = samplerConfig)
-                }
-                conversation = engine?.createConversation(config)
-            }
-
-            // VISION SUPPORT: Package text and images into a multimodal request
-            val contentList = mutableListOf<Content>()
-            contentList.add(Content.Text(prompt))
-            
-            attachments.forEach { uri ->
-                try {
-                    if (isImageUri(uri)) {
-                        val bitmap = loadBitmap(uri)
-                        if (bitmap != null) {
-                            val stream = ByteArrayOutputStream()
-                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
-                            contentList.add(Content.ImageBytes(stream.toByteArray()))
-                            Log.d(TAG, "Attached image to inference: $uri")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to process image attachment $uri: ${e.message}")
-                }
-            }
-
-            var finalFullText = ""
-            var finalTps = 0.0
-            conversation?.let { conv ->
-                val request = if (contentList.size > 1) Contents.of(contentList) else Contents.of(listOf(Content.Text(prompt)))
-                conv.sendMessageAsync(request).collect { message ->
-                    val delta = message.contents.contents
-                        .filterIsInstance<Content.Text>()
-                        .joinToString("") { it.text }
+                    // VISION SUPPORT: Package text and images into a multimodal request
+                    val contentList = mutableListOf<Content>()
                     
-                    if (delta.isNotEmpty()) {
-                        finalFullText += delta
-                        Log.d("RAW_LLM", "Delta: '$delta', Full: '$finalFullText'")
-                        
-                        tokenCount++
-                        val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
-                        val tps = if (elapsed > 0) tokenCount / elapsed else 0.0
-                        _performanceMetrics.value = tps
-                        finalTps = tps
-                        emit(TokenUpdate.Partial(delta, tps))
-
-                        // ACTIVE THERMAL THROTTLING:
-                        // If system is throttled, insert a delay to let the SoC cool down
-                        if (thermalTracker.thermalStatus.value.isThrottled) {
-                            kotlinx.coroutines.delay(50) 
+                    // If conversation was newly initialized due to a session switch, reconstruct the session history into the prompt
+                    val promptWithHistory = if (isNewConv && history.isNotEmpty()) {
+                        buildString {
+                            append("CONVERSATION HISTORY:\n")
+                            history.forEach { turn ->
+                                val roleLabel = when (turn.first.lowercase()) {
+                                    "user" -> "User"
+                                    "model", "assistant" -> "Assistant"
+                                    "system" -> "System"
+                                    else -> "User"
+                                }
+                                append("$roleLabel: ${turn.second}\n")
+                            }
+                            append("\nNew Prompt: ")
+                            append(prompt)
+                        }
+                    } else {
+                        prompt
+                    }
+                    
+                    contentList.add(Content.Text(promptWithHistory))
+                    
+                    attachments.forEach { uri ->
+                        try {
+                            if (isImageUri(uri)) {
+                                  val bitmap = loadBitmap(uri)
+                                  if (bitmap != null) {
+                                      val stream = ByteArrayOutputStream()
+                                      bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
+                                      contentList.add(Content.ImageBytes(stream.toByteArray()))
+                                      Log.d(TAG, "Attached image to inference: $uri")
+                                  }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to process image attachment $uri: ${e.message}")
                         }
                     }
+
+                    var finalFullText = ""
+                    var finalTps = 0.0
+                    val request = if (contentList.size > 1) Contents.of(contentList) else Contents.of(listOf(Content.Text(prompt)))
+                    
+                    conv.sendMessageAsync(request).collect { message ->
+                        val delta = message.contents.contents
+                            .filterIsInstance<Content.Text>()
+                            .joinToString("") { it.text }
+                        
+                        if (delta.isNotEmpty()) {
+                            finalFullText += delta
+                            Log.d("RAW_LLM", "Delta: '$delta', Full: '$finalFullText'")
+                            
+                            tokenCount++
+                            val elapsed = (System.currentTimeMillis() - startTime) / 1000.0
+                            val tps = if (elapsed > 0) tokenCount / elapsed else 0.0
+                            _performanceMetrics.value = tps
+                            finalTps = tps
+                            emit(TokenUpdate.Partial(delta, tps))
+
+                            // ACTIVE THERMAL THROTTLING:
+                            // If system is throttled, insert a delay to let the SoC cool down
+                            if (thermalTracker.thermalStatus.value.isThrottled) {
+                                kotlinx.coroutines.delay(50) 
+                            }
+                        }
+                    }
+                    val duration = System.currentTimeMillis() - startTime
+                    emit(TokenUpdate.Final(finalFullText, finalTps, duration))
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Inference crash: ${e.message}", e)
+                emit(TokenUpdate.Error(e.localizedMessage ?: "Critical inference error"))
+            } finally {
+                if (isCritical) {
+                    criticalInferenceMutex.unlock()
                 }
             }
-            val duration = System.currentTimeMillis() - startTime
-            emit(TokenUpdate.Final(finalFullText, finalTps, duration))
-        } catch (e: Throwable) {
-            Log.e(TAG, "Inference crash: ${e.message}", e)
-            emit(TokenUpdate.Error(e.localizedMessage ?: "Critical inference error"))
         } finally {
-            isGenerating.set(false)
+            concurrencySemaphore.release()
         }
     }.flowOn(inferenceDispatcher)
 
-    override suspend fun resetSession() {
+    override suspend fun resetSession(sessionId: String?) {
         withContext(inferenceDispatcher) {
-            conversation?.close()
-            conversation = null
+            if (sessionId != null) {
+                activeConversations[sessionId]?.close()
+                activeConversations.remove(sessionId)
+                Log.i(TAG, "Reset session: $sessionId")
+            } else {
+                activeConversations.values.forEach { it.close() }
+                activeConversations.clear()
+                Log.i(TAG, "Reset all sessions")
+            }
         }
     }
 
-    override fun isSessionActive(): Boolean = conversation != null
+    override fun isSessionActive(sessionId: String?): Boolean {
+        return if (sessionId != null) {
+            activeConversations.containsKey(sessionId)
+        } else {
+            activeConversations.isNotEmpty()
+        }
+    }
     
     override fun stopInference() {
         try {
-            conversation?.cancelProcess()
+            activeConversations.values.forEach { it.cancelProcess() }
         } catch (e: Exception) {
             Log.w(TAG, "Cancel failed: ${e.message}")
         }
@@ -254,8 +329,8 @@ class LiteRTLMEngine @Inject constructor(
 
     override suspend fun close() {
         withContext(inferenceDispatcher) {
-            conversation?.close()
-            conversation = null
+            activeConversations.values.forEach { it.close() }
+            activeConversations.clear()
             engine?.close()
             engine = null
             _isLoaded.value = false

@@ -117,7 +117,7 @@ class ChhandaServer @Inject constructor(
 
     companion object { private const val TAG = "ChhandaServer" }
 
-    private val requestSemaphore = kotlinx.coroutines.sync.Semaphore(1)
+    private val requestSemaphore = kotlinx.coroutines.sync.Semaphore(16)
     private val clientRequestWindow = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val RATE_LIMIT_MS = 1000L
 
@@ -617,13 +617,17 @@ class ChhandaServer @Inject constructor(
                     if (!validateAuth(call)) return@post
                     val remoteIp = call.request.local.remoteHost
 
+                    // Receive message body first to extract sessionId for precise, session-isolated rate-limiting
+                    val msg = call.receive<WebMessage>()
+                    val sessionKey = remoteIp + "_" + (msg.sessionId ?: "default")
+
                     val now = System.currentTimeMillis()
-                    val lastRequest = clientRequestWindow[remoteIp] ?: 0L
+                    val lastRequest = clientRequestWindow[sessionKey] ?: 0L
                     if (now - lastRequest < RATE_LIMIT_MS) {
                         call.respond(io.ktor.http.HttpStatusCode.TooManyRequests, mapOf("error" to "Rate limit exceeded"))
                         return@post
                     }
-                    clientRequestWindow[remoteIp] = now
+                    clientRequestWindow[sessionKey] = now
 
                     // Wake on Demand: Ensure model is loaded
                     if (!llmEngine.isModelLoaded.value && !llmEngine.isModelLoading.value) {
@@ -640,7 +644,6 @@ class ChhandaServer @Inject constructor(
                         }
                     }
 
-                    val msg = call.receive<WebMessage>()
                     val attachmentFiles = mutableListOf<java.io.File>()
                     val attachmentUris = msg.attachments.mapNotNull { webAtt ->
                         try {
