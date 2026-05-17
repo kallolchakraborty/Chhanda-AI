@@ -242,11 +242,10 @@ fun DashboardScreen(
     val selectedSessions = remember { mutableStateListOf<String>() }
     val activeModelName = remember(ownedModels, sharedModels, isServerRunning, isModelLoaded, isModelLoading) {
         when {
-            isServerRunning && isModelLoaded -> {
+            isModelLoading -> "Loading Model..."
+            else -> {
                 (ownedModels + sharedModels).firstOrNull { it.isActive }?.name ?: "No Active Model"
             }
-            isModelLoading -> "Loading Model..."
-            else -> "No Active Model"
         }
     }
     val anyActiveModel = remember(ownedModels, sharedModels) {

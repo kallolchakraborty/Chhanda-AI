@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +47,21 @@ fun LocalModelItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
+            .then(
+                if (model.isActive) {
+                    Modifier.border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                } else Modifier
+            )
+            .clip(RoundedCornerShape(24.dp))
+            .clickable {
+                if (!model.isActive) {
+                    onActivate()
+                }
+            }
             .semantics(mergeDescendants = true) {},
         cornerRadius = 24.dp
     ) {
@@ -79,21 +96,33 @@ fun LocalModelItem(
                         }
                     }
                     if (model.isActive) {
-                        val badgeText = if (isServerRunning && isModelLoading) "LOADING" else null
-                        if (badgeText != null) {
-                            Spacer(Modifier.width(8.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    badgeText, 
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                    fontSize = 8.sp, 
-                                    fontWeight = FontWeight.Black, 
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                        val badgeText = when {
+                            isServerRunning && isModelLoading -> "LOADING"
+                            isServerRunning && isModelLoaded -> "RUNNING"
+                            else -> "SELECTED"
+                        }
+                        val badgeBgColor = when (badgeText) {
+                            "RUNNING" -> Color(0xFF4ADE80).copy(alpha = 0.15f)
+                            "LOADING" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            else -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
+                        }
+                        val badgeTextColor = when (badgeText) {
+                            "RUNNING" -> Color(0xFF22C55E)
+                            "LOADING" -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.secondary
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = badgeBgColor,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                badgeText, 
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 8.sp, 
+                                fontWeight = FontWeight.Black, 
+                                color = badgeTextColor
+                            )
                         }
                     }
                 }
