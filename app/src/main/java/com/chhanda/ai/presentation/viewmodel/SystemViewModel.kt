@@ -443,6 +443,11 @@ class SystemViewModel @Inject constructor(
         if (serverOrchestrator.isServerRunning.value) {
             serverOrchestrator.stopServer()
         } else {
+            val allModels = ownedModels.value + sharedModels.value
+            if (allModels.isEmpty()) {
+                addLog("SERVER", "Cannot start server: No local LLM downloaded", "ERROR")
+                return
+            }
             serverOrchestrator.startServer()
         }
     }
@@ -845,6 +850,30 @@ class SystemViewModel @Inject constructor(
             try { llmEngine.close() } catch(_: Exception) {}
             modelProvisioner.refreshModels()
             addLog("SERVER", "Web Gateway and Inference Engine stopped", "WARNING")
+        }
+    }
+
+    fun switchModelAndRestartServer(newModelName: String) {
+        viewModelScope.launch {
+            addLog("SYSTEM", "Request to switch running model to: $newModelName", "INFO")
+            // 1. Stop current server & close engine
+            serverOrchestrator.stopServer()
+            try { llmEngine.close() } catch(_: Exception) {}
+            
+            // 2. Wait until server is actually stopped (up to 3 seconds)
+            var waitCount = 0
+            while (serverOrchestrator.isServerRunning.value && waitCount < 30) {
+                delay(100)
+                waitCount++
+            }
+            
+            // 3. Activate the new model
+            modelProvisioner.activateModel(newModelName)
+            delay(300) // Give short window for state updates to settle
+            
+            // 4. Start the new server
+            serverOrchestrator.startServer()
+            addLog("SYSTEM", "Switched running model successfully to $newModelName", "SUCCESS")
         }
     }
 

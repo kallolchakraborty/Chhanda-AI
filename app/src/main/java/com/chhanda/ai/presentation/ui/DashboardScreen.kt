@@ -94,6 +94,7 @@ fun DashboardScreen(
     val vectorStorageMetrics by viewModel.vectorStorageMetrics.collectAsStateWithLifecycle()
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val appSecurityEnabled by viewModel.appSecurityEnabled.collectAsStateWithLifecycle()
+    val isLocalLinkOk by viewModel.isLocalLinkOk.collectAsStateWithLifecycle()
 
     // --- Analytics Dashboard State ---
     val tpsHistory by viewModel.tpsHistory.collectAsStateWithLifecycle()
@@ -118,6 +119,7 @@ fun DashboardScreen(
     var isApiKeyVisibleInQr by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
     var showBackgroundExitDialog by remember { mutableStateOf(false) }
+    var modelToSwitchAndRun by remember { mutableStateOf<String?>(null) }
 
     // Detect exit/background state
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -190,6 +192,35 @@ fun DashboardScreen(
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissVectorStorageWarning() }) {
                     Text("Dismiss")
+                }
+            }
+        )
+    }
+
+    if (modelToSwitchAndRun != null) {
+        AlertDialog(
+            onDismissRequest = { modelToSwitchAndRun = null },
+            icon = { Icon(Icons.Default.SwapCalls, contentDescription = "Switch Model", tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Switch Running Model?") },
+            text = { 
+                Text("At a time, only one LLM Model can be run. Would you like to stop the current running model and run the selected model?") 
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val newModel = modelToSwitchAndRun ?: ""
+                        modelToSwitchAndRun = null
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
+                        viewModel.switchModelAndRestartServer(newModel)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Stop & Start Selected")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { modelToSwitchAndRun = null }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -273,7 +304,7 @@ fun DashboardScreen(
                 actions = {
                     val isServerRunning by viewModel.isServerRunning.collectAsStateWithLifecycle()
                     val ipAddress by viewModel.localIpAddress.collectAsStateWithLifecycle()
-                    val isQrEnabled = (isServerRunning || isModelLoading) && anyActiveModel
+                    val isQrEnabled = isServerRunning && isLocalLinkOk && anyActiveModel
                     
                     var showPulse by remember { mutableStateOf(false) }
                     LaunchedEffect(isQrEnabled) {
@@ -430,7 +461,11 @@ fun DashboardScreen(
                         isModelLoading = isModelLoading,
                         onActivate = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
-                            viewModel.activateModel(model.name) 
+                            if (isServerRunning) {
+                                modelToSwitchAndRun = model.name
+                            } else {
+                                viewModel.activateModel(model.name) 
+                            }
                         }, 
                         onStop = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
@@ -471,7 +506,11 @@ fun DashboardScreen(
                         isModelLoading = isModelLoading,
                         onActivate = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
-                            viewModel.activateModel(model.name) 
+                            if (isServerRunning) {
+                                modelToSwitchAndRun = model.name
+                            } else {
+                                viewModel.activateModel(model.name) 
+                            }
                         }, 
                         onStop = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
@@ -758,7 +797,7 @@ fun DashboardScreen(
                 
                 val ipAddress by viewModel.localIpAddress.collectAsStateWithLifecycle()
                 val anyActiveModel = (ownedModels + sharedModels).any { it.isActive }
-                val isQrEnabled = (isServerRunning || isModelLoading) && anyActiveModel
+                val isQrEnabled = isServerRunning && isLocalLinkOk && anyActiveModel
                 
                 val contentColor = if (isQrEnabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                 
