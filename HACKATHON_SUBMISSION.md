@@ -1,9 +1,9 @@
-# Chhanda (ছন্দ) — The AI Gateway
+# Chhanda (ছন্দা) — The Local AI Gateway
 
 ## Harnessing Gemma 4 for 100% Offline, Privacy-First AI Accessibility
 
 <p align="center">
-  <img src="Presentation/chhanda_card_thumbnail.png" width="560" alt="Chhanda AI Gateway Logo" />
+  <img src="Presentation/chhanda_card_thumbnail.png" width="560" alt="Chhanda Local AI Gateway Logo" />
 </p>
 
 > [!NOTE]
@@ -83,7 +83,7 @@ In the **global south** — specifically in rural India and Bangladesh — relia
 
 **Chhanda bridges the Digital Divide** by delivering world-class AI intelligence entirely offline, in the user's native language, on hardware they already own — their Android phone.
 
-**Chhanda (ছন্দ)**, named after the poetic meter in Bengali literature, ensures that intelligence flows as naturally as a poem. Just as *chhanda* transforms raw syllables into structured verse, LLMs transform raw tokens into structured intelligence. This application is dedicated to my mother, **Chhanda Chakraborty**, whose name embodies this beautiful harmony.
+**Chhanda (ছন্দা)**, named after and dedicated to my beloved mother, **Chhanda Chakraborty**, represents the beautiful harmony between the foundational, rhythmic structure of Bengali poetic meter (*ছন্দ*) and the beautiful, tokenized flow of intelligence. Just as *chhanda* transforms raw syllables into structured verse, LLMs transform raw tokens into structured intelligence.
 
 ### The Problem Statement
 | Challenge | Impact | Chhanda's Solution |

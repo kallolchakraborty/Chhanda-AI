@@ -1,7 +1,7 @@
-# Chhanda (ছন্দ) — The AI Gateway
+# Chhanda (ছন্দা) — The Local AI Gateway
 
 <div align="center">
-  <img src="Presentation/chhanda_card_thumbnail.png" width="560" alt="Chhanda AI Gateway Logo" />
+  <img src="Presentation/chhanda_card_thumbnail.png" width="560" alt="Chhanda Local AI Gateway Logo" />
   <br/>
   <br/>
   <h3>100% Offline · Privacy-First · Production-Hardened AI & RAG Ecosystem for Android</h3>
@@ -23,7 +23,7 @@
 
 ## 📖 The Philosophy & Dedication
 
-**Chhanda** (ছন্দ) refers to the poetic meter or rhythm in Bengali literature. It structures poetry through the precise arrangement of syllables (*mātrā*), derived from words, creating a musical, rhythmic flow.
+**Chhanda** (ছন্দা) is dedicated to my mother, **Chhanda Chakraborty**, and named after the poetic meter or rhythm (*ছন্দ*) in Bengali literature. It structures poetry through the precise arrangement of syllables (*mātrā*), derived from words, creating a musical, rhythmic flow.
 
 In Bengali poetry, words are broken down into syllables—the basic sound units treated as tokens—for chhanda analysis. Each word's pronunciation determines *guru* (long) or *laghu* (short) syllables, and stress patterns form the rules of the meter.
 
