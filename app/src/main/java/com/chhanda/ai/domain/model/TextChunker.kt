@@ -8,7 +8,12 @@ object TextChunker {
     fun chunk(text: String, chunkSize: Int = 800, overlap: Int = 100): List<String> {
         if (text.isBlank()) return emptyList()
         
-        // World Class Strategy: Prefer splitting by paragraphs first to preserve semantic blocks
+        // Guard against invalid inputs to prevent infinite loops or out-of-bound errors
+        if (chunkSize <= 0 || overlap >= chunkSize) {
+            return listOf(text)
+        }
+        
+        // Prefer splitting by paragraphs first to preserve semantic blocks
         val paragraphs = text.split(Regex("\n\n+"))
         
         val segments = paragraphs.flatMap { p ->
@@ -17,7 +22,17 @@ object TextChunker {
                 if (p.contains(".") || p.contains("!") || p.contains("?")) {
                     p.split(Regex("(?<=[.!?])\\s+"))
                 } else {
-                    p.chunked(chunkSize)
+                    // sliding window split of the large paragraph
+                    val list = mutableListOf<String>()
+                    var start = 0
+                    val step = maxOf(1, chunkSize - overlap)
+                    while (start < p.length) {
+                        val end = minOf(start + chunkSize, p.length)
+                        list.add(p.substring(start, end))
+                        if (end == p.length) break
+                        start += step
+                    }
+                    list
                 }
             } else listOf(p)
         }
@@ -41,6 +56,7 @@ object TextChunker {
                 while (subStart < sentence.length) {
                     val subEnd = minOf(subStart + chunkSize, sentence.length)
                     chunks.add(sentence.substring(subStart, subEnd))
+                    if (subEnd == sentence.length) break
                     subStart += chunkSize - overlap
                 }
                 continue

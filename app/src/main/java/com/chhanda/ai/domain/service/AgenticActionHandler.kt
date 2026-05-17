@@ -38,6 +38,31 @@ class AgenticActionHandler @Inject constructor(
                 Log.e("AgenticActionHandler", "File generation failed: ${e.message}")
             }
         }
+        if (text.contains("[CREATE_FILE")) {
+            try {
+                val regex = """\[CREATE_FILE\s+path="([^"]+)"\]([\s\S]*?)\[/CREATE_FILE\]""".toRegex()
+                val matches = regex.findAll(text)
+                for (match in matches) {
+                    val pathStr = match.groupValues[1]
+                    val content = match.groupValues[2].trim()
+                    
+                    val file = if (pathStr.startsWith("/")) {
+                        java.io.File(pathStr)
+                    } else {
+                        val baseDir = java.io.File(context.getExternalFilesDir(null), "generated_files")
+                        if (!baseDir.exists()) baseDir.mkdirs()
+                        java.io.File(baseDir, pathStr)
+                    }
+                    
+                    file.parentFile?.mkdirs()
+                    file.writeText(content)
+                    filePath = file.absolutePath
+                    Log.i("AgenticActionHandler", "Created code file at path: $filePath")
+                }
+            } catch (e: Exception) {
+                Log.e("AgenticActionHandler", "Code file creation failed: ${e.message}")
+            }
+        }
         return ActionResult(filePath)
     }
 

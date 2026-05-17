@@ -70,8 +70,12 @@ class RemoteLLMEngine @Inject constructor(
                         _isLoading.value = isLoading
                     } catch (e: Exception) { 
                         Log.w(TAG, "Telemetry poll failed: ${e.message}") 
-                        // connectionState.value = false // Let onServiceDisconnected handle it
                     }
+                } else {
+                    _loadingProgress.value = 0f
+                    _performanceMetrics.value = 0.0
+                    _isLoaded.value = false
+                    _isLoading.value = false
                 }
                 delay(500)
             }
@@ -114,6 +118,10 @@ class RemoteLLMEngine @Inject constructor(
             connectionState.value = false
             isBound = false
             Log.w(TAG, "Disconnected from InferenceService, reconnecting...")
+            _isLoaded.value = false
+            _isLoading.value = false
+            _loadingProgress.value = 0f
+            _performanceMetrics.value = 0.0
             scope.launch {
                 delay(1000) // Backoff before reconnect
                 bindToService()
@@ -160,7 +168,18 @@ class RemoteLLMEngine @Inject constructor(
     override fun stopInference() { try { remoteService?.stopInference() } catch (e: Exception) {} }
     override fun getCurrentModelName(): String = try { remoteService?.currentModelName ?: "None" } catch (e: Exception) { "None" }
     override fun isMultimodal(): Boolean = try { remoteService?.isMultimodal ?: false } catch (e: Exception) { false }
-    override suspend fun close() { try { remoteService?.closeEngine() } catch (e: Exception) {} }
+    override suspend fun close() {
+        try {
+            remoteService?.closeEngine()
+        } catch (e: Exception) {
+            Log.e(TAG, "close error: ${e.message}")
+        }
+        _isLoaded.value = false
+        _isLoading.value = false
+        _loadingProgress.value = 0f
+        _performanceMetrics.value = 0.0
+        lastModelPath = null
+    }
 
     private suspend fun ensureConnected() {
         if (!isBound) bindToService()

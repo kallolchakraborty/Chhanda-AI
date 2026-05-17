@@ -62,19 +62,23 @@ class ServerOrchestrator @Inject constructor(
                 // Ensure we have scanned models before checking for active one
                 if (modelProvisioner.ownedModels.value.isEmpty() && modelProvisioner.sharedModels.value.isEmpty()) {
                     appLogManager.addLog("SERVER", "Refreshing model list...", "INFO")
-                    modelProvisioner.refreshModels()
-                    // Wait up to 2 seconds for scan to complete
-                    withTimeoutOrNull(2000) {
-                        modelProvisioner.ownedModels.first { it.isNotEmpty() || !modelProvisioner.isScanning.value }
-                    }
+                    modelProvisioner.refreshModelsSync()
                 }
                 
                 // Use the persisted active model from settings as the source of truth
                 val selectedModelName = settingsRepository.activeModelFlow.first()
                 val allModels = modelProvisioner.ownedModels.value + modelProvisioner.sharedModels.value
-                val activeModel = allModels.find { it.name == selectedModelName } 
+                var activeModel = allModels.find { it.name == selectedModelName } 
                     ?: allModels.find { it.isActive } // Fallback to whatever is marked active
                 
+                if (activeModel == null && allModels.isNotEmpty()) {
+                    val fallback = allModels.first()
+                    appLogManager.addLog("SERVER", "Auto-selecting fallback model: ${fallback.name}", "INFO")
+                    settingsRepository.setActiveModel(fallback.name)
+                    modelProvisioner.refreshModelsSync()
+                    activeModel = fallback
+                }
+
                 if (activeModel == null) {
                     _isModelLoading.value = false
                     appLogManager.addLog("SERVER", "Startup failed: No active model selected", "ERROR")

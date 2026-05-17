@@ -215,6 +215,15 @@ private fun ActiveModelContent(
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = loadingProgress,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "modelLoadingProgress"
+    )
+
     Column(modifier = Modifier.padding(20.dp)) {
         // Status Header
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -237,14 +246,14 @@ private fun ActiveModelContent(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LinearProgressIndicator(
-                    progress = { loadingProgress },
+                    progress = { animatedProgress },
                     modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
                     color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
                     trackColor = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f)
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    "${(loadingProgress * 100).toInt()}%", 
+                    "${(animatedProgress * 100).toInt()}%", 
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer

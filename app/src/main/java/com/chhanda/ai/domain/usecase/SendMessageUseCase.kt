@@ -96,22 +96,38 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 isContextFound = true
             }
 
-            val prompt = buildString {
+            val isApiRequest = source.lowercase() == "api"
 
-                if (attachmentContext.isNotBlank()) {
-                    append("<current_attachments>\n")
-                    append(attachmentContext)
-                    append("\n</current_attachments>\n\n")
+            val baseInstructions = buildString {
+                val role = when (source) {
+                    "api", "qr" -> "Senior Technical Architect & Software Engineer"
+                    else -> "Chhanda, a highly capable Senior AI Assistant"
+                }
+                val allowedPersonas = setOf("Senior Teacher", "Senior Software Engineer", "General Companion", "Friend", "Default")
+                val validatedPersona = if (persona != null && persona in allowedPersonas && persona != "Default") persona else null
+                append("IDENTITY: You are ${validatedPersona ?: role}. Respond in $preferredLanguage.\n")
+
+                append("REASONING (CoVe): For complex queries, coding, or analytical tasks, think step-by-step using a 'Chain of Verification' approach:\n")
+                append("1. Analyze the user intent and constraints.\n")
+                append("2. Retrieve and verify facts from context.\n")
+                append("3. Plan the structure.\n")
+                append("4. Wrap your reasoning process inside <thought> tags.\n")
+                append("For simple greetings (e.g. 'hi', 'hello', 'hey', 'hi there'), casual talk, or extremely straightforward questions, do NOT use <thought> tags. Respond directly and naturally.\n")
+
+                if (!includeThinking) {
+                    append("USER PREFERENCE: The user has requested a compact response. While you can reason internally in <thought> tags if needed, keep the final answer concise and direct.\n")
                 }
 
-                if (longTermContext.isNotBlank()) {
-                    append(longTermContext) 
-                    append("\n\n")
+                if (isContextFound) {
+                    append("STRICT GROUNDING: The provided context is your SOURCE OF TRUTH. Do not use outside knowledge if it contradicts the context.\n")
+                    append("UNSURE CASE: If the context doesn't contain the answer, say: 'Based on the provided documents, I don't have enough information.'\n")
                 }
 
-                append("<user_query>\n")
-                append(sanitizedUserText)
-                append("\n</user_query>")
+                if (llmEngine.isMultimodal() && attachments.any { it.toString().contains("image") }) {
+                    append("VISION CAPABILITY: You have native vision processing enabled. Analyze the provided image attachments to answer the query accurately.\n")
+                }
+
+                append("GUARDRAILS: Redact PII (Emails, Phones, CC) in output. No hallucinations. No generic conversational filler.\n")
             }
 
             val formatInstruction = """
@@ -130,45 +146,71 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 - Use these only when explicitly requested or highly beneficial.
             """.trimIndent()
 
-            val baseInstructions = buildString {
-                val role = when (source) {
-                    "api", "qr" -> "Senior Technical Architect & Software Engineer"
-                    else -> "Chhanda, a highly capable Senior AI Assistant"
-                }
-                val allowedPersonas = setOf("Senior Teacher", "Senior Software Engineer", "General Companion", "Friend", "Default")
-                val validatedPersona = if (persona != null && persona in allowedPersonas && persona != "Default") persona else null
-                append("IDENTITY: You are ${validatedPersona ?: role}. Respond in $preferredLanguage.\n")
-
-                append("REASONING (CoVe): You MUST think step-by-step using a 'Chain of Verification' approach.\n")
-                append("1. Analyze the user intent and constraints.\n")
-                append("2. Retrieve and verify facts from provided context.\n")
-                append("3. Plan the structure of the response.\n")
-                append("4. Execute the final output. Wrap ALL reasoning in <thought> tags.\n")
-
-                if (!includeThinking) {
-                    append("USER PREFERENCE: The user has requested a compact response. While you MUST reason internally in <thought> tags, keep the final answer concise and direct.\n")
-                }
-
-                if (isContextFound) {
-                    append("STRICT GROUNDING: The provided context is your SOURCE OF TRUTH. Do not use outside knowledge if it contradicts the context.\n")
-                    append("UNSURE CASE: If the context doesn't contain the answer, say: 'Based on the provided documents, I don't have enough information.'\n")
-                }
-
-                if (llmEngine.isMultimodal() && attachments.any { it.toString().contains("image") }) {
-                    append("VISION CAPABILITY: You have native vision processing enabled. Analyze the provided image attachments to answer the query accurately.\n")
-                }
-
-                append("GUARDRAILS: Redact PII (Emails, Phones, CC) in output. No hallucinations. No generic conversational filler.\n")
-            }
-
             val systemInstruction = if (isRefinement) {
                 "Professional editor mode. Polish the text in $preferredLanguage. Only return polished text."
             } else {
                 "$baseInstructions\n\n$formatInstruction\n\n$agentCapabilities"
             }
 
+            val (promptToUse, historyToUse, systemInstructionToUse) = if (isApiRequest) {
+                // Reset stateful conversation to prevent session pollution across independent API calls
+                llmEngine.resetSession()
+
+                // Build the user prompt cleanly — do NOT inject Gemma chat template markers.
+                // LiteRT's Conversation.sendMessageAsync() handles chat templating internally.
+                val apiPrompt = buildString {
+                    if (history.isNotEmpty()) {
+                        append("CONVERSATION HISTORY:\n")
+                        history.forEach { turn ->
+                            val roleLabel = when (turn.first.lowercase()) {
+                                "user" -> "User"
+                                "model", "assistant" -> "Assistant"
+                                "system" -> "System"
+                                else -> "User"
+                            }
+                            append("$roleLabel: ${turn.second}\n")
+                        }
+                        append("\n")
+                    }
+                    if (attachmentContext.isNotBlank()) {
+                        append("Current Attachments Content:\n")
+                        append(attachmentContext)
+                        append("\n\n")
+                    }
+                    if (longTermContext.isNotBlank()) {
+                        append("Retrieved Context:\n")
+                        append(longTermContext)
+                        append("\n\n")
+                    }
+                    append(sanitizedUserText)
+                }
+
+                // Pass conversation history as structured pairs (LiteRT handles turn formatting)
+                Triple(apiPrompt, history, systemInstruction)
+            } else {
+                val promptText = if (attachmentContext.isBlank() && longTermContext.isBlank()) {
+                    sanitizedUserText
+                } else {
+                    buildString {
+                        if (attachmentContext.isNotBlank()) {
+                            append("Current Attachments Content:\n")
+                            append(attachmentContext)
+                            append("\n\n")
+                        }
+                        if (longTermContext.isNotBlank()) {
+                            append("Retrieved Context:\n")
+                            append(longTermContext) 
+                            append("\n\n")
+                        }
+                        append("User Question: ")
+                        append(sanitizedUserText)
+                    }
+                }
+                Triple(promptText, history, systemInstruction)
+            }
+
             emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Orchestrating model response..."))
-            val responseFlow = llmEngine.generateResponse(prompt, history, systemInstruction, attachments)
+            val responseFlow = llmEngine.generateResponse(promptToUse, historyToUse, systemInstructionToUse, attachments)
             
             responseProcessor.processStream(responseFlow, includeThinking).collect { update ->
                 when (update) {

@@ -87,6 +87,9 @@ class SystemViewModel @Inject constructor(
     val modelLoadingProgress = llmEngine.loadingProgress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0f)
 
+    val isModelLoaded = llmEngine.isModelLoaded
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
     val isModelLoading = serverOrchestrator.isModelLoading
 
     // Network Delegation
@@ -453,7 +456,7 @@ class SystemViewModel @Inject constructor(
 
 
 
-    val deviceModelName = android.os.Build.MODEL.replace(" ", "_")
+    val deviceModelName = (android.os.Build.MODEL ?: "Unknown_Device").replace(" ", "_")
 
     private val _availableVoices = MutableStateFlow<List<String>>(
         listOf(

@@ -56,7 +56,7 @@ class InferenceService : Service() {
                         when (update) {
                             is TokenUpdate.Partial -> try { callback.onToken(update.text, update.tps) } catch (e: Exception) {}
                             is TokenUpdate.Status -> { /* Status updates are internal-only for now */ }
-                            is TokenUpdate.Final -> try { callback.onToken("", update.tps) } catch (e: Exception) {}
+                            is TokenUpdate.Final -> { /* Handled below via onComplete */ }
                             is TokenUpdate.Error -> try { callback.onError(update.message) } catch (e: Exception) {}
                         }
                     }

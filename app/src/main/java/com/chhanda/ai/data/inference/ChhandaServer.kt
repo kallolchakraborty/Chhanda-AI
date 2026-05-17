@@ -102,11 +102,13 @@ class ChhandaServer @Inject constructor(
     private val templateProvider: ServerTemplateProvider,
     private val thermalStatusTracker: com.chhanda.ai.util.ThermalStatusTracker,
     private val securityRepository: com.chhanda.ai.data.repository.SecurityRepository,
-    private val sslCertManager: com.chhanda.ai.util.SslCertManager
+    private val sslCertManager: com.chhanda.ai.util.SslCertManager,
+    private val responseProcessorLazy: dagger.Lazy<com.chhanda.ai.domain.service.ResponseProcessor>
 ) {
     private val llmEngine get() = llmEngineLazy.get()
     private val sendMessageUseCase get() = sendMessageUseCaseLazy.get()
     private val contextManager get() = contextManagerLazy.get()
+    private val responseProcessor get() = responseProcessorLazy.get()
     @Volatile private var server: CIOApplicationEngine? = null
     @Volatile private var boundPort: Int = -1
     private var reaperJob: Job? = null
@@ -348,7 +350,7 @@ class ChhandaServer @Inject constructor(
                 get("/ping") { call.respondText("pong") }
 
                 val isLocalRequest: (String) -> Boolean = { host ->
-                    host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || 
+                    host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true) ||
                     host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172.")
                 }
 
@@ -368,7 +370,11 @@ class ChhandaServer @Inject constructor(
 
                     val providedKey = bearerKey ?: call.request.headers["X-API-KEY"] ?: call.request.queryParameters["key"]
                     val actualKey = securityRepository.apiKey.value
+                    
+                    Log.d(TAG, "API Gateway auth attempt: provided='$providedKey', actual='$actualKey'")
+                    
                     if (actualKey.isBlank() || actualKey == "Initializing..." || actualKey == "000000000" || providedKey != actualKey) {
+                        Log.w(TAG, "API Gateway auth failed. Provided: '$providedKey', Actual: '$actualKey'")
                         call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid or Uninitialized API Key"))
                         false
                     } else true
@@ -409,8 +415,14 @@ class ChhandaServer @Inject constructor(
                     if (!llmEngine.isModelLoaded.value && !llmEngine.isModelLoading.value) {
                         val lastModel = settingsRepository.activeModelFlow.firstOrNull()
                         if (lastModel != null) {
-                            Log.i(TAG, "Wake on Demand: Auto-loading model $lastModel")
-                            try { llmEngine.initModel(lastModel) } catch (e: Exception) { Log.e(TAG, "Wake on Demand failed", e) }
+                            val modelDir = java.io.File(this@ChhandaServer.context.getExternalFilesDir(null), "models")
+                            val modelFile = java.io.File(modelDir, lastModel)
+                            if (modelFile.exists()) {
+                                Log.i(TAG, "Wake on Demand: Auto-loading model ${modelFile.absolutePath}")
+                                try { llmEngine.initModel(modelFile.absolutePath) } catch (e: Exception) { Log.e(TAG, "Wake on Demand failed", e) }
+                            } else {
+                                Log.w(TAG, "Wake on Demand: Selected model file does not exist: ${modelFile.absolutePath}")
+                            }
                         }
                     }
 
@@ -418,6 +430,29 @@ class ChhandaServer @Inject constructor(
                         val req = call.receive<OpenAiChatRequest>()
                         val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.content ?: ""
                         val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
+                        
+                        // Extract previous conversation context (all messages except the last one)
+                        val externalHistory = req.messages.dropLast(1).map { msg ->
+                            Pair(msg.role, msg.content ?: "")
+                        }
+
+                        // System-prompt instruction injecting available tools to act as a robust coding agent
+                        val toolsInstructions = if (req.tools != null && req.tools.isNotEmpty()) {
+                            buildString {
+                                append("\n\nAVAILABLE TOOLS:\n")
+                                append("You can use the following tools to assist the user by generating a tool call:\n")
+                                req.tools.forEach { tool ->
+                                    append("- Function: ${tool.function.name}\n")
+                                    append("  Description: ${tool.function.description ?: ""}\n")
+                                    if (tool.function.parameters != null) {
+                                        append("  Parameters: ${tool.function.parameters}\n")
+                                    }
+                                    append("\n")
+                                }
+                                append("To call a tool, you MUST output a single <tool_call> tag containing a JSON object with 'name' and 'arguments' properties. Do not output anything else. Example:\n")
+                                append("<tool_call>{\"name\": \"create_new_file\", \"arguments\": {\"path\": \"example.py\", \"content\": \"print('hello')\"}}</tool_call>\n")
+                            }
+                        } else ""
 
                         if (req.stream) {
                             call.respondTextWriter(io.ktor.http.ContentType.Text.EventStream) {
@@ -425,17 +460,55 @@ class ChhandaServer @Inject constructor(
                                     try {
                                         val currentModel = llmEngine.getCurrentModelName()
                                         val msgId = "chatcmpl-${System.currentTimeMillis()}"
+                                        var buffer = ""
+                                        var insideToolCall = false
                                         sendMessageUseCase(
-                                            userText = lastUserMsg,
+                                            userText = lastUserMsg + toolsInstructions,
                                             deviceId = call.request.local.remoteHost,
                                             modelName = currentModel,
                                             sessionId = "openai_session",
                                             source = "api",
-                                            includeThinking = thinkingMode
+                                            includeThinking = false,
+                                            externalHistory = externalHistory
                                         ).collect { upd ->
                                             if (upd is TokenUpdate.Partial) {
-                                                val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${upd.text.replace("\"", "\\\"").replace("\n", "\\n")}"},"finish_reason":null}]}"""
-                                                write("data: $chunk\n\n"); flush()
+                                                buffer += upd.text
+                                                if (buffer.contains("<tool_call>")) {
+                                                    insideToolCall = true
+                                                    val parts = buffer.split("<tool_call>", limit = 2)
+                                                    val before = parts[0]
+                                                    if (before.isNotEmpty()) {
+                                                        val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${before.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}"},"finish_reason":null}]}"""
+                                                        write("data: $chunk\n\n"); flush()
+                                                    }
+                                                    buffer = "<tool_call>" + (parts.getOrNull(1) ?: "")
+                                                }
+                                                
+                                                if (insideToolCall) {
+                                                    if (buffer.contains("</tool_call>")) {
+                                                        val match = """<tool_call>([\s\S]*?)</tool_call>""".toRegex().find(buffer)
+                                                        val jsonStr = match?.groupValues?.get(1)?.trim() ?: ""
+                                                        val jsonObj = try {
+                                                            kotlinx.serialization.json.Json.parseToJsonElement(jsonStr).jsonObject
+                                                        } catch (e: Exception) {
+                                                            null
+                                                        }
+                                                        val toolCallName = jsonObj?.get("name")?.jsonPrimitive?.content ?: ""
+                                                        val toolCallArgs = jsonObj?.get("arguments")?.toString() ?: "{}"
+                                                        val toolCallId = "call_" + java.util.UUID.randomUUID().toString().take(8)
+                                                        
+                                                        if (toolCallName.isNotEmpty()) {
+                                                            val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"$toolCallId","type":"function","function":{"name":"$toolCallName","arguments":"${toolCallArgs.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}"}}]},"finish_reason":"tool_calls"}]}"""
+                                                            write("data: $chunk\n\n"); flush()
+                                                        }
+                                                        insideToolCall = false
+                                                        buffer = buffer.substringAfter("</tool_call>")
+                                                    }
+                                                } else {
+                                                    val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${upd.text.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}"},"finish_reason":null}]}"""
+                                                    write("data: $chunk\n\n"); flush()
+                                                    buffer = ""
+                                                }
                                             } else if (upd is TokenUpdate.Final) {
                                                 write("data: [DONE]\n\n"); flush()
                                             }
@@ -448,19 +521,88 @@ class ChhandaServer @Inject constructor(
                             requestSemaphore.withPermit {
                                 try {
                                     sendMessageUseCase(
-                                        userText = lastUserMsg,
+                                        userText = lastUserMsg + toolsInstructions,
                                         deviceId = call.request.local.remoteHost,
                                         modelName = llmEngine.getCurrentModelName(),
                                         sessionId = "openai_session",
                                         source = "api",
-                                        includeThinking = thinkingMode
+                                        includeThinking = false,
+                                        externalHistory = externalHistory
                                     ).collect { upd ->
                                         if (upd is TokenUpdate.Partial) fullResponse += upd.text
                                     }
-                                    call.respond(mapOf(
-                                        "id" to "chatcmpl-${System.currentTimeMillis()}",
-                                        "choices" to listOf(mapOf("message" to mapOf("role" to "assistant", "content" to fullResponse), "finish_reason" to "stop"))
-                                    ))
+                                    
+                                    val toolCallRegex = """<tool_call>([\s\S]*?)</tool_call>""".toRegex()
+                                    val match = toolCallRegex.find(fullResponse)
+                                    val jsonStr = match?.groupValues?.get(1)?.trim()
+                                    val jsonObj = if (jsonStr != null) {
+                                        try {
+                                            kotlinx.serialization.json.Json.parseToJsonElement(jsonStr).jsonObject
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    } else null
+                                    
+                                    val toolCallName = jsonObj?.get("name")?.jsonPrimitive?.content ?: ""
+                                    val toolCallArgs = jsonObj?.get("arguments")?.toString() ?: "{}"
+                                    val toolCallId = "call_" + java.util.UUID.randomUUID().toString().take(8)
+                                    
+                                    if (toolCallName.isNotEmpty()) {
+                                        val escapedArgs = toolCallArgs
+                                            .replace("\\", "\\\\")
+                                            .replace("\"", "\\\"")
+                                            .replace("\n", "\\n")
+                                            .replace("\r", "\\r")
+                                            .replace("\t", "\\t")
+                                        val responseJson = """
+                                            {
+                                              "id": "chatcmpl-${System.currentTimeMillis()}",
+                                              "choices": [
+                                                {
+                                                  "message": {
+                                                    "role": "assistant",
+                                                    "content": null,
+                                                    "tool_calls": [
+                                                      {
+                                                        "id": "$toolCallId",
+                                                        "type": "function",
+                                                        "function": {
+                                                          "name": "$toolCallName",
+                                                          "arguments": "$escapedArgs"
+                                                        }
+                                                      }
+                                                    ]
+                                                  },
+                                                  "finish_reason": "tool_calls"
+                                                }
+                                              ]
+                                            }
+                                        """.trimIndent()
+                                        call.respondText(responseJson, io.ktor.http.ContentType.Application.Json)
+                                    } else {
+                                        val cleanedContent = responseProcessor.cleanFinalResponse(fullResponse).text
+                                        val jsonEscapedContent = cleanedContent
+                                            .replace("\\", "\\\\")
+                                            .replace("\"", "\\\"")
+                                            .replace("\n", "\\n")
+                                            .replace("\r", "\\r")
+                                            .replace("\t", "\\t")
+                                        val responseJson = """
+                                            {
+                                              "id": "chatcmpl-${System.currentTimeMillis()}",
+                                              "choices": [
+                                                {
+                                                  "message": {
+                                                    "role": "assistant",
+                                                    "content": "$jsonEscapedContent"
+                                                  },
+                                                  "finish_reason": "stop"
+                                                }
+                                              ]
+                                            }
+                                        """.trimIndent()
+                                        call.respondText(responseJson, io.ktor.http.ContentType.Application.Json)
+                                    }
                                 } catch (e: Exception) {
                                     call.respond(io.ktor.http.HttpStatusCode.InternalServerError, mapOf("error" to (e.message ?: "Error")))
                                 }
@@ -487,8 +629,14 @@ class ChhandaServer @Inject constructor(
                     if (!llmEngine.isModelLoaded.value && !llmEngine.isModelLoading.value) {
                         val lastModel = settingsRepository.activeModelFlow.firstOrNull()
                         if (lastModel != null) {
-                            Log.i(TAG, "Wake on Demand: Auto-loading model $lastModel")
-                            try { llmEngine.initModel(lastModel) } catch (e: Exception) { Log.e(TAG, "Wake on Demand failed", e) }
+                            val modelDir = java.io.File(this@ChhandaServer.context.getExternalFilesDir(null), "models")
+                            val modelFile = java.io.File(modelDir, lastModel)
+                            if (modelFile.exists()) {
+                                Log.i(TAG, "Wake on Demand: Auto-loading model ${modelFile.absolutePath}")
+                                try { llmEngine.initModel(modelFile.absolutePath) } catch (e: Exception) { Log.e(TAG, "Wake on Demand failed", e) }
+                            } else {
+                                Log.w(TAG, "Wake on Demand: Selected model file does not exist: ${modelFile.absolutePath}")
+                            }
                         }
                     }
 
@@ -540,17 +688,6 @@ class ChhandaServer @Inject constructor(
                 }
             }
         }
-    }
-
-    private fun showNotification(deviceName: String) {
-        val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val channelId = "chhanda_server"
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            notificationManager.createNotificationChannel(android.app.NotificationChannel(channelId, "Chhanda Server", android.app.NotificationManager.IMPORTANCE_DEFAULT))
-        }
-        val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_notify_chat).setContentTitle("New Connection").setContentText("$deviceName connected").build()
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
     }
 
     private fun heartbeatDevice(ip: String) {

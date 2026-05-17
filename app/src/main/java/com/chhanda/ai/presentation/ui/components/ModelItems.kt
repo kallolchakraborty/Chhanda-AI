@@ -33,6 +33,8 @@ import androidx.compose.ui.semantics.*
 fun LocalModelItem(
     model: ModelInfo, 
     isServerRunning: Boolean, 
+    isModelLoaded: Boolean = false,
+    isModelLoading: Boolean = false,
     onActivate: () -> Unit, 
     onStop: () -> Unit,
     onTryIt: () -> Unit,
@@ -77,18 +79,21 @@ fun LocalModelItem(
                         }
                     }
                     if (model.isActive) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                "ACTIVE", 
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                fontSize = 8.sp, 
-                                fontWeight = FontWeight.Black, 
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                        val badgeText = if (isServerRunning && isModelLoading) "LOADING" else null
+                        if (badgeText != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    badgeText, 
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                    fontSize = 8.sp, 
+                                    fontWeight = FontWeight.Black, 
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }

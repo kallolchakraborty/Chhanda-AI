@@ -8,8 +8,10 @@ import com.chhanda.ai.util.ThermalStatusTracker
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.SamplerConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -83,7 +85,7 @@ class LiteRTLMEngine @Inject constructor(
                         Log.w(TAG, "Failed to proactively delete cache: ${ex.message}")
                     }
 
-                    val config = EngineConfig(modelPath = path)
+                    val config = EngineConfig(modelPath = path, maxNumTokens = 4096)
                     engine = Engine(config)
                     
                     _loadingProgress.value = 0.6f
@@ -149,8 +151,23 @@ class LiteRTLMEngine @Inject constructor(
                 Log.w(TAG, "Thermal throttling active ($thermal), reducing inference load")
             }
             
+            // Reuse existing conversation for stateful on-device chat to preserve native multi-turn history.
+            // Stateless API calls invoke resetSession() first, which sets conversation to null, ensuring clean sessions.
             if (conversation == null) {
-                conversation = engine?.createConversation()
+                val samplerConfig = SamplerConfig(
+                    topK = 40,
+                    topP = 0.95,
+                    temperature = 0.7
+                )
+                val config = if (systemInstruction != null && systemInstruction.isNotBlank()) {
+                    ConversationConfig(
+                        systemInstruction = Contents.of(listOf(Content.Text(systemInstruction))),
+                        samplerConfig = samplerConfig
+                    )
+                } else {
+                    ConversationConfig(samplerConfig = samplerConfig)
+                }
+                conversation = engine?.createConversation(config)
             }
 
             // VISION SUPPORT: Package text and images into a multimodal request
@@ -173,20 +190,18 @@ class LiteRTLMEngine @Inject constructor(
                 }
             }
 
-            var emittedTextLength = 0
             var finalFullText = ""
             var finalTps = 0.0
             conversation?.let { conv ->
                 val request = if (contentList.size > 1) Contents.of(contentList) else Contents.of(listOf(Content.Text(prompt)))
                 conv.sendMessageAsync(request).collect { message ->
-                    val fullText = message.contents.contents
+                    val delta = message.contents.contents
                         .filterIsInstance<Content.Text>()
                         .joinToString("") { it.text }
                     
-                    finalFullText = fullText
-                    if (fullText.length > emittedTextLength) {
-                        val delta = fullText.substring(emittedTextLength)
-                        emittedTextLength = fullText.length
+                    if (delta.isNotEmpty()) {
+                        finalFullText += delta
+                        Log.d("RAW_LLM", "Delta: '$delta', Full: '$finalFullText'")
                         
                         tokenCount++
                         val elapsed = (System.currentTimeMillis() - startTime) / 1000.0

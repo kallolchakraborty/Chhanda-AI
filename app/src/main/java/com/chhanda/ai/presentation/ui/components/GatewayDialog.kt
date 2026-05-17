@@ -162,24 +162,29 @@ fun GatewayDialog(
                     val useToolCalling = lowerName.contains("gemma") && 
                         (lowerName.contains("e2b") || lowerName.contains("e4b"))
 
+                    val displayName = if (lowerName.contains("gemma")) "Gemma 4 (Local)" else "$activeModelName (Local)"
+                    val modelIdToUse = if (lowerName.contains("gemma")) "gemma-4-e2b" else modelId
+                    val templateToUse = if (lowerName.contains("gemma")) "chatml" else template
+                    val useToolCallingToUse = useToolCalling || lowerName.contains("gemma")
+
                     val continueConfig = """
                     |name: Local Config
                     |version: 1.0.0
                     |schema: v1
                     |
                     |models:
-                    |  - name: "Chhanda: $activeModelName"
+                    |  - name: "Chhanda: $displayName"
                     |    provider: "openai"
-                    |    model: "$modelId"
+                    |    model: "$modelIdToUse"
                     |    apiBase: "$baseServerUrl/v1"
                     |    apiKey: "$apiKey"
-                    |    template: "$template"
-                    |    useToolCalling: $useToolCalling  # Enables file creation/edits
+                    |    template: "$templateToUse"
+                    |    useToolCalling: $useToolCallingToUse  # Enables file creation/edits
                     |
                     |tabAutocompleteModel:
                     |  name: "Chhanda Autocomplete"
                     |  provider: "openai"
-                    |  model: "$modelId"
+                    |  model: "$modelIdToUse"
                     |  apiBase: "$baseServerUrl/v1"
                     |  apiKey: "$apiKey"
                     |

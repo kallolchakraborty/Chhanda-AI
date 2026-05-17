@@ -21,27 +21,20 @@ fun parseMessageContent(rawText: String): Pair<String?, String> {
     var thinkingText: String? = null
     var responseText = cleanedText
 
-    val thinkStartIndex = cleanedText.indexOf("<think>")
-    val thoughtStartIndex = cleanedText.indexOf("<thought>")
-    
-    if (thinkStartIndex != -1) {
-        val thinkEndIndex = cleanedText.indexOf("</think>", thinkStartIndex)
-        if (thinkEndIndex != -1) {
-            thinkingText = cleanedText.substring(thinkStartIndex + 7, thinkEndIndex).trim()
-            responseText = (cleanedText.substring(0, thinkStartIndex) + cleanedText.substring(thinkEndIndex + 8)).trim()
+    val startRegex = """<(?:thought|think|thoughtint|thoughtints)[^>]*>""".toRegex(RegexOption.IGNORE_CASE)
+    val endRegex = """</(?:thought|think|thoughtint|thoughtints)?>""".toRegex(RegexOption.IGNORE_CASE)
+
+    val startMatch = startRegex.find(cleanedText)
+    if (startMatch != null) {
+        val startIdx = startMatch.range.first
+        val endMatch = endRegex.find(cleanedText, startIdx)
+        if (endMatch != null) {
+            val endIdx = endMatch.range.first
+            thinkingText = cleanedText.substring(startIdx + startMatch.value.length, endIdx).trim()
+            responseText = (cleanedText.substring(0, startIdx) + cleanedText.substring(endIdx + endMatch.value.length)).trim()
         } else {
-            thinkingText = cleanedText.substring(thinkStartIndex + 7).trim()
-            responseText = cleanedText.substring(0, thinkStartIndex).trim()
-        }
-        return Pair(thinkingText, responseText)
-    } else if (thoughtStartIndex != -1) {
-        val thoughtEndIndex = cleanedText.indexOf("</thought>", thoughtStartIndex)
-        if (thoughtEndIndex != -1) {
-            thinkingText = cleanedText.substring(thoughtStartIndex + 9, thoughtEndIndex).trim()
-            responseText = (cleanedText.substring(0, thoughtStartIndex) + cleanedText.substring(thoughtEndIndex + 10)).trim()
-        } else {
-            thinkingText = cleanedText.substring(thoughtStartIndex + 9).trim()
-            responseText = cleanedText.substring(0, thoughtStartIndex).trim()
+            thinkingText = cleanedText.substring(startIdx + startMatch.value.length).trim()
+            responseText = cleanedText.substring(0, startIdx).trim()
         }
         return Pair(thinkingText, responseText)
     }

@@ -85,6 +85,7 @@ fun DashboardScreen(
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val downloadPauseState by viewModel.downloadPauseFlow.collectAsStateWithLifecycle()
     val downloadStatus by viewModel.downloadStatus.collectAsStateWithLifecycle()
+    val isModelLoaded by viewModel.isModelLoaded.collectAsStateWithLifecycle()
     val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
     val modelLoadingProgress by viewModel.modelLoadingProgress.collectAsStateWithLifecycle()
     val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
@@ -196,11 +197,13 @@ fun DashboardScreen(
     var showHistorySheet by remember { mutableStateOf(false) }
     var selectedModelForHistory by remember { mutableStateOf<String?>(null) }
     val selectedSessions = remember { mutableStateListOf<String>() }
-    val activeModelName = remember(ownedModels, sharedModels, isServerRunning) {
-        if (isServerRunning) {
-            (ownedModels + sharedModels).firstOrNull { it.isActive }?.name ?: "No Active Model"
-        } else {
-            "No Active Model"
+    val activeModelName = remember(ownedModels, sharedModels, isServerRunning, isModelLoaded, isModelLoading) {
+        when {
+            isServerRunning && isModelLoaded -> {
+                (ownedModels + sharedModels).firstOrNull { it.isActive }?.name ?: "No Active Model"
+            }
+            isModelLoading -> "Loading Model..."
+            else -> "No Active Model"
         }
     }
     val anyActiveModel = remember(ownedModels, sharedModels) {
@@ -423,6 +426,8 @@ fun DashboardScreen(
                     LocalModelItem(
                         model = model,
                         isServerRunning = isServerRunning,
+                        isModelLoaded = isModelLoaded,
+                        isModelLoading = isModelLoading,
                         onActivate = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                             viewModel.activateModel(model.name) 
@@ -462,6 +467,8 @@ fun DashboardScreen(
                     LocalModelItem(
                         model = model,
                         isServerRunning = isServerRunning,
+                        isModelLoaded = isModelLoaded,
+                        isModelLoading = isModelLoading,
                         onActivate = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
                             viewModel.activateModel(model.name) 

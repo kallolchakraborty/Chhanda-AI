@@ -43,9 +43,9 @@ class ContextManagerTest {
         )
         
         coEvery { chatDao.getRecentMessagesForSession(sessionId, 10) } returns history
-        coEvery { embeddingEngine.embed(any()) } returns floatArrayOf(0.1f, 0.2f)
+        coEvery { embeddingEngine.embed(any()) } returns Embedding(floatArrayOf(0.1f, 0.2f))
         coEvery { vectorStore.search(any(), any(), any(), any()) } returns listOf(
-            VectorResult(text = "Paris is the capital.", score = 0.9f, metadata = mapOf("source" to "world_capitals.pdf"))
+            SearchResult(text = "Paris is the capital.", score = 0.9f, metadata = mapOf("source" to "world_capitals.pdf"))
         )
         coEvery { uploadedFileDao.getDisabledFileNames() } returns emptyList()
 
@@ -54,8 +54,10 @@ class ContextManagerTest {
 
         // Assert
         assertEquals(2, result.first.size)
-        assertEquals("user", result.first[0].first)
-        assertEquals("Hello", result.first[0].second)
+        assertEquals("assistant", result.first[0].first)
+        assertEquals("Hi there!", result.first[0].second)
+        assertEquals("user", result.first[1].first)
+        assertEquals("Hello", result.first[1].second)
         assertTrue(result.second.contains("Paris is the capital"))
         assertTrue(result.second.contains("<retrieved_knowledge>"))
     }
@@ -71,7 +73,7 @@ class ContextManagerTest {
         )
         
         coEvery { chatDao.getRecentMessagesForSession(sessionId, 10) } returns history
-        coEvery { embeddingEngine.embed("Tell me about the Eiffel Tower What about it?") } returns floatArrayOf(0.1f)
+        coEvery { embeddingEngine.embed(any()) } returns Embedding(floatArrayOf(0.1f))
         coEvery { vectorStore.search(any(), any(), any(), any()) } returns emptyList()
         coEvery { uploadedFileDao.getDisabledFileNames() } returns emptyList()
 
@@ -89,9 +91,9 @@ class ContextManagerTest {
         val query = "Quantum physics"
         
         coEvery { chatDao.getRecentMessagesForSession(sessionId, 10) } returns emptyList()
-        coEvery { embeddingEngine.embed(any()) } returns floatArrayOf(0.1f)
+        coEvery { embeddingEngine.embed(any()) } returns Embedding(floatArrayOf(0.1f))
         coEvery { vectorStore.search(any(), any(), any(), any()) } returns listOf(
-            VectorResult(text = "Secret details.", score = 0.9f, metadata = mapOf("source" to "confidential.pdf"))
+            SearchResult(text = "Secret details.", score = 0.9f, metadata = mapOf("source" to "confidential.pdf"))
         )
         coEvery { uploadedFileDao.getDisabledFileNames() } returns listOf("confidential.pdf")
 
