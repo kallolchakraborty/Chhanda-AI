@@ -17,7 +17,7 @@
 
 ---
 
-## 📱 Application UI Layout
+## 📱 Media Gallery
 
 To provide a visual walkthrough of the production-hardened **Chhanda AI & RAG Ecosystem**, here are the on-device layouts captured across the core functional tabs of the Android application:
 
