@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.core.*
@@ -441,7 +442,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     ChhandaSectionHeader(
-                        icon = Icons.Default.LibraryBooks, 
+                        icon = Icons.AutoMirrored.Filled.LibraryBooks, 
                         title = Localization.getString("internal_models", appLanguage), 
                         badge = "${ownedModels.size} " + Localization.getString("secure_badge", appLanguage)
                     )
@@ -597,7 +598,7 @@ fun DashboardScreen(
             
 
             item {
-                ChhandaSectionHeader(icon = Icons.Default.Chat, title = Localization.getString("chat_management", appLanguage), badge = Localization.getString("secure_badge", appLanguage))
+                ChhandaSectionHeader(icon = Icons.AutoMirrored.Filled.Chat, title = Localization.getString("chat_management", appLanguage), badge = Localization.getString("secure_badge", appLanguage))
             }
 
             item {
@@ -761,7 +762,7 @@ fun DashboardScreen(
                                         }
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Default.Chat, contentDescription = "Chat Session", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat Session", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.width(12.dp))
                                     Text(
                                         text = sessionInfo.sessionTitle ?: "Session: ${sessionId.take(8)}...",
@@ -840,7 +841,7 @@ fun DashboardScreen(
                             Text("Share via QR Code", fontWeight = FontWeight.Bold, color = contentColor)
                             Text("Invite other devices to use this AI model.", fontSize = 12.sp, color = contentColor.copy(alpha = 0.7f))
                         }
-                        Icon(Icons.Default.ArrowForward, contentDescription = "View Details", tint = contentColor)
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "View Details", tint = contentColor)
                     }
                 }
                 
@@ -1291,7 +1292,7 @@ fun StorageManagerSheet(
             Text("DEVICES & HISTORY", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             
             IconButton(onClick = { showSortMenu = true }) {
-                Icon(Icons.Default.Sort, "Sort", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.AutoMirrored.Filled.Sort, "Sort", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                     DropdownMenuItem(
                         text = { Text("Latest Activity") },
@@ -1431,7 +1432,7 @@ fun DeviceHistoryItem(
             }
             
             if (isExpanded) {
-                Divider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                 Column(modifier = Modifier.padding(16.dp)) {
                     val threads = deviceHistory.messages.groupBy { it.sessionId }
                     threads.filter { (sid, messages) ->
@@ -1473,7 +1474,7 @@ fun DeviceHistoryItem(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         }
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
                     }
                     if (threads.isEmpty()) {
                         Text(

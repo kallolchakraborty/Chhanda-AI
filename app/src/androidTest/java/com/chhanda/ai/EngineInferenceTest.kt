@@ -22,7 +22,9 @@ class EngineInferenceTest {
         val thermalTracker = ThermalStatusTracker(appContext)
         val memoryMonitor = MemoryPressureMonitor(appContext)
         
-        val engine = LiteRTLMEngine(appContext, thermalTracker, memoryMonitor)
+        val settingsRepo = com.chhanda.ai.data.repository.SettingsRepository(appContext)
+        
+        val engine = LiteRTLMEngine(appContext, thermalTracker, memoryMonitor, settingsRepo)
         
         val modelFile = File(appContext.getExternalFilesDir(null), "models/Gemma-4-E2B-IT.litertlm")
         assertTrue("Model file should exist at ${modelFile.absolutePath}", modelFile.exists())
