@@ -287,13 +287,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         val extractedThinking = processed.thinking
 
                         // Append sources metadata block at the very end
+                        val trimmedResponse = cleanedResponse.trim()
                         val sourcesTag = if (retrievedSourcesList.isNotEmpty()) {
                             "\n\n[Sources: ${retrievedSourcesList.joinToString("||")}]"
                         } else {
                             ""
                         }
 
-                        val toSave = cleanedResponse + sourcesTag
+                        val toSave = trimmedResponse + sourcesTag
 
                         if (toSave.isNotBlank() || !extractedThinking.isNullOrBlank()) {
 

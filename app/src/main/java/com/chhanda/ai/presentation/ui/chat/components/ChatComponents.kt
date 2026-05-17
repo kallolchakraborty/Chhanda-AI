@@ -210,16 +210,21 @@ fun MessageBubble(
                 
                 var displayText = finalResponse
                 val sourcesList = mutableListOf<Pair<String, String>>()
-                val sourcesMatch = Regex("\\[Sources:\\s*(.*?)\\]$").find(finalResponse)
+                val sourcesMatch = Regex("\\[Sources:\\s*(.*?)\\]", RegexOption.IGNORE_CASE).find(finalResponse)
                 if (sourcesMatch != null) {
-                    displayText = finalResponse.substring(0, sourcesMatch.range.first).trim()
+                    displayText = finalResponse.replace(sourcesMatch.value, "").trim()
                     val sourcesStr = sourcesMatch.groupValues[1]
                     sourcesStr.split("||").forEach { src ->
-                        if (src.contains("|")) {
-                            val parts = src.split("|", limit = 2)
-                            if (parts.size == 2) sourcesList.add(Pair(parts[0], parts[1]))
-                        } else {
-                            sourcesList.add(Pair(src, src))
+                        val trimmedSrc = src.trim()
+                        if (trimmedSrc.isNotEmpty()) {
+                            if (trimmedSrc.contains("|")) {
+                                val parts = trimmedSrc.split("|", limit = 2)
+                                if (parts.size == 2) {
+                                    sourcesList.add(Pair(parts[0].trim(), parts[1].trim()))
+                                }
+                            } else {
+                                sourcesList.add(Pair(trimmedSrc, trimmedSrc))
+                            }
                         }
                     }
                 }
@@ -369,20 +374,34 @@ fun MessageBubble(
                     )
                 }
 
-                if (message.isRagUsed) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                val sourceLabel = when (message.contextSource) {
+                    "Knowledge Base", "Multi-Source", "Attachment" -> "RAG"
+                    "Web Fallback" -> "WEB"
+                    else -> "LLM"
+                }
+                val badgeColor = when (sourceLabel) {
+                    "RAG" -> MaterialTheme.colorScheme.primary
+                    "WEB" -> Color(0xFF10B981) // Emerald Green
+                    else -> Color(0xFF6366F1) // Indigo/Blue for LLM
+                }
+                val badgeIcon = when (sourceLabel) {
+                    "RAG" -> Icons.Default.AutoAwesome
+                    "WEB" -> Icons.Default.Public
+                    else -> Icons.Default.SmartToy
+                }
+
+                Surface(
+                    color = badgeColor.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, badgeColor.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text("RAG ACTIVE", fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
-                        }
+                        Icon(badgeIcon, null, modifier = Modifier.size(10.dp), tint = badgeColor)
+                        Text(sourceLabel, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = badgeColor)
                     }
                 }
 
