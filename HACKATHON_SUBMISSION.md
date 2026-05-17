@@ -126,6 +126,7 @@ sequenceDiagram
     participant CM as ContextManager
     participant EE as EmbeddingEngine (512-dim)
     participant VS as LocalVectorStore (Int8)
+    participant SU as ScrapeUrlUseCase
     participant DB as Room DB (BLOB)
     participant LLM as LiteRT LM Engine (Gemma 4)
 
@@ -148,8 +149,21 @@ sequenceDiagram
     DB-->>VS: List<VectorChunkEntity>
     VS->>VS: For each chunk:<br/>1. Int8 dot product (no de-quant)<br/>2. Cosine similarity<br/>3. Min-Heap insert (O(log K))
     VS-->>CM: Top 8 SearchResults (score ≥ 0.60)
+    CM-->>SM: List<SearchResult>
     
-    CM-->>SM: (chatHistory, "<retrieved_knowledge>...</retrieved_knowledge>")
+    Note over SM: Check fallback search bounds
+    alt Max RAG Score < 0.70 AND WebSearchEnabled AND InternetConnected
+        SM->>UI: Emit status "Bypassing local RAG. Scraping Web..."
+        SM->>SU: invoke(query)
+        SU-->>SM: List<SearchResult> (Web Scrapes)
+    else Search Toggle Disabled / Offline
+        SM->>UI: Emit status "Searching locally. Bypassing Web..."
+    end
+
+    SM->>DB: Query User Thumbs Up/Down feedback templates
+    DB-->>SM: List<MessageEntity> (Few-Shot History)
+    SM->>SM: Formulate Dynamic Few-Shot Prompt adaptation
+    
     SM->>SG: sanitizeInput(text) → [USER_INPUT_START]...[USER_INPUT_END]
     SM->>SG: sanitizeContext(rag) → [EXTERNAL_CONTEXT_START]...[EXTERNAL_CONTEXT_END]
     SM->>LLM: generate(systemPrompt + context + history + query)
@@ -157,7 +171,7 @@ sequenceDiagram
     loop Token-by-Token Streaming
         LLM-->>SM: TokenUpdate.Partial(token, tps)
         SM->>SM: Parse thinking tags (<thought>)
-        SM-->>UI: Emit visible tokens
+        SM-->>UI: Emit visible tokens + status updates
         UI-->>U: Render in real-time
     end
     

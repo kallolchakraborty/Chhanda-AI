@@ -229,6 +229,8 @@ sequenceDiagram
     participant CM as ContextManager
     participant EE as EmbeddingEngine
     participant VS as LocalVectorStore (Int8)
+    participant SU as ScrapeUrlUseCase
+    participant DB as Room DB
     participant LLM as LiteRT LM Engine
 
     U->>UI: Send Message + Attachments
@@ -245,12 +247,26 @@ sequenceDiagram
         EE-->>CM: Float[512] vector
         CM->>VS: search(query, topK, threshold)
         VS-->>CM: List<SearchResult>
-        CM-->>SM: (history, ragContext)
+        CM-->>SM: List<SearchResult> (RAG Context)
+        
+        Note over SM: Check fallback search bounds
+        alt Max RAG Score < 0.70 AND WebSearchEnabled AND InternetConnected
+            SM->>UI: Emit status "Bypassing local RAG. Scraping Web..."
+            SM->>SU: invoke(query)
+            SU-->>SM: List<SearchResult> (Web Scrapes)
+        else Search Toggle Disabled / Offline
+            SM->>UI: Emit status "Searching locally. Bypassing Web..."
+        end
+
+        SM->>DB: Query User Thumbs Up/Down feedback templates
+        DB-->>SM: List<MessageEntity> (Few-Shot History)
+        SM->>SM: Formulate Dynamic Few-Shot Prompt adaptation
+        
         SM->>SG: sanitizeInput() + sanitizeContext()
         SM->>LLM: generate(fullPrompt)
         loop Token Streaming
             LLM-->>SM: TokenUpdate.Partial
-            SM-->>UI: Emit partial response
+            SM-->>UI: Emit partial response + status updates
             UI-->>U: Render token
         end
         LLM-->>SM: TokenUpdate.Final

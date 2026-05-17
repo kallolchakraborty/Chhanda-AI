@@ -85,13 +85,18 @@ graph TD
         N -- "Explicit (file/search)" --> O["≥ 0.60"]
         N -- "General" --> P["≥ 0.80"]
         N -- "Follow-up fallback" --> Q["≥ 0.50"]
+        
+        O & P & Q --> R{"Similarity Score < 0.70 AND WebSearchEnabled AND Online?"}
+        R -- Yes --> S["Scrape Live Google Web Content"]
+        R -- No --> T["Search Locally Only"]
     end
 
     subgraph "Generation Layer"
-        O & P & Q --> R["Format as XML tags"]
-        R --> S["Multi-Tier Prompt Builder"]
-        S --> T["LiteRT LM Engine"]
-        T --> U["Streaming Response + TTS"]
+        S & T --> U["Format as XML tags"]
+        DB[("Room DB Thumbs Feedback")] --> V["Formulate Dynamic Few-Shot guidelines"]
+        U & V --> W["Assemble Multi-Tier System Prompt"]
+        W --> X["LiteRT LM Engine (Gemma 4)"]
+        X --> Y["Streaming Response + real-time status"]
     end
 ```
 
