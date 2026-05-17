@@ -337,7 +337,7 @@ graph TD
     LLM2 --> RAG2
     THERM -.->|Context Reduction| LLM2
     FGS3 --> KTOR
-    TILE2 -.->|isServerActive()| FGS3
+    TILE2 -.->|isServerActive| FGS3
     REAP --> KTOR
 ```
 
