@@ -334,16 +334,45 @@ fun DownloadableModelItem(
                 
                 // Progress Bar with smooth animation and pulse effect
                 Box(modifier = Modifier.fillMaxWidth()) {
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
+                    val infiniteTransition = rememberInfiniteTransition(label = "downloadShimmer")
+                    val shimmerOffset by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(2000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "downloadShimmerOffset"
+                    )
+                    
+                    val barColor = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+                    val barColorContainer = if (isPaused) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.primaryContainer
+                    
+                    val progressBrush = androidx.compose.ui.graphics.Brush.linearGradient(
+                        colors = listOf(
+                            barColor,
+                            barColorContainer,
+                            barColor
+                        ),
+                        start = androidx.compose.ui.geometry.Offset(-300f + (shimmerOffset * 1000f), 0f),
+                        end = androidx.compose.ui.geometry.Offset(shimmerOffset * 1000f, 0f)
+                    )
+
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(10.dp)
-                            .clip(RoundedCornerShape(5.dp)),
-                        color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                    )
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(animatedProgress)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(progressBrush)
+                        )
+                    }
                 }
                 
                 Spacer(Modifier.height(12.dp))

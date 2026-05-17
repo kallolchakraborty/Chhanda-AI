@@ -34,7 +34,8 @@ fun GatewayDialog(
     viewModel: SystemViewModel,
     displayPort: Int,
     tunnelUrl: String,
-    activeModelName: String
+    activeModelName: String,
+    forceShowQr: Boolean = false
 ) {
     if (!show) return
     
@@ -44,7 +45,7 @@ fun GatewayDialog(
     var isSetupConfirmed by remember { mutableStateOf(false) }
     var isApiKeyMasked by remember { mutableStateOf(true) }
     var showConfirmationPrompt by remember { mutableStateOf(false) }
-    val showSetup = !hasNetworkState && !isSetupConfirmed
+    val showSetup = !hasNetworkState && !isSetupConfirmed && !forceShowQr
 
     androidx.compose.ui.window.Dialog(onDismissRequest = { 
         isSetupConfirmed = false

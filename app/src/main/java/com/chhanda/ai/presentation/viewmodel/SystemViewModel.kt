@@ -926,6 +926,17 @@ class SystemViewModel @Inject constructor(
         }
     }
 
+    fun activateModelAndStartServer(modelName: String) {
+        viewModelScope.launch {
+            addLog("SYSTEM", "Activating and starting model: $modelName", "INFO")
+            modelProvisioner.activateModel(modelName)
+            delay(300)
+            if (!serverOrchestrator.isServerRunning.value) {
+                serverOrchestrator.startServer()
+            }
+        }
+    }
+
     fun registerCustomModel(file: java.io.File) {
         viewModelScope.launch {
             if (!file.exists()) {

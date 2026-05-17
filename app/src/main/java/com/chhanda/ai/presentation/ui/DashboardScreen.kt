@@ -115,6 +115,8 @@ fun DashboardScreen(
     var showClearHistoryConfirm by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
     var showHotspotPrompt by remember { mutableStateOf(false) }
+    var showNoNetworkHotspotPrompt by remember { mutableStateOf(false) }
+    var forceShowQr by remember { mutableStateOf(false) }
     val hasNetworkState by viewModel.hasNetwork.collectAsStateWithLifecycle()
     var expandedAssistant by remember { mutableStateOf<String?>(null) }
     var isApiKeyVisibleInQr by remember { mutableStateOf(false) }
@@ -352,7 +354,7 @@ fun DashboardScreen(
                         onClick = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                             if (!hasNetworkState) {
-                                showHotspotPrompt = true 
+                                showNoNetworkHotspotPrompt = true 
                             } else {
                                 showQrDialog = true
                             }
@@ -823,7 +825,7 @@ fun DashboardScreen(
                     onClick = { 
                         if (isQrEnabled) {
                             if (!hasNetworkState) {
-                                showHotspotPrompt = true
+                                showNoNetworkHotspotPrompt = true
                             } else {
                                 showQrDialog = true
                             }
@@ -980,14 +982,17 @@ fun DashboardScreen(
                 } else {
                     LazyColumn {
                         items(ownedModels + sharedModels) { model ->
+                            val isModelRunning = model.isActive && isServerRunning
+                            val isModelRecommended = model.name.contains("Gemma-4-E4B-IT", ignoreCase = true) || model.name.contains("Gemma-4-E2B-IT", ignoreCase = true)
+
                             Surface(
                                 onClick = {
-                                    if (!model.isActive) {
-                                        if (isServerRunning) {
+                                    if (isServerRunning) {
+                                        if (!model.isActive) {
                                             viewModel.switchModelAndRestartServer(model.name)
-                                        } else {
-                                            viewModel.activateModel(model.name)
                                         }
+                                    } else {
+                                        viewModel.activateModelAndStartServer(model.name)
                                     }
                                     showModelPicker = false
                                 },
@@ -1006,11 +1011,74 @@ fun DashboardScreen(
                                     )
                                     Spacer(Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            formatModelDisplayName(model.name), 
-                                            fontWeight = FontWeight.Bold, 
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                formatModelDisplayName(model.name), 
+                                                fontWeight = FontWeight.Bold, 
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        
+                                        if (isModelRunning || isModelRecommended) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                if (isModelRunning) {
+                                                    Surface(
+                                                        color = Color(0xFF2E7D32).copy(alpha = 0.15f),
+                                                        contentColor = Color(0xFF4CAF50),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f))
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.PlayArrow,
+                                                                contentDescription = "Running",
+                                                                modifier = Modifier.size(10.dp)
+                                                            )
+                                                            Spacer(Modifier.width(2.dp))
+                                                            Text(
+                                                                "RUNNING",
+                                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                                fontSize = 9.sp
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                if (isModelRecommended) {
+                                                    Surface(
+                                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Star,
+                                                                contentDescription = "Recommended",
+                                                                modifier = Modifier.size(10.dp),
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                            Spacer(Modifier.width(2.dp))
+                                                            Text(
+                                                                "RECOMMENDED",
+                                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                                fontSize = 9.sp
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        Spacer(Modifier.height(4.dp))
                                         Text(
                                             model.details, 
                                             style = MaterialTheme.typography.bodySmall,
@@ -1084,16 +1152,75 @@ fun DashboardScreen(
         )
     }
 
+    if (showNoNetworkHotspotPrompt) {
+        AlertDialog(
+            onDismissRequest = { showNoNetworkHotspotPrompt = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Wifi,
+                    contentDescription = "Activate Hotspot",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "No Local Network Detected",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "To share this local AI gateway offline, please complete these steps:",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "1. Turn on your phone's Personal Hotspot in settings.\n2. Ask other users/devices to connect to your hotspot network.\n3. Once they join, confirm below to open the QR Code window.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNoNetworkHotspotPrompt = false
+                        forceShowQr = true
+                        showQrDialog = true
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Confirm & Show QR")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoNetworkHotspotPrompt = false }) {
+                    Text("CANCEL")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
     GatewayDialog(
         show = showQrDialog || showHotspotPrompt,
         onDismiss = { 
             showQrDialog = false
             showHotspotPrompt = false
+            forceShowQr = false
         },
         viewModel = viewModel,
         displayPort = displayPort,
         tunnelUrl = tunnelUrl,
-        activeModelName = activeModelName
+        activeModelName = activeModelName,
+        forceShowQr = forceShowQr
     )
 
 

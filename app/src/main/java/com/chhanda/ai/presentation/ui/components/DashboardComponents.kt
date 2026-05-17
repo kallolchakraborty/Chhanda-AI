@@ -250,12 +250,53 @@ private fun ActiveModelContent(
         if (isLoading) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                LinearProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.weight(1f).height(6.dp).clip(CircleShape),
-                    color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                    trackColor = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f)
-                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background((if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.2f))
+                ) {
+                    val progressWidthFraction = if (animatedProgress > 0f) animatedProgress else 1f
+                    
+                    val infiniteTransition = rememberInfiniteTransition(label = "modelLoadShimmer")
+                    val shimmerOffset by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1500, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "modelLoadShimmerOffset"
+                    )
+
+                    val brush = if (animatedProgress == 0f) {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.3f),
+                                if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.3f)
+                            ),
+                            start = androidx.compose.ui.geometry.Offset(-200f + (shimmerOffset * 800f), 0f),
+                            end = androidx.compose.ui.geometry.Offset(shimmerOffset * 800f, 0f)
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary).copy(alpha = 0.6f)
+                            )
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progressWidthFraction)
+                            .clip(CircleShape)
+                            .background(brush)
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
                 Text(
                     "${(animatedProgress * 100).toInt()}%", 
