@@ -20,6 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.testTag
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import com.chhanda.ai.util.Localization
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,17 +103,50 @@ fun ChatInput(
                         }
                     }
 
-                    IconButton(onClick = {
-                        if (hapticsEnabled) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isListening) {
+                            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                            val scale by infiniteTransition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 1.7f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1000, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Restart
+                                ),
+                                label = "scale"
+                            )
+                            val alpha by infiniteTransition.animateFloat(
+                                initialValue = 0.6f,
+                                targetValue = 0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1000, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Restart
+                                ),
+                                label = "alpha"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .graphicsLayer {
+                                        scaleX = scale
+                                        scaleY = scale
+                                        this.alpha = alpha
+                                    }
+                                    .background(MaterialTheme.colorScheme.error, CircleShape)
+                            )
                         }
-                        onVoiceClick()
-                    }) {
-                        Icon(
-                            if (isListening) Icons.Default.Mic else Icons.Default.MicNone,
-                            contentDescription = "Voice Input",
-                            tint = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                        )
+                        IconButton(onClick = {
+                            if (hapticsEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            onVoiceClick()
+                        }) {
+                            Icon(
+                                if (isListening) Icons.Default.Mic else Icons.Default.MicNone,
+                                contentDescription = "Voice Input",
+                                tint = if (isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
