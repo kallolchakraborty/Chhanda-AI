@@ -49,8 +49,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         try {
             val isInternetPresent = networkManager.isConnected.value
             val isQrRequest = source.lowercase() == "qr"
-            val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest
-            val webSearchEnabled = settingsRepository.webSearchEnabledFlow.first() && !isQrRequest
+            val isGreetingMsg = isGreeting(userText)
+            val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest && !isGreetingMsg
+            val webSearchEnabled = settingsRepository.webSearchEnabledFlow.first() && !isQrRequest && !isGreetingMsg
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
@@ -663,5 +664,19 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         if (q.length > 50 || r.length > 500) return true
         
         return false
+    }
+
+    private fun isGreeting(text: String): Boolean {
+        val clean = text.trim().lowercase().replace(Regex("[^a-zA-Z0-9\\s\\u0980-\\u09FF\\u0900-\\u097F]"), "")
+        if (clean.isBlank()) return false
+        val greetings = setOf(
+            "hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", "good evening", "howdy",
+            "hi there", "hello there", "namaste", "pranam", "namaskar",
+            // Bengali
+            "হ্যালো", "হাই", "নমস্কার", "প্রণাম", "শুভ সকাল", "শুভ দুপুর", "শুভ সন্ধ্যা", "শুভ রাত্রি", "কেমন আছো", "কেমন আছেন",
+            // Hindi
+            "नमस्ते", "नमस्कार", "प्रणाम", "शुभ प्रभात", "शुभ दोपहर", "शुभ संध्या", "शुभ रात्रि", "कैसे हो", "कैसे हैं", "हेलो"
+        )
+        return clean in greetings || greetings.any { clean == it || clean.startsWith(it + " ") }
     }
 }
