@@ -404,6 +404,10 @@ fun DashboardScreen(
                         selectedModelForHistory = activeModelName
                         showHistorySheet = true 
                     },
+                    onSelectModel = {
+                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                        showModelPicker = true
+                    },
                     isLoading = isModelLoading,
                     loadingProgress = modelLoadingProgress,
                     temperature = deviceTemperature,
@@ -978,8 +982,13 @@ fun DashboardScreen(
                         items(ownedModels + sharedModels) { model ->
                             Surface(
                                 onClick = {
-                                    viewModel.activateModel(model.name)
-                                    viewModel.toggleServer()
+                                    if (!model.isActive) {
+                                        if (isServerRunning) {
+                                            viewModel.switchModelAndRestartServer(model.name)
+                                        } else {
+                                            viewModel.activateModel(model.name)
+                                        }
+                                    }
                                     showModelPicker = false
                                 },
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

@@ -112,6 +112,7 @@ fun ActiveModelCard(
     onStop: () -> Unit, 
     onStart: () -> Unit,
     onTryIt: () -> Unit,
+    onSelectModel: () -> Unit,
     isLoading: Boolean = false,
     loadingProgress: Float = 0f,
     temperature: Double,
@@ -160,6 +161,7 @@ fun ActiveModelCard(
                 onStop = onStop,
                 onTryIt = onTryIt,
                 onStart = onStart,
+                onSelectModel = onSelectModel,
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope
             )
@@ -188,6 +190,7 @@ fun ActiveModelCard(
                 onStop = onStop,
                 onTryIt = onTryIt,
                 onStart = onStart,
+                onSelectModel = onSelectModel,
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope
             )
@@ -212,6 +215,7 @@ private fun ActiveModelContent(
     onStop: () -> Unit,
     onTryIt: () -> Unit,
     onStart: () -> Unit,
+    onSelectModel: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -264,7 +268,14 @@ private fun ActiveModelContent(
         Spacer(Modifier.height(4.dp))
         
         // Model Info
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(enabled = isLocalModelPresent) { onSelectModel() }
+                .padding(vertical = 4.dp)
+        ) {
             with(sharedTransitionScope) {
                 ChhandaLogo(
                     size = 32, 
@@ -283,19 +294,30 @@ private fun ActiveModelContent(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
-                with(sharedTransitionScope) {
-                    Text(
-                        if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else formatModelDisplayName(modelName), 
-                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
-                        fontSize = 20.sp, 
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.sharedElement(
-                            sharedTransitionScope.rememberSharedContentState(key = "model_name_$modelName"),
-                            animatedVisibilityScope = animatedVisibilityScope
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    with(sharedTransitionScope) {
+                        Text(
+                            if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else formatModelDisplayName(modelName), 
+                            color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
+                            fontSize = 20.sp, 
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.sharedElement(
+                                sharedTransitionScope.rememberSharedContentState(key = "model_name_$modelName"),
+                                animatedVisibilityScope = animatedVisibilityScope
+                            )
                         )
-                    )
+                    }
+                    if (isLocalModelPresent) {
+                        Spacer(Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "Switch Model",
+                            tint = (if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer).copy(alpha = 0.8f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
