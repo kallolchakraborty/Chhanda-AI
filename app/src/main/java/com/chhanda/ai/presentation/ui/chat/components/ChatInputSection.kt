@@ -45,6 +45,16 @@ fun ChatInput(
     val context = LocalContext.current
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { onAttach(it) } }
 
+    // Camera capture support
+    val photoUri = remember {
+        mutableStateOf<android.net.Uri?>(null)
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            photoUri.value?.let { onAttach(it) }
+        }
+    }
+
     if (isReadOnly) {
         Surface(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -75,6 +85,25 @@ fun ChatInput(
                 ) {
                     IconButton(onClick = { fileLauncher.launch("*/*") }) {
                         Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = {
+                        try {
+                            val photoFile = java.io.File(
+                                context.cacheDir,
+                                "chhanda_photo_${System.currentTimeMillis()}.jpg"
+                            )
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "com.chhanda.ai.fileprovider",
+                                photoFile
+                            )
+                            photoUri.value = uri
+                            cameraLauncher.launch(uri)
+                        } catch (e: Exception) {
+                            android.util.Log.e("ChatInput", "Camera launch failed: ${e.message}")
+                        }
+                    }) {
+                        Icon(Icons.Default.CameraAlt, "Take Photo", tint = MaterialTheme.colorScheme.primary)
                     }
                     
                     TextField(

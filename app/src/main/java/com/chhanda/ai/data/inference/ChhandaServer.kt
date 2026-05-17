@@ -63,10 +63,28 @@ data class OpenAiToolCall(val id: String, val type: String, val function: OpenAi
 @Serializable
 data class OpenAiMessage(
     val role: String, 
-    val content: String? = null, 
+    val content: JsonElement? = null, 
     val tool_calls: List<OpenAiToolCall>? = null,
     val tool_call_id: String? = null
-)
+) {
+    fun contentAsString(): String {
+        if (content == null) return ""
+        return when {
+            content is JsonPrimitive -> content.contentOrNull ?: ""
+            content is JsonArray -> {
+                // OpenAI multipart: [{"type":"text","text":"..."}, {"type":"image_url",...}]
+                content.jsonArray.mapNotNull { part ->
+                    val obj = part.jsonObject
+                    when (obj["type"]?.jsonPrimitive?.contentOrNull) {
+                        "text" -> obj["text"]?.jsonPrimitive?.contentOrNull
+                        else -> null
+                    }
+                }.joinToString("\n")
+            }
+            else -> content.toString()
+        }
+    }
+}
 
 @Serializable
 data class OpenAiChatRequest(
@@ -467,12 +485,12 @@ class ChhandaServer @Inject constructor(
 
                     try {
                         val req = call.receive<OpenAiChatRequest>()
-                        val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.content ?: ""
+                        val lastUserMsg = req.messages.lastOrNull { it.role == "user" }?.contentAsString() ?: ""
                         val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
                         
                         // Extract previous conversation context (all messages except the last one)
                         val externalHistory = req.messages.dropLast(1).map { msg ->
-                            Pair(msg.role, msg.content ?: "")
+                            Pair(msg.role, msg.contentAsString())
                         }
 
                         // System-prompt instruction injecting available tools to act as a robust coding agent
@@ -501,6 +519,7 @@ class ChhandaServer @Inject constructor(
                                         val msgId = "chatcmpl-${System.currentTimeMillis()}"
                                         var buffer = ""
                                         var insideToolCall = false
+                                        var firstChunkSent = false
                                         sendMessageUseCase(
                                             userText = lastUserMsg + toolsInstructions,
                                             deviceId = call.request.local.remoteHost,
@@ -511,13 +530,19 @@ class ChhandaServer @Inject constructor(
                                             externalHistory = externalHistory
                                         ).collect { upd ->
                                             if (upd is TokenUpdate.Partial) {
+                                                if (!firstChunkSent) {
+                                                    val roleChunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}"""
+                                                    write("data: $roleChunk\n\n"); flush()
+                                                    firstChunkSent = true
+                                                }
                                                 buffer += upd.text
                                                 if (buffer.contains("<tool_call>")) {
                                                     insideToolCall = true
                                                     val parts = buffer.split("<tool_call>", limit = 2)
                                                     val before = parts[0]
                                                     if (before.isNotEmpty()) {
-                                                        val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${before.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}"},"finish_reason":null}]}"""
+                                                        val escapedBefore = before.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+                                                        val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"$escapedBefore"},"finish_reason":null}]}"""
                                                         write("data: $chunk\n\n"); flush()
                                                     }
                                                     buffer = "<tool_call>" + (parts.getOrNull(1) ?: "")
@@ -537,18 +562,22 @@ class ChhandaServer @Inject constructor(
                                                         val toolCallId = "call_" + java.util.UUID.randomUUID().toString().take(8)
                                                         
                                                         if (toolCallName.isNotEmpty()) {
-                                                            val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"$toolCallId","type":"function","function":{"name":"$toolCallName","arguments":"${toolCallArgs.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}"}}]},"finish_reason":"tool_calls"}]}"""
+                                                            val escapedArgs = toolCallArgs.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+                                                            val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"$toolCallId","type":"function","function":{"name":"$toolCallName","arguments":"$escapedArgs"}}]},"finish_reason":"tool_calls"}]}"""
                                                             write("data: $chunk\n\n"); flush()
                                                         }
                                                         insideToolCall = false
                                                         buffer = buffer.substringAfter("</tool_call>")
                                                     }
                                                 } else {
-                                                    val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"${upd.text.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}"},"finish_reason":null}]}"""
+                                                    val escapedContent = upd.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+                                                    val chunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{"content":"$escapedContent"},"finish_reason":null}]}"""
                                                     write("data: $chunk\n\n"); flush()
                                                     buffer = ""
                                                 }
                                             } else if (upd is TokenUpdate.Final) {
+                                                val finishChunk = """{"id":"$msgId","object":"chat.completion.chunk","created":${System.currentTimeMillis()/1000},"model":"$currentModel","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"""
+                                                write("data: $finishChunk\n\n"); flush()
                                                 write("data: [DONE]\n\n"); flush()
                                             }
                                         }
@@ -629,15 +658,20 @@ class ChhandaServer @Inject constructor(
                                         val responseJson = """
                                             {
                                               "id": "chatcmpl-${System.currentTimeMillis()}",
+                                              "object": "chat.completion",
+                                              "created": ${System.currentTimeMillis()/1000},
+                                              "model": "${llmEngine.getCurrentModelName()}",
                                               "choices": [
                                                 {
+                                                  "index": 0,
                                                   "message": {
                                                     "role": "assistant",
                                                     "content": "$jsonEscapedContent"
                                                   },
                                                   "finish_reason": "stop"
                                                 }
-                                              ]
+                                              ],
+                                              "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
                                             }
                                         """.trimIndent()
                                         call.respondText(responseJson, io.ktor.http.ContentType.Application.Json)

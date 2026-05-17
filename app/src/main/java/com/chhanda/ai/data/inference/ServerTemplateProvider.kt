@@ -223,7 +223,9 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
         <div id="prev"></div>
         <div id="iw">
           <input type="file" id="fi" style="display:none" multiple>
+          <input type="file" id="camIn" accept="image/*" capture="environment" style="display:none">
           <button class="ib" id="ab" title="Attach"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
+          <button class="ib" id="camBtn" title="Camera"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
           <button class="ib" id="micBtn" title="Speak"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg></button>
           <textarea id="inp" placeholder="Connecting..." disabled rows="1"></textarea>
           <button id="btn" class="ib" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2"/></svg></button>
@@ -234,7 +236,7 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
 </div>
 
 <script>
-const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),btn=document.getElementById('btn'),bt=document.getElementById('bt'),badge=document.getElementById('badge'),fi=document.getElementById('fi'),prev=document.getElementById('prev');
+const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),btn=document.getElementById('btn'),bt=document.getElementById('bt'),badge=document.getElementById('badge'),fi=document.getElementById('fi'),prev=document.getElementById('prev'),camIn=document.getElementById('camIn');
 let ready=false,thinkOn=true,atts=[],streaming=false;
 const K=new URLSearchParams(location.search).get('key')||'';
 
@@ -394,7 +396,9 @@ return h;
 }
 
 document.getElementById('ab').onclick=()=>fi.click();
+document.getElementById('camBtn').onclick=()=>camIn.click();
 fi.onchange=e=>{for(const f of e.target.files){const r=new FileReader();r.onload=re=>{atts.push({name:f.name,type:f.type,data:re.target.result});renderPrev()};r.readAsDataURL(f)}fi.value=''};
+camIn.onchange=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=re=>{atts.push({name:'photo_'+Date.now()+'.jpg',type:f.type||'image/jpeg',data:re.target.result});renderPrev()};r.readAsDataURL(f)}camIn.value=''};
 
 function renderPrev(){
 if(!atts.length){prev.style.display='none';return}
