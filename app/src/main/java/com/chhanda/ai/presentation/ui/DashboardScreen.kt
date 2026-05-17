@@ -1172,18 +1172,60 @@ fun DashboardScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "To share this local AI gateway offline, please complete these steps:",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "1. Turn on your phone's Personal Hotspot in settings.\n2. Ask other users/devices to connect to your hotspot network.\n3. Once they join, confirm below to open the QR Code window.",
+                        text = "1. Tap the button below to open your phone's Personal Hotspot settings and turn it on.\n2. Ask other users/devices to connect to your hotspot network.\n3. Once they join, confirm below to open the QR Code window.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
                     )
+                    Spacer(Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                            try {
+                                val intent = android.content.Intent().apply {
+                                    action = "android.settings.TETHER_SETTINGS"
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                try {
+                                    val intent = android.content.Intent().apply {
+                                        action = android.provider.Settings.ACTION_WIRELESS_SETTINGS
+                                    }
+                                    context.startActivity(intent)
+                                } catch (ex: Exception) {
+                                    try {
+                                        val intent = android.content.Intent().apply {
+                                            action = android.provider.Settings.ACTION_SETTINGS
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (err: Exception) {
+                                        // Silent fallback
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Open Hotspot Settings",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Configure Hotspot", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             },
             confirmButton = {
