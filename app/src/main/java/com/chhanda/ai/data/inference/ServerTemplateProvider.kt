@@ -118,6 +118,9 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
 .persona-chip{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:var(--tx2);padding:6px 12px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;display:inline-block;flex-shrink:0}
 .persona-chip:hover{background:rgba(255,255,255,0.08);color:#fff}
 .persona-chip.active{background:rgba(138,180,248,0.1);border-color:rgba(138,180,248,0.3);color:var(--p)}
+.tts-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--tx2);padding:6px 12px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;margin-top:12px;display:inline-flex;align-items:center;gap:6px;transition:all 0.15s;font-family:inherit}
+.tts-btn:hover{background:rgba(138,180,248,0.1);border-color:rgba(138,180,248,0.3);color:var(--p)}
+#micBtn.recording{color:var(--r); animation:pulse 1.5s infinite;}
 
 /* Name Overlay Modal style */
 #nameModal{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;z-index:99999}
@@ -226,6 +229,7 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
         <div id="iw">
           <input type="file" id="fi" style="display:none" multiple>
           <button class="ib" id="ab" title="Attach"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
+          <button class="ib" id="micBtn" title="Speak"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 00-3 3v7a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg></button>
           <textarea id="inp" placeholder="Connecting..." disabled rows="1"></textarea>
           <button id="btn" class="ib" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2"/></svg></button>
         </div>
@@ -250,6 +254,57 @@ function setPers(val, el) {
   document.querySelectorAll('.persona-chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
 }
+
+let autoSpeak = false;
+function speakText(txt) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(txt);
+    utterance.lang = document.getElementById('lang').value || 'en-US';
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function getTtsBtnHtml(txt) {
+    const cleanTxt = txt.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return '<button class="tts-btn" onclick="speakText(`' + cleanTxt + '`)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg> Play Audio</button>';
+}
+
+const micBtn = document.getElementById('micBtn');
+let recognition;
+let isRecording = false;
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRec();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onstart = function() {
+    isRecording = true;
+    micBtn.classList.add('recording');
+    inp.placeholder = "Listening...";
+  };
+  recognition.onresult = function(event) {
+    const transcript = event.results[0][0].transcript;
+    inp.value = transcript;
+    autoSpeak = true;
+    if (!btn.disabled) btn.click();
+  };
+  recognition.onerror = function(e) { console.error(e); stopRecording(); };
+  recognition.onend = function() { stopRecording(); };
+} else {
+  micBtn.style.display = 'none';
+}
+function stopRecording() {
+  isRecording = false;
+  micBtn.classList.remove('recording');
+  inp.placeholder = "Message Chhanda...";
+}
+micBtn.onclick = () => {
+  if (isRecording) { recognition.stop(); } else {
+    recognition.lang = document.getElementById('lang').value || 'en-US';
+    recognition.start();
+  }
+};
 
 function md(src){
 src=src.replace(/\r\n/g,'\n');
@@ -549,7 +604,11 @@ aiMsg.innerHTML=renderThinking(thought,response);
 msgs.scrollTop=msgs.scrollHeight;
 }
 }
-if(raw){const{thought,response}=parseThinking(raw);aiMsg.innerHTML=renderThinking(thought,response)}
+if(raw){
+  const{thought,response}=parseThinking(raw);
+  aiMsg.innerHTML=renderThinking(thought,response) + getTtsBtnHtml(response);
+  if(autoSpeak){ speakText(response); autoSpeak=false; }
+}
 }catch(e){aiMsg.innerHTML='<span style="color:var(--r)">Connection error: '+esc(e.message)+'</span>'}
 streaming=false;if(inp.value.trim()&&ready)btn.disabled=false;
 };
