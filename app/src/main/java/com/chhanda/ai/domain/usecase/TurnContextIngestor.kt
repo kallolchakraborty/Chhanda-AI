@@ -5,9 +5,11 @@ import android.util.Log
 import com.chhanda.ai.domain.model.MultimodalIngestor
 import javax.inject.Inject
 import javax.inject.Singleton
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
 class TurnContextIngestor @Inject constructor(
+    @ApplicationContext private val context: android.content.Context,
     private val ingestor: MultimodalIngestor,
     private val persistentIngestor: IngestDocumentUseCase,
     private val scrapeUrlUseCase: ScrapeUrlUseCase,
@@ -22,42 +24,44 @@ class TurnContextIngestor @Inject constructor(
             for (uri in attachments) {
                 try {
                     val uriString = uri.toString()
-                    val fileName = uri.lastPathSegment ?: "file"
+                    val (fileName, fileLength) = com.chhanda.ai.util.FileUtils.getFileDetails(context, uri)
+                    val lowerName = fileName.lowercase()
                     val (rawText, type) = when {
-                        uriString.contains("image") || uriString.endsWith(".jpg") || uriString.endsWith(".png") || uriString.endsWith(".jpeg") || uriString.endsWith(".webp") -> 
+                        lowerName.contains("image") || lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp") -> 
                             ingestor.ingestImage(uri) to DocType.IMAGE
-                        uriString.endsWith(".pdf") -> 
+                        lowerName.endsWith(".pdf") -> 
                             ingestor.ingestPdf(uri).joinToString("\n") to DocType.PDF
-                        uriString.contains("audio") || uriString.endsWith(".wav") || uriString.endsWith(".mp3") || uriString.endsWith(".m4a") -> 
+                        lowerName.contains("audio") || lowerName.endsWith(".wav") || lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a") -> 
                             ingestor.ingestAudio(uri) to DocType.AUDIO
-                        uriString.endsWith(".docx") || uriString.endsWith(".doc") -> 
+                        lowerName.endsWith(".docx") || lowerName.endsWith(".doc") -> 
                             ingestor.ingestWord(uri) to DocType.WORD
-                        uriString.endsWith(".xlsx") || uriString.endsWith(".xls") -> 
+                        lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") -> 
                             ingestor.ingestExcel(uri) to DocType.EXCEL
-                        uriString.endsWith(".json") -> 
+                        lowerName.endsWith(".json") -> 
                             ingestor.ingestJson(uri) to DocType.JSON
-                        uriString.endsWith(".csv") -> 
+                        lowerName.endsWith(".csv") -> 
                             ingestor.ingestCsv(uri) to DocType.CSV
-                        uriString.endsWith(".tsv") || uriString.endsWith(".tab") -> 
+                        lowerName.endsWith(".tsv") || lowerName.endsWith(".tab") -> 
                             ingestor.ingestTsv(uri) to DocType.TSV
-                        uriString.endsWith(".xml") -> 
+                        lowerName.endsWith(".xml") -> 
                             ingestor.ingestXml(uri) to DocType.XML
-                        uriString.endsWith(".html") || uriString.endsWith(".htm") -> 
+                        lowerName.endsWith(".html") || lowerName.endsWith(".htm") -> 
                             ingestor.ingestHtml(uri) to DocType.HTML
-                        uriString.endsWith(".md") -> 
+                        lowerName.endsWith(".md") -> 
                             ingestor.ingestMd(uri) to DocType.MD
                         else -> ingestor.ingestTxt(uri) to DocType.TXT
                     }
                     
                     try {
                         persistentIngestor.ingestScrapedText(rawText, uriString, fileName, type.name)
-                        val existing = uploadedFileDao.findByNameAndSize(fileName, rawText.length.toLong())
+                        val sizeToUse = if (fileLength > 0) fileLength else rawText.length.toLong()
+                        val existing = uploadedFileDao.findByNameAndSize(fileName, sizeToUse)
                         if (existing == null) {
                             uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
                                 id = java.util.UUID.randomUUID().toString(),
                                 name = fileName,
                                 format = type.name,
-                                size = rawText.length.toLong(),
+                                size = sizeToUse,
                                 path = uriString,
                                 timestamp = System.currentTimeMillis()
                             ))

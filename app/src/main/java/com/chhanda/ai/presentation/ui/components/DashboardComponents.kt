@@ -25,6 +25,7 @@ import com.chhanda.ai.util.Localization
 import kotlinx.coroutines.flow.StateFlow
 import com.chhanda.ai.domain.model.HardwareStatus
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * ChhandaSectionHeader: A unified header component for dashboard sections.
@@ -77,7 +78,7 @@ fun StatCard(
     icon: ImageVector,
     onClick: (() -> Unit)? = null
 ) {
-    val displayValue by value.collectAsState()
+    val displayValue by value.collectAsStateWithLifecycle()
     
     GlassBox(
         modifier = modifier

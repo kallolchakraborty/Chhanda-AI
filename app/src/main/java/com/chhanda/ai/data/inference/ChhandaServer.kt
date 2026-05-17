@@ -323,7 +323,10 @@ class ChhandaServer @Inject constructor(
                 tunnelSession = session
                 val config = java.util.Properties()
                 config["StrictHostKeyChecking"] = "no"
+                config["TCPKeepAlive"] = "yes"
                 session.setConfig(config)
+                session.setServerAliveInterval(15000)
+                session.setServerAliveCountMax(3)
                 session.connect(20000)
                 session.setPortForwardingR(80, "127.0.0.1", boundPort)
                 val channel = session.openChannel("shell") as com.jcraft.jsch.ChannelShell
@@ -408,7 +411,14 @@ class ChhandaServer @Inject constructor(
                         host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true)
                     }
 
-                    if (actualKey.isBlank() || actualKey == "Initializing..." || actualKey == "000000000" || providedKey != actualKey) {
+                    val isKeyValid = providedKey != null && try {
+                        java.security.MessageDigest.isEqual(
+                            providedKey.toByteArray(Charsets.UTF_8),
+                            actualKey.toByteArray(Charsets.UTF_8)
+                        )
+                    } catch (_: Exception) { false }
+
+                    if (actualKey.isBlank() || actualKey == "Initializing..." || actualKey == "000000000" || !isKeyValid) {
                         Log.w(TAG, "API Gateway auth failed. Provided: '$providedKey', Actual: '$actualKey'")
                         call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid or Uninitialized API Key"))
                         false
@@ -724,7 +734,8 @@ class ChhandaServer @Inject constructor(
                         try {
                             val cleanBase64 = webAtt.data.substringAfter("base64,")
                             val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
-                            val file = java.io.File(this@ChhandaServer.context.cacheDir, "web_upload_${System.currentTimeMillis()}_${webAtt.name}")
+                            val safeName = java.io.File(webAtt.name).name.replace("..", "").replace("/", "").replace("\\", "")
+                            val file = java.io.File(this@ChhandaServer.context.cacheDir, "web_upload_${System.currentTimeMillis()}_$safeName")
                             file.writeBytes(bytes)
                             attachmentFiles.add(file)
                             android.net.Uri.fromFile(file)
@@ -771,7 +782,14 @@ class ChhandaServer @Inject constructor(
                     }
 
                     if (!isLoopback(remoteHost)) {
-                        if (scanToken != null && activeQrToken != null && scanToken == activeQrToken) {
+                        val isTokenValid = scanToken != null && activeQrToken != null && try {
+                            java.security.MessageDigest.isEqual(
+                                scanToken.toByteArray(Charsets.UTF_8),
+                                activeQrToken!!.toByteArray(Charsets.UTF_8)
+                            )
+                        } catch (_: Exception) { false }
+
+                        if (isTokenValid) {
                             // Perfect! Authorize this remote host IP address
                             authorizedQrIps.add(remoteHost)
                             // Consume the token immediately to prevent any other device from using it
