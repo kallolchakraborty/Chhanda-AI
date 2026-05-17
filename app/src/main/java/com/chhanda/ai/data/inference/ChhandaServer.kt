@@ -332,6 +332,7 @@ class ChhandaServer @Inject constructor(
             install(CORS) {
                 anyHost() // Use anyHost() and rely on X-API-KEY for security
                 allowHeader("X-API-KEY")
+                allowHeader("Authorization")
                 allowHeader("Content-Type")
                 allowMethod(io.ktor.http.HttpMethod.Options)
                 allowMethod(io.ktor.http.HttpMethod.Get)
@@ -360,7 +361,12 @@ class ChhandaServer @Inject constructor(
                         return@validateAuth false
                     }
 
-                    val providedKey = call.request.headers["X-API-KEY"] ?: call.request.queryParameters["key"]
+                    val authHeader = call.request.headers["Authorization"]
+                    val bearerKey = if (authHeader != null && authHeader.startsWith("Bearer ", ignoreCase = true)) {
+                        authHeader.substring(7).trim()
+                    } else null
+
+                    val providedKey = bearerKey ?: call.request.headers["X-API-KEY"] ?: call.request.queryParameters["key"]
                     val actualKey = securityRepository.apiKey.value
                     if (actualKey.isBlank() || actualKey == "Initializing..." || actualKey == "000000000" || providedKey != actualKey) {
                         call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid or Uninitialized API Key"))
