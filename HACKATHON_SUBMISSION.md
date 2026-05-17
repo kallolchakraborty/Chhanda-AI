@@ -134,30 +134,36 @@ sequenceDiagram
     UI->>SG: auditInput(text) → PII redaction + injection check
     SG-->>UI: (sanitizedText, isViolation=false)
     UI->>SM: invoke(sanitizedText, source="Local")
-    SM->>PM: getSystemPrompt(persona=null, source="Local")
-    PM-->>SM: "SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR..."
-    SM->>CM: getOptimizedContext(query, sessionId)
     
-    Note over CM: Adaptive Query Augmentation
-    CM->>CM: Detect follow-up (pronouns/short query)
-    CM->>EE: embed("quantum computing research paper")
-    EE-->>CM: Float[512] query vector
-    CM->>VS: search(queryVector, topK=8, threshold=0.60)
-    
-    Note over VS: Int8 Min-Heap Search
-    VS->>DB: getAllForModel("shared_rag_db")
-    DB-->>VS: List<VectorChunkEntity>
-    VS->>VS: For each chunk:<br/>1. Int8 dot product (no de-quant)<br/>2. Cosine similarity<br/>3. Min-Heap insert (O(log K))
-    VS-->>CM: Top 8 SearchResults (score ≥ 0.60)
-    CM-->>SM: List<SearchResult>
-    
-    Note over SM: Check fallback search bounds
-    alt Max RAG Score < 0.70 AND WebSearchEnabled AND InternetConnected
-        SM->>UI: Emit status "Bypassing local RAG. Scraping Web..."
-        SM->>SU: invoke(query)
-        SU-->>SM: List<SearchResult> (Web Scrapes)
-    else Search Toggle Disabled / Offline
-        SM->>UI: Emit status "Searching locally. Bypassing Web..."
+    alt Input is a Greeting (Hi/Hello/Bengali/Hindi greeting)
+        Note over SM: Greeting Auto-Bypass Guard
+        SM->>UI: Emit status "Greeting detected. Bypassing search..."
+    else General Query
+        SM->>PM: getSystemPrompt(persona=null, source="Local")
+        PM-->>SM: "SYSTEM ROLE: CHHANDA AI GATEWAY ORCHESTRATOR..."
+        SM->>CM: getOptimizedContext(query, sessionId)
+        
+        Note over CM: Adaptive Query Augmentation
+        CM->>CM: Detect follow-up (pronouns/short query)
+        CM->>EE: embed("quantum computing research paper")
+        EE-->>CM: Float[512] query vector
+        CM->>VS: search(queryVector, topK=8, threshold=0.60)
+        
+        Note over VS: Int8 Min-Heap Search
+        VS->>DB: getAllForModel("shared_rag_db")
+        DB-->>VS: List<VectorChunkEntity>
+        VS->>VS: For each chunk:<br/>1. Int8 dot product (no de-quant)<br/>2. Cosine similarity<br/>3. Min-Heap insert (O(log K))
+        VS-->>CM: Top 8 SearchResults (score ≥ 0.60)
+        CM-->>SM: List<SearchResult>
+        
+        Note over SM: Check fallback search bounds
+        alt Max RAG Score < 0.70 AND WebSearchEnabled AND InternetConnected
+            SM->>UI: Emit status "Bypassing local RAG. Scraping Web..."
+            SM->>SU: invoke(query)
+            SU-->>SM: List<SearchResult> (Web Scrapes)
+        else Search Toggle Disabled / Offline
+            SM->>UI: Emit status "Searching locally. Bypassing Web..."
+        end
     end
 
     SM->>DB: Query User Thumbs Up/Down feedback templates
@@ -367,6 +373,24 @@ Augmented: "quantum computing research Tell me more about it"
 **The Solution**: Developed a premium Material 3 configuration switch directly controlling the LLM's fallback web-search scraping logic. When toggled "OFF", all Jsoup and query fallbacks are completely bypassed in the domain layer, keeping all data flows 100% locally contained.
 *   **Code Reference**: `ConfigScreen.kt` (UI preference switch), `SendMessageUseCase.kt` (conditional execution guarding).
 
+### Innovation 11: Zero-Default Model Selection Enforcement
+**The Problem**: Mobile AI environments often assume a default model (like Gemma-4) and load or start running it automatically. This creates a silent default choice without checking the user's explicit intent, which can consume significant local device resources and power without explicit instruction.
+
+**The Solution**: We hardened the active model configuration pipeline by removing the auto-selecting default model fallback block. The system enforces absolute zero default model assumptions on first boot or server start. If no model is explicitly selected, server startup cleanly aborts with clean user-facing instruction, giving the user 100% control over which model to load.
+*   **Code Reference**: `ServerOrchestrator.kt` (eliminated default fallback checks).
+
+### Innovation 12: Dynamic Active Icon Status Indicators
+**The Problem**: Text-based badges representing loading, running, or selected statuses take up screen space and look static, offering a generic, non-interactive visual feel.
+
+**The Solution**: Replaced flat text status badges (`SELECTED`, `RUNNING`, `LOADING`) with premium, dynamic, animated icon indicators beside model names. A primary-tinted Check Circle denotes selection. This updates to an active glowing **emerald-green** check circle when the model is running and server is active, or an animated **circular progress spinner** during model engine loading, dramatically elevating UI responsiveness.
+*   **Code Reference**: `ModelItems.kt` (dynamic Compose rendering checks).
+
+### Innovation 13: Greeting Auto-Bypass Guard
+**The Problem**: Searching the database vectors (RAG) or scraping the web for simple conversational greetings (e.g. "Hi", "Hello") adds unnecessary CPU overhead and search latency for trivial turns.
+
+**The Solution**: Engineered a high-fidelity greeting bypass guard (`isGreeting`) in the use case flow. Casual greetings in English, Hindi, and Bengali are immediately filtered, bypassing the entire search and retrieval sequence to reply instantly using pre-trained model weights.
+*   **Code Reference**: `SendMessageUseCase.kt`.
+
 ---
 
 ## 🌟 Social Impact: "Gemma 4 Good"
@@ -428,6 +452,10 @@ In an era of mass data collection, Chhanda represents a fundamental shift: **you
 | **Few-Shot Prompt Learning** | ❌ | ✅ (Cloud) | ✅ Dynamic user bubble feedback few-shot instruction injects |
 | **In-Context Read-Only Sessions**| ❌ | ❌ | ✅ Server-aware security layer for reading histories |
 | **Offline Hotspot Discovery** | ❌ | ❌ | ✅ Manual tether wizard + join confirmation checks |
+| **Internet Search Toggle** | ❌ | ❌ | ✅ UI configuration toggle to completely disable/enable fallback web crawls |
+| **Zero-Default Selection** | ❌ | ❌ | ✅ Zero automatic default model fallbacks to enforce user selection |
+| **Glowing Active Icons** | ❌ | ❌ | ✅ Dynamic Emerald Green check circles/loaders replacing static text badges |
+| **Greeting Auto-Bypass** | ❌ | ❌ | ✅ Latency-free instant replies bypassing RAG/Web for casual greetings |
 
 ---
 

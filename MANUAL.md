@@ -131,13 +131,18 @@ graph LR
 
 ### 3.3 Model Activation
 1. Tap **Activate** on any model card (or use the model picker dialog)
-2. Chhanda will:
+2. **Zero-Default Selection Enforcement**: Previously, the app would auto-select a default model (such as Gemma-4) on first start. This has been completely hardened. Chhanda now enforces a strict **Zero-Default Selection** model: no assumptions are made. The user must explicitly tap to select and activate their preferred model from the list. If starting without a selected model, startup cleanly aborts with the instruction: *"Startup aborted: No LLM model has been selected. Please tap a model from the list to activate it."*
+3. **Glowing State Icon Indicators**: Instead of old flat text status badges (`SELECTED`, `RUNNING`, `LOADING`), Chhanda presents modern dynamic icons beside local model names:
+   * **Selected (Idle)**: Shows a premium primary-tinted Check Circle vector.
+   * **Loading Engine**: Displays an active Material 3 circular progress spinner while the LiteRT-LM C++ instance is initializing in memory.
+   * **Active (Running)**: Renders a premium, glowing **emerald-green** (`#22C55E`) Check Circle when the model is loaded and the gateway server is successfully running.
+4. When a model is successfully activated, Chhanda will:
    - Stop any currently running server
    - Wait **2.5 seconds** for RAM to flush (prevents OOM)
    - Load the model into memory via LiteRT-LM
    - Start the Ktor-CIO server on the configured port
    - Register mDNS for network discovery
-3. The Active Model Card will show a green pulsing indicator
+5. The Active Model Card will show a green pulsing indicator.
 
 ### 3.4 Model Deletion
 Tap the **Delete** icon on any model card → Confirm in the dialog. This removes the `.task` file from disk.

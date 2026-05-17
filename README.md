@@ -126,6 +126,9 @@ English · Hindi · Bengali — full UI + TTS localization with voice persona sy
 | **Google Drive Cloud Sync** | Auto-syncs chats offline-to-online daily by default. Supports user configurations (custom schedules, no sync, Google account binding check). |
 | **Hot Model Swapping & Reload** | Swaps active running models directly from the active card. Automatically stops the server, tears down the C++ engine instance, swaps models, and starts back online with zero manual restarts. |
 | **Internet Search Toggle Switch** | A premium Material 3 configuration switch enabling users to completely turn off the LLM's external web search/scraping fallback. When disabled, the system operates as a 100% offline local brain, bypassing any internet calls with real-time status banners. |
+| **Zero-Default Selection Enforcement** | Enforces zero automatic model fallbacks on startup. The app does not assume or preload any model (like Gemma-4) by default, requiring explicit user selection to start the server. Startup cleanly aborts with informative user guidance if no model is selected. |
+| **Glowing State Icon Indicators** | Replaced flat text status badges (`SELECTED`, `RUNNING`, `LOADING`) with interactive dynamic icons beside local model cards. A primary-tinted Check Circle denotes selection, turning into an active emerald-green glowing Check Circle when running, or an animated circular progress indicator during model loading. |
+| **Greeting Auto-Bypass Guard** | High-fidelity greeting filter (`isGreeting`) intercepting inputs like *"Hi"*, *"Hello"*, *"নমস্কার"*, or *"नमस्ते"*. Bypasses RAG SQLite database lookup and Web scraper operations entirely to respond directly from pretrained parameters, cutting processing latency to absolute zero. |
 
 ---
 
@@ -240,22 +243,28 @@ sequenceDiagram
         UI-->>U: ⛔ Blocked
     else Safe
         UI->>SM: invoke(text, attachments, source)
-        SM->>PM: getSystemPrompt(persona, source)
-        PM-->>SM: Multi-Tier System Prompt
-        SM->>CM: getOptimizedContext(query)
-        CM->>EE: embed(augmentedQuery)
-        EE-->>CM: Float[512] vector
-        CM->>VS: search(query, topK, threshold)
-        VS-->>CM: List<SearchResult>
-        CM-->>SM: List<SearchResult> (RAG Context)
         
-        Note over SM: Check fallback search bounds
-        alt Max RAG Score < 0.70 AND WebSearchEnabled AND InternetConnected
-            SM->>UI: Emit status "Bypassing local RAG. Scraping Web..."
-            SM->>SU: invoke(query)
-            SU-->>SM: List<SearchResult> (Web Scrapes)
-        else Search Toggle Disabled / Offline
-            SM->>UI: Emit status "Searching locally. Bypassing Web..."
+        alt Input is a Greeting (Hi/Hello/Bengali/Hindi greeting)
+            Note over SM: Greeting Auto-Bypass Guard
+            SM->>UI: Emit status "Greeting detected. Bypassing search..."
+        else General Query
+            SM->>PM: getSystemPrompt(persona, source)
+            PM-->>SM: Multi-Tier System Prompt
+            SM->>CM: getOptimizedContext(query)
+            CM->>EE: embed(augmentedQuery)
+            EE-->>CM: Float[512] vector
+            CM->>VS: search(query, topK, threshold)
+            VS-->>CM: List<SearchResult>
+            CM-->>SM: List<SearchResult> (RAG Context)
+            
+            Note over SM: Check fallback search bounds
+            alt Max RAG Score < 0.70 AND WebSearchEnabled AND InternetConnected
+                SM->>UI: Emit status "Bypassing local RAG. Scraping Web..."
+                SM->>SU: invoke(query)
+                SU-->>SM: List<SearchResult> (Web Scrapes)
+            else Search Toggle Disabled / Offline
+                SM->>UI: Emit status "Searching locally. Bypassing Web..."
+            end
         end
 
         SM->>DB: Query User Thumbs Up/Down feedback templates
