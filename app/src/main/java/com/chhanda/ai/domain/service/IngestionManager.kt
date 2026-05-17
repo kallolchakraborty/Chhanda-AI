@@ -65,7 +65,27 @@ class IngestionManager @Inject constructor(
                     _ingestionMessage.value = "Indexing $fileName..."
                     _ingestionProgress.value = (index.toFloat() / uris.size)
                     val docType = determineDocType(uri)
+                    
+                    val fileSize = try {
+                        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0L
+                    } catch (e: Exception) { 0L }
+
+                    val existing = uploadedFileDao.findByNameAndSize(fileName, fileSize)
+                    if (existing != null) {
+                        android.util.Log.i("IngestionManager", "Duplicate file skipped: $fileName")
+                        return@forEachIndexed
+                    }
+
                     ingestDocumentUseCase(uri, docType)
+                    
+                    uploadedFileDao.insertFile(UploadedFileEntity(
+                        id = UUID.randomUUID().toString(),
+                        name = fileName,
+                        format = docType.name,
+                        size = fileSize,
+                        path = uri.toString(),
+                        timestamp = System.currentTimeMillis()
+                    ))
                 }
                 _ingestionMessage.value = "Batch complete!"
                 _ingestionProgress.value = 1.0f
@@ -120,6 +140,15 @@ class IngestionManager @Inject constructor(
                 ingestDocumentUseCase.ingestScrapedText(scrapedText, url, finalLabel) { progress ->
                     _ingestionProgress.value = 0.2f + (progress * 0.8f)
                 }
+
+                uploadedFileDao.insertFile(UploadedFileEntity(
+                    id = UUID.randomUUID().toString(),
+                    name = finalLabel,
+                    format = "WEB_URL",
+                    size = scrapedText.length.toLong(),
+                    path = url,
+                    timestamp = System.currentTimeMillis()
+                ))
 
                 _ingestionMessage.value = "Web indexing complete!"
                 _ingestionProgress.value = 1.0f
