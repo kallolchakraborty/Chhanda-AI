@@ -385,5 +385,5 @@ With **14,500+ lines of production-hardened Kotlin**, a **3-layer security model
 
 ---
 
-Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for compilation, build orchestration, UI layouts, profiling, and diagnostics, and **Google Gemini 3 Flash** as the exclusive AI development assistant.
+Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for compilation, build orchestration, UI layouts, profiling, and diagnostics, **Google's Antigravity** as the agentic codebase orchestration platform, and **Google Gemini 3 Flash** as the exclusive AI development assistant.
 Dedicated to **Chhanda Chakraborty**.
