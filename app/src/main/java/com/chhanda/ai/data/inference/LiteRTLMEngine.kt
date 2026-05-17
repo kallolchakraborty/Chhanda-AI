@@ -70,6 +70,19 @@ class LiteRTLMEngine @Inject constructor(
                     conversation = null
                     engine?.close()
                     
+                    // PROACTIVE FIX: Delete stale/corrupted xnnpack_cache files to prevent silent token corruption (such as generating "Hiowpy" for "Hi").
+                    try {
+                        val modelDir = File(path).parentFile
+                        modelDir?.listFiles()?.forEach { file ->
+                            if (file.name.contains(".xnnpack_cache")) {
+                                Log.i(TAG, "Proactively deleting stale cache: ${file.name}")
+                                file.delete()
+                            }
+                        }
+                    } catch (ex: Exception) {
+                        Log.w(TAG, "Failed to proactively delete cache: ${ex.message}")
+                    }
+
                     val config = EngineConfig(modelPath = path)
                     engine = Engine(config)
                     
