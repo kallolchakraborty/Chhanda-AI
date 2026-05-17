@@ -356,9 +356,15 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
                         if (toSave.isNotBlank() || !extractedThinking.isNullOrBlank()) {
 
-                            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Handling agentic actions..."))
-                            val actionResult = agenticActionHandler.handleActions(toSave)
-                            val filePath = actionResult.generatedFilePath
+                            val filePath: String?
+
+                            if (!isApiRequest) {
+                                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Handling agentic actions..."))
+                                val actionResult = agenticActionHandler.handleActions(toSave)
+                                filePath = actionResult.generatedFilePath
+                            } else {
+                                filePath = null
+                            }
 
                             chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
                                 text = toSave, 
