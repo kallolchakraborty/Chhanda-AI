@@ -10,7 +10,8 @@ import javax.inject.Singleton
 class TurnContextIngestor @Inject constructor(
     private val ingestor: MultimodalIngestor,
     private val persistentIngestor: IngestDocumentUseCase,
-    private val scrapeUrlUseCase: ScrapeUrlUseCase
+    private val scrapeUrlUseCase: ScrapeUrlUseCase,
+    private val uploadedFileDao: com.chhanda.ai.data.repository.UploadedFileDao
 ) {
     suspend fun processTurnContext(
         userText: String,
@@ -41,7 +42,18 @@ class TurnContextIngestor @Inject constructor(
                     }
                     
                     try {
-                        persistentIngestor.ingestScrapedText(rawText, uriString, type.name)
+                        persistentIngestor.ingestScrapedText(rawText, uriString, fileName, type.name)
+                        val existing = uploadedFileDao.findByNameAndSize(fileName, rawText.length.toLong())
+                        if (existing == null) {
+                            uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                                id = java.util.UUID.randomUUID().toString(),
+                                name = fileName,
+                                format = type.name,
+                                size = rawText.length.toLong(),
+                                path = uriString,
+                                timestamp = System.currentTimeMillis()
+                            ))
+                        }
                     } catch (e: Exception) {
                         Log.e("TurnContextIngestor", "Failed to persist attachment: ${e.message}")
                     }

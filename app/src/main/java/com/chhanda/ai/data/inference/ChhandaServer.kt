@@ -126,6 +126,7 @@ class ChhandaServer @Inject constructor(
     @Volatile private var cachedVpnStatus: Boolean = false
     @Volatile private var cachedPublicUrl: String = ""
     @Volatile private var tunnelActive: Boolean = false
+    @Volatile private var configuredMaxDevices: Int = 10
     @Volatile private var lastIpRefresh = 0L
 
     private val _boundPortFlow = MutableStateFlow(-1)
@@ -133,6 +134,15 @@ class ChhandaServer @Inject constructor(
 
     private val _serverErrorFlow = MutableStateFlow<String?>(null)
     val serverErrorFlow: StateFlow<String?> = _serverErrorFlow.asStateFlow()
+
+    @Volatile var activeQrToken: String? = null
+    val authorizedQrIps = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun generateNewQrToken(): String {
+        val token = java.util.UUID.randomUUID().toString().substring(0, 8)
+        activeQrToken = token
+        return token
+    }
 
     private fun isPortFree(port: Int): Boolean {
         return try {
@@ -203,10 +213,11 @@ class ChhandaServer @Inject constructor(
         return Triple(sortedIps.firstOrNull(), sortedIps, vpnFound)
     }
 
-    fun start(requestedPort: Int, @Suppress("UNUSED_PARAMETER") maxDevices: Int) {
+    fun start(requestedPort: Int, maxDevices: Int) {
         stop()
         cleanupTempFiles()
         startTime = System.currentTimeMillis()
+        configuredMaxDevices = maxDevices
         lastIpRefresh = 0L
         val ip = freshIp()
         _serverErrorFlow.value = null
@@ -373,11 +384,21 @@ class ChhandaServer @Inject constructor(
                     
                     Log.d(TAG, "API Gateway auth attempt: provided='$providedKey', actual='$actualKey'")
                     
+                    val isLoopback: (String) -> Boolean = { host ->
+                        host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true)
+                    }
+
                     if (actualKey.isBlank() || actualKey == "Initializing..." || actualKey == "000000000" || providedKey != actualKey) {
                         Log.w(TAG, "API Gateway auth failed. Provided: '$providedKey', Actual: '$actualKey'")
                         call.respond(io.ktor.http.HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized: Invalid or Uninitialized API Key"))
                         false
-                    } else true
+                    } else {
+                        // Secure remote verification: remote hosts (not loopback) must have scanned the QR code
+                        if (!isLoopback(remoteHost) && !authorizedQrIps.contains(remoteHost)) {
+                            call.respond(io.ktor.http.HttpStatusCode.Forbidden, mapOf("error" to "Forbidden: Device not authorized via QR code scan."))
+                            false
+                        } else true
+                    }
                 }
 
                 post("/register") {
@@ -385,13 +406,29 @@ class ChhandaServer @Inject constructor(
                     try {
                         val req = call.receive<RegisterRequest>()
                         val ip = call.request.local.remoteHost
-                        deviceDao.updateDeviceStatus(req.name, true, System.currentTimeMillis()) ?: run {
+                        
+                        val activeDevices = deviceDao.getActiveConnections().filter { it.connectionType == "SHARED" }
+                        val alreadyConnected = activeDevices.any { it.deviceName == req.name || it.ipAddress == ip }
+                        if (activeDevices.size >= configuredMaxDevices && !alreadyConnected) {
+                            call.respond(io.ktor.http.HttpStatusCode.Forbidden, mapOf("error" to "Max device limit reached"))
+                            return@post
+                        }
+
+                        val existing = deviceDao.getAllDevices().firstOrNull()?.find { it.deviceName == req.name }
+                        if (existing != null) {
+                            deviceDao.updateDevice(existing.copy(
+                                ipAddress = ip,
+                                isCurrentlyConnected = true,
+                                lastActive = System.currentTimeMillis()
+                            ))
+                        } else {
                             deviceDao.insertDevice(com.chhanda.ai.data.repository.DeviceEntity(
                                 deviceName = req.name,
                                 ipAddress = ip,
                                 connectionTime = System.currentTimeMillis(),
                                 isCurrentlyConnected = true,
-                                connectionType = "SHARED"
+                                connectionType = "SHARED",
+                                lastActive = System.currentTimeMillis()
                             ))
                         }
                         call.respondText("""{"ok":true}""", io.ktor.http.ContentType.Application.Json)
@@ -659,15 +696,17 @@ class ChhandaServer @Inject constructor(
                     call.respondTextWriter(io.ktor.http.ContentType.Text.EventStream) {
                         requestSemaphore.withPermit {
                             try {
+                                val devName = try { deviceDao.getDeviceByIp(remoteIp)?.deviceName } catch(e: Exception) { null } ?: remoteIp
                                 val thinkingMode = settingsRepository.thinkingModeEnabledFlow.firstOrNull() ?: true
                                 sendMessageUseCase(
                                     userText = msg.text, 
-                                    deviceId = remoteIp, 
+                                    deviceId = devName, 
                                     modelName = llmEngine.getCurrentModelName(), 
                                     sessionId = msg.sessionId ?: "api_session", 
                                     attachments = attachmentUris, 
                                     persona = msg.persona,
-                                    includeThinking = thinkingMode
+                                    includeThinking = thinkingMode,
+                                    source = "qr"
                                 ).collect { upd ->
                                     if (upd is TokenUpdate.Partial) {
                                         write("data: ${upd.text.replace("\n", "\\n")}\n\n"); flush()
@@ -686,8 +725,73 @@ class ChhandaServer @Inject constructor(
                 }
 
                 get("/") {
-                    val sessions = try { chatDao.getSessionIdsForDevice(call.request.local.remoteHost).firstOrNull() ?: emptyList() } catch(e: Exception) { emptyList() }
+                    val remoteHost = call.request.local.remoteHost
+                    val scanToken = call.request.queryParameters["scan_token"]
+
+                    val isLoopback: (String) -> Boolean = { host ->
+                        host == "127.0.0.1" || host == "0:0:0:0:0:0:0:1" || host == "::1" || host.equals("localhost", ignoreCase = true)
+                    }
+
+                    if (!isLoopback(remoteHost)) {
+                        if (scanToken != null && activeQrToken != null && scanToken == activeQrToken) {
+                            // Perfect! Authorize this remote host IP address
+                            authorizedQrIps.add(remoteHost)
+                            // Consume the token immediately to prevent any other device from using it
+                            activeQrToken = null
+                        } else if (!authorizedQrIps.contains(remoteHost)) {
+                            // Not authorized via QR scan! Reject access!
+                            call.respondText(templateProvider.buildAccessDeniedHtml(), io.ktor.http.ContentType.Text.Html)
+                            return@get
+                        }
+                    }
+
+                    val activeDevices = deviceDao.getActiveConnections().filter { it.connectionType == "SHARED" }
+                    val alreadyConnected = activeDevices.any { it.ipAddress == remoteHost }
+                    if (activeDevices.size >= configuredMaxDevices && !alreadyConnected) {
+                        call.respondText(templateProvider.buildMaxLimitReachedHtml(configuredMaxDevices), io.ktor.http.ContentType.Text.Html)
+                        return@get
+                    }
+                    val sessions = try { chatDao.getSessionIdsForDevice(remoteHost).firstOrNull() ?: emptyList() } catch(e: Exception) { emptyList() }
                     call.respondText(templateProvider.buildChatHtml(capturedPort, call.request.host(), emptyList(), false, "", sessions), io.ktor.http.ContentType.Text.Html)
+                }
+
+                get("/session/{id}") {
+                    if (!validateAuth(call)) return@get
+                    val sessionId = call.parameters["id"] ?: ""
+                    val messages = try {
+                        chatDao.getMessagesForSession(sessionId).firstOrNull() ?: emptyList()
+                    } catch(e: Exception) {
+                        emptyList()
+                    }
+                    val jsonArray = messages.map { msg ->
+                        """{
+                            "role": "${msg.role}",
+                            "text": "${msg.text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")}",
+                            "timestamp": ${msg.timestamp}
+                        }"""
+                    }.joinToString(",", "[", "]")
+                    call.respondText(jsonArray, io.ktor.http.ContentType.Application.Json)
+                }
+
+                post("/disconnect") {
+                    if (!validateAuth(call)) return@post
+                    try {
+                        val ip = call.request.local.remoteHost
+                        authorizedQrIps.remove(ip)
+                        val active = deviceDao.getActiveConnections().filter { it.ipAddress == ip && it.isCurrentlyConnected }
+                        active.forEach { device ->
+                            val now = System.currentTimeMillis()
+                            val duration = now - device.connectionTime
+                            deviceDao.updateDevice(device.copy(
+                                isCurrentlyConnected = false,
+                                disconnectionTime = now,
+                                durationMs = duration
+                            ))
+                        }
+                        call.respondText("""{"ok":true}""", io.ktor.http.ContentType.Application.Json)
+                    } catch(e: Exception) {
+                        call.respondText("""{"ok":false}""", io.ktor.http.ContentType.Application.Json)
+                    }
                 }
             }
         }

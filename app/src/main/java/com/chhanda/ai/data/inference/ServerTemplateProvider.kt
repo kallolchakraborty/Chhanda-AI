@@ -10,7 +10,7 @@ class ServerTemplateProvider @Inject constructor() {
 <!DOCTYPE html><html><head><title>Chhanda AI - Access Denied</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>*{box-sizing:border-box}body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;background:#111;color:#e3e3e3;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.c{background:#1a1a1a;padding:2.5rem;border-radius:1.5rem;text-align:center;border:1px solid #333;max-width:400px}h1{color:#f87171;margin:0 0 1rem}p{color:#9aa0a6;line-height:1.6;margin:0}</style>
-</head><body><div class="c"><h1>Access Denied</h1><p>This Chhanda AI Node is secured. Please provide a valid API Key to connect.</p></div></body></html>
+</head><body><div class="c"><h1>Access Denied</h1><p>This Chhanda AI Node is secured. For security purposes, this device must be authorized by scanning the active pairing QR code.</p></div></body></html>
     """.trimIndent()
 
     fun buildMaxLimitReachedHtml(limit: Int): String = """
@@ -26,12 +26,28 @@ class ServerTemplateProvider @Inject constructor() {
     ): String {
         return """
 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>Chhanda AI</title>
+<title>Chhanda AI Portal</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0">
 <style>
 :root{--p:#8ab4f8;--bg:#111;--sf:#1a1a1a;--sf2:#222;--bd:rgba(255,255,255,.08);--tx:#e3e3e3;--tx2:#9aa0a6;--ub:#1e3a5f;--ab:#1a1a1a;--g:#34d399;--r:#f87171;--y:#facc15}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;margin:0;height:100dvh;display:flex;justify-content:center;overflow:hidden}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;margin:0;height:100dvh;display:flex;overflow:hidden}
+
+#app-container{display:flex;width:100%;height:100%;overflow:hidden}
+#sidebar{width:280px;background:#151515;border-right:1px solid var(--bd);display:flex;flex-direction:column;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);flex-shrink:0;z-index:20}
+#sidebar.collapsed{width:0;overflow:hidden;border-right:none}
+.sb-hdr{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd);flex-shrink:0}
+.sb-title{font-weight:700;font-size:11px;color:var(--tx2);letter-spacing:1px;text-transform:uppercase}
+.new-chat-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(138,180,248,0.08);border:1px solid rgba(138,180,248,0.2);color:var(--p);margin:14px;padding:12px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;outline:none}
+.new-chat-btn:hover{background:var(--p);color:var(--bg);transform:translateY(-1px)}
+.history-list{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
+.history-list::-webkit-scrollbar{width:3px}
+.history-list::-webkit-scrollbar-thumb{background:var(--bd);border-radius:9px}
+.history-item{padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;color:var(--tx2);cursor:pointer;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}
+.history-item:hover{background:rgba(255,255,255,0.04);color:#fff}
+.history-item.active{background:rgba(138,180,248,0.08);color:var(--p);border-left:3px solid var(--p)}
+
+#main-area{flex:1;display:flex;justify-content:center;height:100%;overflow:hidden;position:relative}
 #app{flex:1;display:flex;flex-direction:column;max-width:860px;width:100%;height:100%}
 #hdr{padding:12px 20px;background:rgba(17,17,17,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px;z-index:10}
 .logo{display:flex;align-items:center;gap:10px}
@@ -93,43 +109,146 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
 #btn{background:var(--p);color:var(--bg)}
 #btn:disabled{background:rgba(255,255,255,.05);color:var(--tx2);cursor:not-allowed}
 #btn:not(:disabled):hover{transform:scale(1.06);box-shadow:0 0 12px rgba(138,180,248,.3)}
+
+/* Premium Selectors and Starters style */
+.ctrl-select{background:var(--sf);border:1px solid var(--bd);color:var(--tx);font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;outline:none;cursor:pointer;transition:border-color 0.2s}
+.ctrl-select:hover{border-color:var(--p)}
+.starter-chip{background:rgba(138,180,248,0.05);border:1px solid var(--bd);color:var(--p);padding:8px 14px;border-radius:16px;font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;display:inline-block}
+.starter-chip:hover{background:rgba(138,180,248,0.12);border-color:var(--p);color:#fff;transform:translateY(-1px)}
+
+/* Name Overlay Modal style */
+#nameModal{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;z-index:99999}
+.nm-card{background:var(--sf);border:1px solid var(--bd);border-radius:24px;padding:32px;width:90%;max-width:400px;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.6);animation:scaleUp 0.3s cubic-bezier(.16,1,.3,1)}
+@keyframes scaleUp{from{transform:scale(0.9);opacity:0}to{transform:scale(1);opacity:1}}
+.nm-title{font-size:22px;font-weight:800;margin-bottom:12px;color:#fff}
+.nm-desc{font-size:14px;color:var(--tx2);margin-bottom:24px;line-height:1.5}
+.nm-input{width:100%;background:var(--sf2);border:1px solid var(--bd);border-radius:14px;padding:12px 16px;color:var(--tx);font-size:16px;outline:none;margin-bottom:20px;text-align:center;transition:border-color 0.2s}
+.nm-input:focus{border-color:var(--p)}
+.nm-btn{width:100%;background:var(--p);color:var(--bg);border:none;border-radius:14px;padding:12px;font-size:16px;font-weight:700;cursor:pointer;transition:all 0.2s}
+.nm-btn:hover{transform:scale(1.02);box-shadow:0 0 16px rgba(138,180,248,0.4)}
+
+@media(max-width:768px){
+  #sidebar{position:fixed;left:0;top:0;height:100%;z-index:999;box-shadow:4px 0 24px rgba(0,0,0,0.5)}
+  #sidebar.collapsed{transform:translateX(-100%);width:280px;display:flex}
+}
+
 @media(max-width:600px){#hdr{padding:10px 12px}#msgs{padding:16px 10px}#ftr{padding:10px 10px 16px}.mc{max-width:94%}#title{font-size:16px}}
 </style></head><body>
-<div id="app">
-<div id="hdr">
-<div class="logo">
-<svg width="28" height="28" viewBox="0 0 108 108"><path d="M70,30A28,28 0 1,0 70,78" stroke="var(--p)" stroke-width="8" stroke-linecap="round" fill="none"/><rect x="46" y="44" width="5" height="20" fill="var(--g)" opacity=".7"/><rect x="56" y="38" width="5" height="32" fill="var(--r)" opacity=".7"/><rect x="66" y="48" width="5" height="12" fill="var(--p)" opacity=".7"/></svg>
-<div id="title">Chhanda</div>
+
+<div id="nameModal">
+  <div class="nm-card">
+    <div class="nm-title">Welcome to Chhanda</div>
+    <div class="nm-desc">Please enter your name to connect this device securely to the local AI Gateway.</div>
+    <input type="text" id="nmInput" class="nm-input" placeholder="Your Name">
+    <button onclick="submitName()" class="nm-btn">Start Chatting</button>
+  </div>
 </div>
-<div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
-<div style="flex:1"></div>
-<button class="ib" onclick="newChat()" title="New Chat"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+
+<div id="closedOverlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;z-index:999999;flex-direction:column;text-align:center;padding:24px">
+  <div style="width:64px;height:64px;border-radius:50%;background:rgba(248,113,113,0.1);border:2px solid var(--r);display:flex;align-items:center;justify-content:center;margin-bottom:24px">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--r)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </div>
+  <h1 style="color:#fff;font-size:26px;font-weight:800;margin:0 0 12px">Session Disconnected</h1>
+  <p style="color:var(--tx2);font-size:16px;max-width:440px;line-height:1.6;margin:0">This device has closed its shared gateway connection securely. Duration logging has been synced with the node. You may now close this browser tab.</p>
 </div>
-<div id="msgs"><div class="mc s" id="welcome"><div class="m s">Waiting for AI engine...</div></div></div>
-<div id="ftr">
-<div id="prev"></div>
-<div id="iw">
-<input type="file" id="fi" style="display:none" multiple>
-<button class="ib" id="ab" title="Attach"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
-<textarea id="inp" placeholder="Connecting..." disabled rows="1"></textarea>
-<button id="btn" class="ib" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2"/></svg></button>
-</div></div></div>
+
+<div id="app-container">
+  <div id="sidebar" class="collapsed">
+    <div class="sb-hdr">
+      <span class="sb-title">Chat History</span>
+      <button class="ib" onclick="toggleSidebar()" style="width:30px;height:30px" title="Collapse Sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+    </div>
+    <button class="new-chat-btn" onclick="newChat()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Chat
+    </button>
+    <div class="history-list" id="sessionsList"></div>
+  </div>
+
+  <div id="main-area">
+    <div id="app">
+      <div id="hdr">
+        <button class="ib" onclick="toggleSidebar()" title="Toggle Sidebar" style="margin-right:4px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="logo">
+          <svg width="28" height="28" viewBox="0 0 108 108"><path d="M70,30A28,28 0 1,0 70,78" stroke="var(--p)" stroke-width="8" stroke-linecap="round" fill="none"/><rect x="46" y="44" width="5" height="20" fill="var(--g)" opacity=".7"/><rect x="56" y="38" width="5" height="32" fill="var(--r)" opacity=".7"/><rect x="66" y="48" width="5" height="12" fill="var(--p)" opacity=".7"/></svg>
+          <div id="title">Chhanda</div>
+        </div>
+        <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
+        <div style="flex:1"></div>
+        <button class="ib" onclick="newChat()" title="New Chat"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button class="ib" onclick="closeSession()" title="Close Session" style="color:var(--r);background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);margin-left:8px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div id="msgs">
+        <div class="mc s" id="welcome">
+          <div class="m s" style="font-size:16px; font-weight:bold; color:#fff; margin-bottom:6px">Chhanda Offline Portal</div>
+          <div class="m s">Awaiting local connection heartbeat...</div>
+        </div>
+      </div>
+
+      <div id="ftr">
+        <div id="starters" style="display:flex;gap:8px;overflow-x:auto;white-space:nowrap;margin-bottom:10px;padding:2px 4px">
+          <div class="starter-chip" onclick="useStarter(this.textContent)">Explain vector search with a simple analogy</div>
+          <div class="starter-chip" onclick="useStarter(this.textContent)">Write a clean Kotlin sorting function</div>
+          <div class="starter-chip" onclick="useStarter(this.textContent)">Summarize key trends in AI gateways</div>
+        </div>
+
+        <div id="ctrls" style="display:flex;gap:12px;margin-bottom:10px;align-items:center;padding:0 4px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:0.3px">PERSONA:</span>
+            <select id="pers" class="ctrl-select">
+              <option value="Default">Default</option>
+              <option value="Senior Teacher">Senior Teacher</option>
+              <option value="Senior Software Engineer">Senior Software Engineer</option>
+              <option value="Friend">Friend</option>
+              <option value="General Companion">General Companion</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:0.3px">LANG:</span>
+            <select id="lang" class="ctrl-select">
+              <option value="en">English</option>
+              <option value="hi">Hindi</option>
+              <option value="bn">Bengali</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="prev"></div>
+        <div id="iw">
+          <input type="file" id="fi" style="display:none" multiple>
+          <button class="ib" id="ab" title="Attach"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></button>
+          <textarea id="inp" placeholder="Connecting..." disabled rows="1"></textarea>
+          <button id="btn" class="ib" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const msgs=document.getElementById('msgs'),inp=document.getElementById('inp'),btn=document.getElementById('btn'),bt=document.getElementById('bt'),badge=document.getElementById('badge'),fi=document.getElementById('fi'),prev=document.getElementById('prev');
 let ready=false,thinkOn=true,atts=[],streaming=false;
 const K=new URLSearchParams(location.search).get('key')||'';
 
+const savedSessions = [${sessions.joinToString(",") { "'$it'" }}];
+let currentSessionId = 'session_' + Date.now();
+let sessionsList = [...savedSessions];
+
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
-// Inline Markdown Parser — zero dependencies
 function md(src){
 src=src.replace(/\r\n/g,'\n');
-// code blocks
 src=src.replace(/```(\w*)\n([\s\S]*?)```/g,function(_,lang,code){
 const l=lang||'code';
 return '<div class="cb-wrap"><div class="cb-hdr"><span>'+esc(l)+'</span><button onclick="cpCode(this)">Copy</button></div><pre><code>'+esc(code.replace(/\n$/,''))+'</code></pre></div>';
 });
-// process line by line
 const lines=src.split('\n');let html='',inUl=false,inOl=false,inBq=false,inP=false,inTable=false,tableRows=[];
 function closeAll(){
 if(inUl){html+='</ul>';inUl=false}
@@ -162,35 +281,33 @@ var u=url.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/"/g,'');
 if(!/^https?:\/\//i.test(u))return text;
 return '<a href="'+esc(u)+'" target="_blank" rel="noopener">'+text+'</a>';
 });
+s=s.replace(/\[Source #(\d+)(?:,\s*Source #(\d+))*\]/g, function(match) {
+    const numbers = match.match(/\d+/g);
+    if (numbers && numbers.length > 0) {
+        return '<sup style="color:#8ab4f8; font-weight:bold; font-size:10px; margin-left:2px;">[' + numbers.join(', ') + ']</sup>';
+    }
+    return match;
+});
 return s;
 }
 for(let i=0;i<lines.length;i++){
 const L=lines[i];
-// table row
 if(L.trim().startsWith('|')&&L.trim().endsWith('|')){
 if(!inTable){closeAll();inTable=true;tableRows=[]}
 const cells=L.trim().slice(1,-1).split('|');
 tableRows.push(cells);continue;
 }else if(inTable){html+=buildTable(tableRows);tableRows=[];inTable=false}
-// hr
 if(/^[-*_]{3,}\s*$/.test(L)){closeAll();html+='<hr>';continue}
-// heading
 const hm=L.match(/^(#{1,4})\s+(.+)/);
 if(hm){closeAll();const lv=hm[1].length;html+='<h'+lv+'>'+inline(hm[2])+'</h'+lv+'>';continue}
-// ul
 const ulm=L.match(/^[\s]*[-*+]\s+(.+)/);
 if(ulm){if(inOl){html+='</ol>';inOl=false}if(inP){html+='</p>';inP=false}if(!inUl){html+='<ul>';inUl=true}html+='<li>'+inline(ulm[1])+'</li>';continue}
-// ol
 const olm=L.match(/^[\s]*\d+\.\s+(.+)/);
 if(olm){if(inUl){html+='</ul>';inUl=false}if(inP){html+='</p>';inP=false}if(!inOl){html+='<ol>';inOl=true}html+='<li>'+inline(olm[1])+'</li>';continue}
-// blockquote
 if(L.startsWith('>')){const t=L.replace(/^>\s?/,'');if(!inBq){closeAll();html+='<blockquote>';inBq=true}html+=inline(t)+' ';continue}else if(inBq){html+='</blockquote>';inBq=false}
-// close lists on non-list line
 if(inUl&&!ulm){html+='</ul>';inUl=false}
 if(inOl&&!olm){html+='</ol>';inOl=false}
-// empty line
 if(!L.trim()){closeAll();continue}
-// paragraph
 if(!inP){html+='<p>';inP=true}else{html+=' '}
 html+=inline(L);
 }
@@ -200,7 +317,6 @@ return html;
 
 function cpCode(b){const code=b.closest('.cb-wrap').querySelector('code');navigator.clipboard.writeText(code.textContent).then(()=>{b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',1500)}).catch(()=>{})}
 
-// Thinking process parser
 function parseThinking(raw){
 const r=/<(?:think|thought)>([\s\S]*?)(?:<\/(?:think|thought)>|$)/i;
 const m=raw.match(r);
@@ -236,28 +352,178 @@ else{badge.className='warm';bt.textContent='LOADING';inp.disabled=true;btn.disab
 }catch(e){badge.className='err';bt.textContent='OFFLINE';inp.disabled=true;btn.disabled=true}}
 setInterval(pulse,3000);pulse();
 
-function newChat(){msgs.innerHTML='';addMsg('New conversation started.','s')}
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+function renderSessions() {
+  const container = document.getElementById('sessionsList');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (sessionsList.length === 0) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--tx2)">No conversations yet</div>';
+    return;
+  }
+  
+  sessionsList.forEach(sid => {
+    const item = document.createElement('div');
+    item.className = 'history-item' + (sid === currentSessionId ? ' active' : '');
+    
+    let displayName = sid;
+    if (sid.startsWith('session_')) {
+      const ts = parseInt(sid.split('_')[1]);
+      if (!isNaN(ts)) {
+        displayName = 'Chat ' + new Date(ts).toLocaleDateString() + ' ' + new Date(ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      }
+    }
+    item.innerHTML = '💬 ' + esc(displayName.length > 22 ? displayName.slice(0, 20) + '...' : displayName);
+    item.onclick = () => loadSession(sid);
+    container.appendChild(item);
+  });
+}
+
+async function loadSession(sid) {
+  if (streaming) return;
+  currentSessionId = sid;
+  renderSessions();
+  msgs.innerHTML = '<div class="mc s"><div class="m s">Loading history...</div></div>';
+  
+  try {
+    const res = await fetch('/session/' + sid, {
+      headers: { 'X-API-KEY': K }
+    });
+    const messages = await res.json();
+    msgs.innerHTML = '';
+    hideStarters();
+    if (messages.length === 0) {
+      addMsg('Session is empty.', 's');
+      showStarters();
+    } else {
+      messages.forEach(m => {
+        addMsg(m.text, m.role === 'user' ? 'u' : 'a');
+      });
+    }
+  } catch(e) {
+    msgs.innerHTML = '<div class="mc s"><div class="m s" style="color:var(--r)">Failed to load session.</div></div>';
+  }
+}
+
+function newChat(){
+  if (streaming) return;
+  currentSessionId = 'session_' + Date.now();
+  msgs.innerHTML = '';
+  addMsg('New conversation started.','s');
+  showStarters();
+  renderSessions();
+  inp.value = '';
+  inp.dispatchEvent(new Event('input'));
+  atts = [];
+  renderPrev();
+}
 
 function addMsg(t,c){
-const ct=document.createElement('div');ct.className='mc '+c;
-const m=document.createElement('div');m.className='m '+c;
-if(c==='u')m.innerHTML=esc(t).replace(/\n/g,'<br>');
-else if(c==='s')m.textContent=t;
-else m.innerHTML=md(t);
-ct.appendChild(m);msgs.appendChild(ct);msgs.scrollTop=msgs.scrollHeight;return m;
+  const ct=document.createElement('div');ct.className='mc '+c;
+  const m=document.createElement('div');m.className='m '+c;
+  if(c==='u')m.innerHTML=esc(t).replace(/\n/g,'<br>');
+  else if(c==='s')m.textContent=t;
+  else m.innerHTML=md(t);
+  ct.appendChild(m);msgs.appendChild(ct);msgs.scrollTop=msgs.scrollHeight;return m;
+}
+
+function useStarter(t){
+  inp.value=t;
+  inp.dispatchEvent(new Event('input'));
+  inp.focus();
+}
+
+function hideStarters() {
+  const s = document.getElementById('starters');
+  if(s) s.style.display = 'none';
+}
+
+function showStarters() {
+  const s = document.getElementById('starters');
+  if(s) s.style.display = 'flex';
+}
+
+async function closeSession() {
+  if (confirm("Are you sure you want to close this chat session?")) {
+    try {
+      await fetch('/disconnect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-KEY': K
+        }
+      });
+    } catch(e) {}
+    document.getElementById('closedOverlay').style.display = 'flex';
+  }
+}
+
+// Name prompt and registration management
+const storedName = localStorage.getItem('chhanda_username');
+if (!storedName) {
+  document.getElementById('nameModal').style.display = 'flex';
+} else {
+  registerUser(storedName);
+}
+renderSessions();
+
+function submitName() {
+  const name = document.getElementById('nmInput').value.trim();
+  if (!name) return;
+  localStorage.setItem('chhanda_username', name);
+  document.getElementById('nameModal').style.display = 'none';
+  registerUser(name);
+}
+
+async function registerUser(name) {
+  try {
+    await fetch('/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': K
+      },
+      body: JSON.stringify({ name: name })
+    });
+  } catch (e) {
+    console.error("User registration failed offline: ", e);
+  }
 }
 
 btn.onclick=async()=>{
 const txt=inp.value.trim();if(!txt&&!atts.length)return;
 inp.value='';inp.style.height='auto';btn.disabled=true;streaming=true;
+hideStarters();
 addMsg(txt,'u');
 const aiEl=document.createElement('div');aiEl.className='mc a';
 const aiMsg=document.createElement('div');aiMsg.className='m a';
 aiMsg.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
 aiEl.appendChild(aiMsg);msgs.appendChild(aiEl);msgs.scrollTop=msgs.scrollHeight;
 
+const selectedPers = document.getElementById('pers').value;
+const selectedLang = document.getElementById('lang').value;
+
+if (!sessionsList.includes(currentSessionId)) {
+  sessionsList.unshift(currentSessionId);
+  renderSessions();
+}
+
 try{
-const res=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','X-API-KEY':K},body:JSON.stringify({text:txt,language:'en',persona:'Default',attachments:atts})});
+const res=await fetch('/chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-API-KEY':K},
+    body:JSON.stringify({
+        text:txt,
+        language:selectedLang,
+        persona:selectedPers,
+        attachments:atts,
+        sessionId:currentSessionId
+    })
+});
 atts=[];renderPrev();
 const reader=res.body.getReader();const dec=new TextDecoder();let raw='',buf='';
 while(true){
@@ -275,12 +541,11 @@ aiMsg.innerHTML=renderThinking(thought,response);
 msgs.scrollTop=msgs.scrollHeight;
 }
 }
-// Final render
 if(raw){const{thought,response}=parseThinking(raw);aiMsg.innerHTML=renderThinking(thought,response)}
 }catch(e){aiMsg.innerHTML='<span style="color:var(--r)">Connection error: '+esc(e.message)+'</span>'}
 streaming=false;if(inp.value.trim()&&ready)btn.disabled=false;
 };
 </script></body></html>
-        """.trimIndent()
+""".trimIndent()
     }
 }

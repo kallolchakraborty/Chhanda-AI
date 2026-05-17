@@ -129,24 +129,6 @@ fun ConfigScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(Localization.getString("haptic_feedback", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text(Localization.getString("haptic_feedback_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                            }
-                            Switch(checked = hapticsEnabled, onCheckedChange = {
-                                viewModel.setHapticsEnabled(it)
-                                if (it) {
-                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
-                                }
-                            })
-                        }
-                        
-                        Spacer(Modifier.height(24.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
                                 Text(Localization.getString("thinking_mode", appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 Text(
                                     if (isThinkingSupported) Localization.getString("thinking_mode_desc", appLanguage)
@@ -266,6 +248,31 @@ fun ConfigScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Column {
+                    ChhandaSectionHeader(icon = Icons.Default.Vibration, title = "Vibration & Haptics")
+                    Spacer(Modifier.height(12.dp))
+                    ChhandaCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(Localization.getString("haptic_feedback", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(Localization.getString("haptic_feedback_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(checked = hapticsEnabled, onCheckedChange = {
+                                viewModel.setHapticsEnabled(it)
+                                if (it) {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                }
+                            })
                         }
                     }
                 }

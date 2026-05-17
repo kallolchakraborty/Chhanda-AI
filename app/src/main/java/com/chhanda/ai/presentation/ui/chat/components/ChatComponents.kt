@@ -698,6 +698,38 @@ fun buildInlineAnnotated(text: String, baseColor: Color): AnnotatedString = buil
                     i = end + 1
                 } else { append(text[i]); i++ }
             }
+            text.startsWith("[", i) -> {
+                val end = text.indexOf("]", i + 1)
+                if (end != -1) {
+                    val content = text.substring(i + 1, end)
+                    if (content.contains("Source #")) {
+                        val numbers = """\d+""".toRegex().findAll(content).map { it.value }.toList()
+                        if (numbers.isNotEmpty()) {
+                            val formattedCitation = "[${numbers.joinToString(", ")}]"
+                            withStyle(
+                                SpanStyle(
+                                    color = Color(0xFF2563EB),
+                                    fontWeight = FontWeight.Bold,
+                                    baselineShift = androidx.compose.ui.text.style.BaselineShift.Superscript,
+                                    fontSize = 10.sp
+                                )
+                            ) {
+                                append(formattedCitation)
+                            }
+                            i = end + 1
+                        } else {
+                            append(text[i])
+                            i++
+                        }
+                    } else {
+                        append(text[i])
+                        i++
+                    }
+                } else {
+                    append(text[i])
+                    i++
+                }
+            }
             else -> { append(text[i]); i++ }
         }
     }

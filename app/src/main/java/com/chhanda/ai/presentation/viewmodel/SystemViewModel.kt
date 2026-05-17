@@ -1123,6 +1123,12 @@ class SystemViewModel @Inject constructor(
     private var lastStorageCheck: Long = 0L
     private var storageDirty: Boolean = true
 
+    fun getQrCodeUrl(ip: String, port: Int): String {
+        val token = chhandaServer.generateNewQrToken()
+        val apiKeyVal = apiKey.value
+        return "http://$ip:$port?key=$apiKeyVal&scan_token=$token"
+    }
+
     fun simulateQrConnection() {
         viewModelScope.launch {
             val newDevice = com.chhanda.ai.data.repository.DeviceEntity(

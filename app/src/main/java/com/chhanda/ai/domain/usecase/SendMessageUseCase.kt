@@ -46,7 +46,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         var isContextFound = false
 
         try {
-            val ragEnabled = settingsRepository.ragEnabledFlow.first()
+            val isQrRequest = source.lowercase() == "qr"
+            val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest
             if (ragEnabled) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Searching local knowledge base..."))
             }
@@ -136,18 +137,16 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             isContextFound = hasDbKnowledge || hasWebKnowledge
 
-            if (source.lowercase() != "api") {
-                val attachmentPathsString = if (attachments.isNotEmpty()) attachments.joinToString(",") { it.toString() } else null
-                chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
-                    text = userText, 
-                    role = "user", 
-                    deviceId = deviceId, 
-                    modelName = modelName, 
-                    sessionId = sessionId, 
-                    source = source,
-                    attachmentPaths = attachmentPathsString
-                ))
-            }
+            val attachmentPathsString = if (attachments.isNotEmpty()) attachments.joinToString(",") { it.toString() } else null
+            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
+                text = userText, 
+                role = "user", 
+                deviceId = deviceId, 
+                modelName = modelName, 
+                sessionId = sessionId, 
+                source = source,
+                attachmentPaths = attachmentPathsString
+            ))
 
             if (history.isEmpty()) {
                 llmEngine.resetSession(sessionId)
@@ -361,28 +360,26 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                             val actionResult = agenticActionHandler.handleActions(toSave)
                             val filePath = actionResult.generatedFilePath
 
-                            if (source.lowercase() != "api") {
-                                chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
-                                    text = toSave, 
-                                    role = "model", 
-                                    deviceId = deviceId, 
-                                    modelName = modelName, 
-                                    sessionId = sessionId, 
-                                    tps = update.tps, 
-                                    isRagUsed = isContextFound, 
-                                    contextSource = when {
-                                        hasAttachmentKnowledge && hasDbKnowledge -> "Multi-Source"
-                                        hasAttachmentKnowledge -> "Attachment"
-                                        hasDbKnowledge -> "Knowledge Base"
-                                        hasWebKnowledge -> "Web Fallback"
-                                        else -> null
-                                    },
-                                    responseTimeMs = update.responseTimeMs,
-                                    generatedFilePath = filePath,
-                                    source = source,
-                                    thinking = extractedThinking
-                                ))
-                            }
+                            chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
+                                text = toSave, 
+                                role = "model", 
+                                deviceId = deviceId, 
+                                modelName = modelName, 
+                                sessionId = sessionId, 
+                                tps = update.tps, 
+                                isRagUsed = isContextFound, 
+                                contextSource = when {
+                                    hasAttachmentKnowledge && hasDbKnowledge -> "Multi-Source"
+                                    hasAttachmentKnowledge -> "Attachment"
+                                    hasDbKnowledge -> "Knowledge Base"
+                                    hasWebKnowledge -> "Web Fallback"
+                                    else -> null
+                                },
+                                responseTimeMs = update.responseTimeMs,
+                                generatedFilePath = filePath,
+                                source = source,
+                                thinking = extractedThinking
+                            ))
                             saved = true
                             contextManager.maintainMemoryHygiene()
                         }

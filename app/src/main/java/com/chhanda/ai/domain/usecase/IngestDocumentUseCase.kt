@@ -32,8 +32,8 @@ class IngestDocumentUseCase @javax.inject.Inject constructor(
         processRawText(rawText, uri.toString(), type.name, modelId, onProgress)
     }
 
-    suspend fun ingestScrapedText(text: String, url: String, label: String, onProgress: (Float) -> Unit = {}) {
-        processRawText(text, url, "WEB_URL", "shared_rag_db", onProgress)
+    suspend fun ingestScrapedText(text: String, url: String, label: String, docType: String = "WEB_URL", onProgress: (Float) -> Unit = {}) {
+        processRawText(text, url, docType, "shared_rag_db", onProgress)
     }
 
     private suspend fun processRawText(rawText: String, source: String, type: String, modelId: String, onProgress: (Float) -> Unit) {

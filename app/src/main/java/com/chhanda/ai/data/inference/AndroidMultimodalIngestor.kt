@@ -212,7 +212,7 @@ class AndroidMultimodalIngestor @Inject constructor(
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 val reader = android.util.JsonReader(inputStream.bufferedReader())
                 try {
-                    parseJsonStreaming(reader, stringBuilder)
+                    parseAnyJsonValue(reader, stringBuilder)
                 } catch (e: Exception) {
                     // Fallback to raw text if streaming parse fails
                     android.util.Log.w("Ingestor", "Streaming parse failed, falling back: ${e.message}")
@@ -227,48 +227,134 @@ class AndroidMultimodalIngestor @Inject constructor(
         stringBuilder.toString().trim()
     }
 
-    private fun parseJsonStreaming(reader: android.util.JsonReader, out: StringBuilder) {
-        if (reader.peek() == android.util.JsonToken.BEGIN_ARRAY) {
-            reader.beginArray()
-            while (reader.hasNext()) {
-                parseConversationObject(reader, out)
-            }
-            reader.endArray()
-        } else if (reader.peek() == android.util.JsonToken.BEGIN_OBJECT) {
-            reader.beginObject()
-            while (reader.hasNext()) {
-                val name = reader.nextName()
-                if (name == "messages" && reader.peek() == android.util.JsonToken.BEGIN_ARRAY) {
-                    // Simple "messages" array format export
-                    reader.beginArray()
-                    while (reader.hasNext()) {
-                        parseMessageSimple(reader, out)
-                    }
-                    reader.endArray()
-                } else {
-                    reader.skipValue()
+    private fun parseAnyJsonValue(reader: android.util.JsonReader, out: StringBuilder) {
+        when (reader.peek()) {
+            android.util.JsonToken.BEGIN_ARRAY -> {
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    parseAnyJsonValue(reader, out)
                 }
+                reader.endArray()
             }
-            reader.endObject()
+            android.util.JsonToken.BEGIN_OBJECT -> {
+                parseJsonObjectAdaptively(reader, out)
+            }
+            else -> {
+                reader.skipValue()
+            }
         }
     }
 
-    private fun parseConversationObject(reader: android.util.JsonReader, out: StringBuilder) {
+    private fun parseJsonObjectAdaptively(reader: android.util.JsonReader, out: StringBuilder) {
         reader.beginObject()
-        var title = "Untitled Chat"
+        var role: String? = null
+        var text: String? = null
+        var title: String? = null
+        
         while (reader.hasNext()) {
             val name = reader.nextName()
-            when (name) {
-                "title" -> title = reader.nextString()
-                "mapping" -> {
-                    out.append("\n=== CONVERSATION: $title ===\n")
+            val token = reader.peek()
+            when {
+                name == "title" && token == android.util.JsonToken.STRING -> {
+                    title = reader.nextString()
+                }
+                name == "mapping" && token == android.util.JsonToken.BEGIN_OBJECT -> {
+                    val titlePrefix = if (title != null) ": $title" else ""
+                    out.append("\n=== CONVERSATION$titlePrefix ===\n")
                     parseMapping(reader, out)
                 }
-                else -> reader.skipValue()
+                name == "role" && token == android.util.JsonToken.STRING -> {
+                    role = reader.nextString()
+                }
+                name == "author" -> {
+                    if (token == android.util.JsonToken.BEGIN_OBJECT) {
+                        reader.beginObject()
+                        while (reader.hasNext()) {
+                            if (reader.nextName() == "role" && reader.peek() == android.util.JsonToken.STRING) {
+                                role = reader.nextString()
+                            } else {
+                                reader.skipValue()
+                            }
+                        }
+                        reader.endObject()
+                    } else if (token == android.util.JsonToken.STRING) {
+                        role = reader.nextString()
+                    } else {
+                        reader.skipValue()
+                    }
+                }
+                (name == "text" || name == "content" || name == "body" || name == "message" || name == "prompt" || name == "response") -> {
+                    if (token == android.util.JsonToken.STRING) {
+                        text = reader.nextString()
+                    } else if (token == android.util.JsonToken.BEGIN_OBJECT) {
+                        val contentBuilder = StringBuilder()
+                        parseContentObject(reader, contentBuilder)
+                        text = contentBuilder.toString().trim()
+                    } else if (token == android.util.JsonToken.BEGIN_ARRAY) {
+                        val contentBuilder = StringBuilder()
+                        reader.beginArray()
+                        while (reader.hasNext()) {
+                            if (reader.peek() == android.util.JsonToken.STRING) {
+                                contentBuilder.append(reader.nextString()).append(" ")
+                            } else {
+                                parseAnyJsonValue(reader, contentBuilder)
+                            }
+                        }
+                        reader.endArray()
+                        text = contentBuilder.toString().trim()
+                    } else {
+                        reader.skipValue()
+                    }
+                }
+                token == android.util.JsonToken.BEGIN_OBJECT || token == android.util.JsonToken.BEGIN_ARRAY -> {
+                    parseAnyJsonValue(reader, out)
+                }
+                else -> {
+                    reader.skipValue()
+                }
             }
         }
         reader.endObject()
-        out.append("\n")
+        
+        if (role != null || text != null) {
+            val r = role ?: "unknown"
+            val t = text ?: ""
+            if (t.isNotBlank()) {
+                out.append("[$r]: $t\n")
+            }
+        }
+    }
+
+    private fun parseContentObject(reader: android.util.JsonReader, out: StringBuilder) {
+        reader.beginObject()
+        var isText = false
+        while (reader.hasNext()) {
+            val name = reader.nextName()
+            val token = reader.peek()
+            when {
+                name == "content_type" && token == android.util.JsonToken.STRING -> {
+                    if (reader.nextString() == "text") isText = true
+                }
+                name == "parts" && token == android.util.JsonToken.BEGIN_ARRAY -> {
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        if (reader.peek() == android.util.JsonToken.STRING) {
+                            out.append(reader.nextString()).append("\n")
+                        } else {
+                            reader.skipValue()
+                        }
+                    }
+                    reader.endArray()
+                }
+                token == android.util.JsonToken.BEGIN_OBJECT || token == android.util.JsonToken.BEGIN_ARRAY -> {
+                    parseAnyJsonValue(reader, out)
+                }
+                else -> {
+                    reader.skipValue()
+                }
+            }
+        }
+        reader.endObject()
     }
 
     private fun parseMapping(reader: android.util.JsonReader, out: StringBuilder) {
@@ -327,21 +413,6 @@ class AndroidMultimodalIngestor @Inject constructor(
                 else -> reader.skipValue()
             }
         }
-        reader.endObject()
-    }
-
-    private fun parseMessageSimple(reader: android.util.JsonReader, out: StringBuilder) {
-        reader.beginObject()
-        var role = ""
-        var text = ""
-        while (reader.hasNext()) {
-            when (reader.nextName()) {
-                "role" -> role = reader.nextString()
-                "text", "content" -> text = reader.nextString()
-                else -> reader.skipValue()
-            }
-        }
-        if (text.isNotBlank()) out.append("[$role]: $text\n")
         reader.endObject()
     }
 

@@ -77,7 +77,7 @@ class ModelProvisioner @Inject constructor(
             val owned = files.filter { !it.name.contains("shared", ignoreCase = true) }.map {
                 ModelInfo(
                     name = it.name, 
-                    details = "${it.length() / 1024 / 1024} MB", 
+                    details = String.format(java.util.Locale.US, "%.2f GB", it.length() / (1024.0 * 1024.0 * 1024.0)), 
                     isActive = it.name == activeTarget,
                     isMultimodal = it.name.contains("multimodal", ignoreCase = true)
                 )

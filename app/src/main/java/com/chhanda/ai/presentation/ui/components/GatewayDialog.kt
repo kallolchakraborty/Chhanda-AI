@@ -221,7 +221,9 @@ fun GatewayDialog(
                                     }
                                     else -> currentIp
                                 }
-                                val chatUrl = "http://$qrIp:$displayPort?key=$apiKey"
+                                val chatUrl = remember(qrIp, displayPort, apiKey) {
+                                    viewModel.getQrCodeUrl(qrIp, displayPort)
+                                }
                                 val qrBitmap = remember(chatUrl) { QRCodeGenerator.generate(chatUrl, 400) }
                                 if (qrBitmap != null) {
                                     Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "Chat QR", modifier = Modifier.fillMaxSize())
