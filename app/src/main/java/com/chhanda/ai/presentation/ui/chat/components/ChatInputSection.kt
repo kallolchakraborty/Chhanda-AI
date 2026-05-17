@@ -78,7 +78,7 @@ fun ChatInput(
                         value = text,
                         onValueChange = onTextChange,
                         modifier = Modifier.weight(1f).testTag("chat_input_field"),
-                        placeholder = { Text(Localization.getString("type_message", appLanguage)) },
+                        placeholder = { Text(Localization.getString("chat_hint", appLanguage)) },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,

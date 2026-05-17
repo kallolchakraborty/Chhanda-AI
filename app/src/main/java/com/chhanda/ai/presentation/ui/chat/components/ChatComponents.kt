@@ -330,8 +330,10 @@ fun MessageBubble(
                 }
 
                 if (message.tps > 0) {
+                    val timeSpent = message.responseTimeMs / 1000.0
+                    val tokens = (message.tps * timeSpent).toInt().coerceAtLeast(1)
                     Text(
-                        String.format("%.1f t/s", message.tps),
+                        String.format("%d tokens | %.2fs (%.1f t/s)", tokens, timeSpent, message.tps),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                         modifier = Modifier.padding(start = 4.dp)
