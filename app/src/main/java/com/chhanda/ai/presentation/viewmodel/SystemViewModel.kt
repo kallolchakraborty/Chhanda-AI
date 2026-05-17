@@ -272,7 +272,7 @@ class SystemViewModel @Inject constructor(
     val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "Kallol (Indian Male)")
     val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-    val webSearchEnabled = settingsRepository.webSearchEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val webSearchEnabled = settingsRepository.webSearchEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val thinkingModeEnabled = settingsRepository.thinkingModeEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val privacyShieldEnabled = settingsRepository.privacyShieldEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val appSecurityEnabled = settingsRepository.appSecurityEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, false)

@@ -143,7 +143,7 @@ class SettingsRepository @Inject constructor(
     }
 
     val webSearchEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.WEB_SEARCH_ENABLED] ?: true
+        preferences[PreferencesKeys.WEB_SEARCH_ENABLED] ?: false
     }
 
     val thinkingModeEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
