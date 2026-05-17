@@ -179,11 +179,14 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
         <button class="ib" onclick="toggleSidebar()" title="Toggle Sidebar" style="margin-right:4px">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        <div class="logo">
-          <svg width="28" height="28" viewBox="0 0 108 108"><path d="M70,30A28,28 0 1,0 70,78" stroke="var(--p)" stroke-width="8" stroke-linecap="round" fill="none"/><rect x="46" y="44" width="5" height="20" fill="var(--g)" opacity=".7"/><rect x="56" y="38" width="5" height="32" fill="var(--r)" opacity=".7"/><rect x="66" y="48" width="5" height="12" fill="var(--p)" opacity=".7"/></svg>
-          <div id="title">Chhanda</div>
-        </div>
         <div id="badge"><div id="dot"></div><span id="bt">CONNECTING</span></div>
+        <div style="display:flex;align-items:center;margin-left:12px">
+          <select id="lang" class="ctrl-select" style="background:rgba(255,255,255,0.05);color:var(--tx2);border:1px solid var(--bd);border-radius:6px;padding:4px 8px;font-size:12px;outline:none">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+            <option value="bn">Bengali</option>
+          </select>
+        </div>
         <div style="flex:1"></div>
         <button class="ib" onclick="newChat()" title="New Chat"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         <button class="ib" onclick="closeSession()" title="Close Session" style="color:var(--r);background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);margin-left:8px">
@@ -215,14 +218,7 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
             <div class="persona-chip" onclick="setPers('General Companion', this)">General Companion</div>
             <input type="hidden" id="pers" value="Default">
           </div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-            <span style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:0.3px">LANG:</span>
-            <select id="lang" class="ctrl-select">
-              <option value="en">English</option>
-              <option value="hi">Hindi</option>
-              <option value="bn">Bengali</option>
-            </select>
-          </div>
+
         </div>
 
         <div id="prev"></div>
@@ -246,6 +242,8 @@ const K=new URLSearchParams(location.search).get('key')||'';
 const savedSessions = [${sessions.joinToString(",") { "'$it'" }}];
 let currentSessionId = 'session_' + Date.now();
 let sessionsList = [...savedSessions];
+const userName = '${savedName}';
+let hasGreeted = false;
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
@@ -410,7 +408,20 @@ inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.pr
 
 async function pulse(){
 try{const r=await fetch('/status',{headers:{'X-API-KEY':K}});const d=await r.json();ready=d.modelLoaded;thinkOn=d.thinkingMode!==false;
-if(ready){badge.className='on';bt.textContent='ONLINE';inp.disabled=false;inp.placeholder='Message Chhanda...';const w=document.getElementById('welcome');if(w)w.remove();if(inp.value.trim()&&!streaming)btn.disabled=false}
+if(ready){
+  badge.className='on';bt.textContent='ONLINE';inp.disabled=false;inp.placeholder='Message Chhanda...';
+  const w=document.getElementById('welcome');
+  if(w) {
+    w.remove();
+    if(!hasGreeted) {
+      hasGreeted = true;
+      if(sessionsList.length === 0 || !sessionsList.includes(currentSessionId)) {
+        addMsg('Welcome, ' + esc(userName) + '! How can I assist you today?', 'a');
+      }
+    }
+  }
+  if(inp.value.trim()&&!streaming)btn.disabled=false;
+}
 else{badge.className='warm';bt.textContent='LOADING';inp.disabled=true;btn.disabled=true}
 }catch(e){badge.className='err';bt.textContent='OFFLINE';inp.disabled=true;btn.disabled=true}}
 setInterval(pulse,3000);pulse();
