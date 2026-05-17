@@ -4,7 +4,10 @@ import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -61,7 +64,91 @@ class MainActivity : FragmentActivity() {
             val isDark by vm.darkMode.collectAsState()
             
             com.chhanda.ai.presentation.ui.theme.ChhandaTheme(darkTheme = isDark) {
-                ChhandaApp(vm)
+                val appSecurityEnabled by vm.appSecurityEnabled.collectAsState()
+                var isAppUnlocked by remember(appSecurityEnabled) { mutableStateOf(!appSecurityEnabled) }
+                var appAuthError by remember { mutableStateOf<String?>(null) }
+                val activity = context as? androidx.fragment.app.FragmentActivity
+
+                LaunchedEffect(appSecurityEnabled) {
+                    if (appSecurityEnabled) {
+                        if (activity != null && com.chhanda.ai.util.BiometricAuthenticator.canAuthenticate(context)) {
+                            isAppUnlocked = false
+                            com.chhanda.ai.util.BiometricAuthenticator.authenticate(
+                                activity = activity,
+                                onResult = { success, error ->
+                                    if (success) {
+                                        isAppUnlocked = true
+                                        appAuthError = null
+                                    } else {
+                                        appAuthError = error ?: "Authentication failed"
+                                    }
+                                }
+                            )
+                        } else {
+                            isAppUnlocked = true
+                        }
+                    } else {
+                        isAppUnlocked = true
+                    }
+                }
+
+                if (!isAppUnlocked) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = androidx.compose.ui.Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Secure Gateway",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = appAuthError ?: "Authentication required to access Chhanda AI",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Button(onClick = {
+                                    if (activity != null) {
+                                        com.chhanda.ai.util.BiometricAuthenticator.authenticate(
+                                            activity = activity,
+                                            onResult = { success, error ->
+                                                if (success) {
+                                                    isAppUnlocked = true
+                                                    appAuthError = null
+                                                } else {
+                                                    appAuthError = error ?: "Authentication failed"
+                                                }
+                                            }
+                                        )
+                                    }
+                                }) {
+                                    Text("Unlock Application")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ChhandaApp(vm)
+                }
             }
 
             // PRO FIX: Request ALL Permissions at startup for smooth UX

@@ -218,7 +218,7 @@ class ChhandaServer @Inject constructor(
                     continue
                 }
 
-                val sslConfig = sslCertManager.getSslConfig()
+
                 
                 val environment = io.ktor.server.engine.applicationEngineEnvironment {
                     log = org.slf4j.LoggerFactory.getLogger("ktor.application")

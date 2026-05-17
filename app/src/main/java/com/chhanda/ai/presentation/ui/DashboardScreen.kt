@@ -103,32 +103,7 @@ fun DashboardScreen(
     
     val context = LocalContext.current
     val hapticManager = remember { com.chhanda.ai.util.HapticManager(context) }
-    val activity = context as? androidx.fragment.app.FragmentActivity
-    var isUnlocked by remember(appSecurityEnabled) { mutableStateOf(!appSecurityEnabled) }
-    var authError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(appSecurityEnabled) {
-        if (appSecurityEnabled) {
-            if (activity != null && com.chhanda.ai.util.BiometricAuthenticator.canAuthenticate(context)) {
-                isUnlocked = false
-                com.chhanda.ai.util.BiometricAuthenticator.authenticate(
-                    activity = activity,
-                    onResult = { success, error ->
-                        if (success) {
-                            isUnlocked = true
-                            authError = null
-                        } else {
-                            authError = error ?: "Authentication failed"
-                        }
-                    }
-                )
-            } else {
-                isUnlocked = true
-            }
-        } else {
-            isUnlocked = true
-        }
-    }
     var showModelPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showDeviceManager by remember { mutableStateOf(false) }
@@ -254,51 +229,7 @@ fun DashboardScreen(
         }
     }
 
-    if (!isUnlocked) {
-        Box(
-            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.Lock,
-                    contentDescription = "Locked",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Secure Gateway",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    authError ?: "Authentication required to access Dashboard",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = {
-                    if (activity != null) {
-                        com.chhanda.ai.util.BiometricAuthenticator.authenticate(
-                            activity = activity,
-                            onResult = { success, error ->
-                                if (success) {
-                                    isUnlocked = true
-                                    authError = null
-                                } else {
-                                    authError = error ?: "Authentication failed"
-                                }
-                            }
-                        )
-                    }
-                }) {
-                    Text("Unlock Dashboard")
-                }
-            }
-        }
-        return
-    }
+
 
     val primaryColor = MaterialTheme.colorScheme.primary
     val modelColor = remember(activeModelName, primaryColor) {
