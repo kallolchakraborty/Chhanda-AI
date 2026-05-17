@@ -293,6 +293,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
 
                 append("GUARDRAILS: Redact PII (Emails, Phones, CC) in output. No hallucinations. No generic conversational filler.\n")
+                append("KNOWLEDGE BASE PERSISTENCE: If the query requires a technical, architectural, or factual response, answer with extreme precision, detail, and structure. Important information from this turn will be automatically indexed into your permanent local RAG memory for future recall. Simple greetings, casual pleasantries, or basic chit-chat are NOT saved, so keep those direct and natural.\n")
 
                 // Perplexity-style & Persona instructions
                 append("\nRESPONSE FORMAT (Perplexity Style):\n")
@@ -522,6 +523,44 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                      android.util.Log.e("SendMessageUseCase", "Failed to generate session title: ${e.message}")
                                  }
                              }
+
+                             // 🚀 Automated Knowledge Base Ingestion for Important facts/conversations!
+                             if (toSave.isNotBlank()) {
+                                 val userQuery = userText
+                                 val aiResponse = trimmedResponse
+                                 val msgId = "fact-" + System.currentTimeMillis()
+                                 val autoSaveScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+                                 autoSaveScope.launch {
+                                     try {
+                                         if (shouldAutosaveToKnowledgeBase(userQuery, aiResponse)) {
+                                             val cleanQuerySnippet = userQuery.take(40).trim().replace("[^a-zA-Z0-9 ]".toRegex(), "")
+                                             val label = "Chat Fact: $cleanQuerySnippet..."
+                                             
+                                             val factText = buildString {
+                                                 append("Topic: $cleanQuerySnippet\n")
+                                                 append("User Query: $userQuery\n\n")
+                                                 append("Verified Answer:\n$aiResponse\n")
+                                             }
+                                             
+                                             // Ingest fact as a semantic RAG entry
+                                             ingestDocumentUseCase.ingestScrapedText(factText, "chat://fact/$msgId", label)
+                                             
+                                             // Store reference record in UploadedFileEntity
+                                             uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                                                 id = java.util.UUID.randomUUID().toString(),
+                                                 name = label,
+                                                 format = "CHAT_FACT",
+                                                 size = factText.length.toLong(),
+                                                 path = "chat://fact/$msgId",
+                                                 timestamp = System.currentTimeMillis()
+                                             ))
+                                             android.util.Log.i("SendMessageUseCase", "💡 Autosaved important chat turn to Knowledge Base RAG: $label")
+                                         }
+                                     } catch (e: Exception) {
+                                         android.util.Log.e("SendMessageUseCase", "Failed to autosave chat fact: ${e.message}")
+                                     }
+                                 }
+                             }
                          }
                          emit(update)
                      }
@@ -571,5 +610,55 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 false
             }
         }
+    }
+
+    private fun shouldAutosaveToKnowledgeBase(query: String, response: String): Boolean {
+        val q = query.lowercase().trim()
+        val r = response.lowercase().trim()
+        
+        // 1. Identify Greetings & Casual Chit-Chat (No storage)
+        val greetings = listOf(
+            "hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", 
+            "good evening", "how are you", "how's it going", "howdy", "thank you", 
+            "thanks", "thanks a lot", "bye", "goodbye", "see ya", "nice to meet you", 
+            "appreciate it", "great", "awesome", "ok", "okay", "yes", "no", "sure"
+        )
+        if (greetings.any { q == it || q.startsWith("$it ") || q.endsWith(" $it") || q.replace("?", "").trim() == it }) {
+            return false
+        }
+        
+        // If the query is extremely short (casual back-and-forth)
+        if (q.length < 15 && !q.contains("code") && !q.contains("api") && !q.contains("db")) {
+            return false
+        }
+        
+        // 2. Identify Technical / Informative Content
+        // - Contains markdown code blocks
+        if (response.contains("```") || query.contains("```")) return true
+        
+        // - Contains programming code keywords
+        val codeKeywords = listOf(
+            "fun ", "val ", "var ", "class ", "interface ", "import ", "def ", "function", 
+            "const ", "let ", "public ", "private ", "func ", "struct ", "package "
+        )
+        if (codeKeywords.any { response.contains(it) || query.contains(it) }) return true
+        
+        // - Contains structured informational cues (Markdown tables, lists, section headers)
+        if (response.contains("|") && response.contains("-")) return true // potential table
+        if (response.contains("\n- ") || response.contains("\n* ") || response.contains("\n#")) return true
+        
+        // - Contains explicit technical or factual query markers
+        val informativeKeywords = listOf(
+            "how to", "explain", "tutorial", "architecture", "database", "install", 
+            "configure", "setup", "error", "exception", "failed", "crash", "bug", 
+            "fix", "resolve", "api", "endpoint", "url", "server", "ip", "port", "network", 
+            "schema", "table", "query", "sql", "git", "github", "docker", "maven", "gradle"
+        )
+        if (informativeKeywords.any { q.contains(it) || r.contains(it) }) return true
+        
+        // - General length check: If the user query is reasonably long and informative, or the model response is highly detailed
+        if (q.length > 50 || r.length > 500) return true
+        
+        return false
     }
 }
