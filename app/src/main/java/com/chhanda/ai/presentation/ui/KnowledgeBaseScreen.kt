@@ -565,7 +565,7 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(280.dp)
+            .wrapContentHeight()
             .clip(RoundedCornerShape(32.dp))
             .background(MaterialTheme.colorScheme.surface)
             // Dashed border simulation
@@ -616,19 +616,42 @@ fun UploadRagCard(appLanguage: String, onUpload: () -> Unit, onConnectUrl: () ->
                     Text("Connect URL", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly, 
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "SUPPORTED KNOWLEDGE SOURCES",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.2.sp,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                SupportedTypeItem(Icons.Default.PictureAsPdf, "PDF", Color(0xFFF43F5E))
-                SupportedTypeItem(Icons.Default.Description, "Word", Color(0xFF2563EB))
-                SupportedTypeItem(Icons.Default.TableChart, "Excel", Color(0xFF10B981))
-                SupportedTypeItem(Icons.Default.TextFields, "Text", Color(0xFF6B7280))
-                SupportedTypeItem(Icons.Default.Image, "Image", Color(0xFF8B5CF6))
-                SupportedTypeItem(Icons.Default.Mic, "Audio", Color(0xFFF59E0B))
-                SupportedTypeItem(Icons.Default.Public, "Web", Color(0xFF06B6D4))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SupportedTypeItem(Icons.Default.PictureAsPdf, "PDF", Color(0xFFF43F5E))
+                    SupportedTypeItem(Icons.Default.Description, "Word", Color(0xFF2563EB))
+                    SupportedTypeItem(Icons.Default.TableChart, "Excel", Color(0xFF10B981))
+                    SupportedTypeItem(Icons.Default.Assessment, "CSV", Color(0xFF059669))
+                    SupportedTypeItem(Icons.Default.Settings, "JSON", Color(0xFFD97706))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SupportedTypeItem(Icons.Default.TextFields, "Text", Color(0xFF6B7280))
+                    SupportedTypeItem(Icons.Default.Image, "Image", Color(0xFF8B5CF6))
+                    SupportedTypeItem(Icons.Default.Mic, "Audio", Color(0xFFEA580C))
+                    SupportedTypeItem(Icons.Default.Public, "Web Link", Color(0xFF0D9488))
+                    SupportedTypeItem(Icons.Default.Code, "GitHub", Color(0xFF4F46E5))
+                }
             }
         }
     }
