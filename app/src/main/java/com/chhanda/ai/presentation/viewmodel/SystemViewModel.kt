@@ -237,6 +237,7 @@ class SystemViewModel @Inject constructor(
     }
 
     val darkMode = settingsRepository.darkModeFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val hapticsEnabled = settingsRepository.hapticsEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val hfToken = securityRepository.hfToken.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val serverPort = settingsRepository.serverPortFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "8080")
     val contextLength = settingsRepository.contextLengthFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "2048")
@@ -739,6 +740,13 @@ class SystemViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setDarkMode(enabled)
             addLog("CONFIG", "Dark mode set to $enabled", "INFO")
+        }
+    }
+
+    fun setHapticsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setHapticsEnabled(enabled)
+            addLog("CONFIG", "Haptics set to $enabled", "INFO")
         }
     }
 

@@ -60,6 +60,7 @@ fun ConfigScreen(
     val ragEnabled by viewModel.ragEnabled.collectAsStateWithLifecycle()
     val privacyShieldEnabled by viewModel.privacyShieldEnabled.collectAsStateWithLifecycle()
     val appSecurityEnabled by viewModel.appSecurityEnabled.collectAsStateWithLifecycle()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = context as? androidx.fragment.app.FragmentActivity
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -118,6 +119,24 @@ fun ConfigScreen(
                             Switch(checked = isDark, onCheckedChange = {
                                 hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                                 viewModel.toggleDarkMode(it)
+                            })
+                        }
+                        
+                        Spacer(Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(Localization.getString("haptic_feedback", appLanguage), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(Localization.getString("haptic_feedback_desc", appLanguage), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            }
+                            Switch(checked = hapticsEnabled, onCheckedChange = {
+                                viewModel.setHapticsEnabled(it)
+                                if (it) {
+                                    hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                }
                             })
                         }
                         

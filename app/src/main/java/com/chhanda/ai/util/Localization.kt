@@ -130,7 +130,9 @@ object Localization {
             "export_success" to "Memory exported successfully.",
             "chatgpt_format" to "ChatGPT (conversations.json)",
             "perplexity_format" to "Perplexity (JSON/Text)",
-            "loading_model" to "Initializing Engine..."
+            "loading_model" to "Initializing Engine...",
+            "haptic_feedback" to "Haptic Feedback",
+            "haptic_feedback_desc" to "Enable or disable physical vibration triggers."
         ),
         "Bengali" to mapOf(
             "dashboard" to "মূল পাতা",
@@ -259,7 +261,9 @@ object Localization {
             "export_success" to "মেমোরি সফলভাবে এক্সপোর্ট করা হয়েছে।",
             "chatgpt_format" to "ChatGPT (conversations.json)",
             "perplexity_format" to "Perplexity (JSON/Text)",
-            "loading_model" to "ইঞ্জিন চালু হচ্ছে..."
+            "loading_model" to "ইঞ্জিন চালু হচ্ছে...",
+            "haptic_feedback" to "হ্যাপটিক ফিডব্যাক",
+            "haptic_feedback_desc" to "শারীরিক কম্পন প্রতিক্রিয়া সক্রিয় বা নিষ্ক্রিয় করুন।"
         ),
         "Hindi" to mapOf(
             "dashboard" to "मुख्य",
@@ -388,7 +392,9 @@ object Localization {
             "export_success" to "मेमोरी सफलतापूर्वक निर्यात की गई।",
             "chatgpt_format" to "ChatGPT (conversations.json)",
             "perplexity_format" to "Perplexity (JSON/Text)",
-            "loading_model" to "इंजन चालू हो रहा है..."
+            "loading_model" to "इंजन चालू हो रहा है...",
+            "haptic_feedback" to "हैप्टिक फीडबैक",
+            "haptic_feedback_desc" to "शारीरिक कंपन प्रतिक्रियाओं को सक्षम या अक्षम करें।"
         ),
 
     )

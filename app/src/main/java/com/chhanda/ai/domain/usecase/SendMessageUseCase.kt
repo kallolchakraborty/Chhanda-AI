@@ -6,6 +6,7 @@ import com.chhanda.ai.domain.model.LLMEngine
 import com.chhanda.ai.domain.model.TokenUpdate
 import com.chhanda.ai.domain.model.ContextManager
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 @javax.inject.Singleton
 class SendMessageUseCase @javax.inject.Inject constructor(
@@ -18,9 +19,13 @@ class SendMessageUseCase @javax.inject.Inject constructor(
     private val responseProcessor: com.chhanda.ai.domain.service.ResponseProcessor,
     private val agenticActionHandler: com.chhanda.ai.domain.service.AgenticActionHandler,
     private val webSearchUseCase: com.chhanda.ai.domain.usecase.WebSearchUseCase,
+    private val ingestDocumentUseCaseLazy: dagger.Lazy<com.chhanda.ai.domain.usecase.IngestDocumentUseCase>,
+    private val uploadedFileDaoLazy: dagger.Lazy<com.chhanda.ai.data.repository.UploadedFileDao>,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) {
     private val llmEngine get() = llmEngineLazy.get()
+    private val ingestDocumentUseCase get() = ingestDocumentUseCaseLazy.get()
+    private val uploadedFileDao get() = uploadedFileDaoLazy.get()
     
     operator fun invoke(
         userText: String, 
@@ -98,6 +103,30 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                 }
                             }
                             append("</retrieved_web_knowledge>")
+                        }
+                        
+                        // Ingest the search results to the vector database for later use in the background
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            try {
+                                searchResults.forEach { result ->
+                                    val resultText = "Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}"
+                                    val finalLabel = result.title.ifBlank { result.url }.take(50).trim()
+                                    val existing = uploadedFileDao.findByNameAndSize(finalLabel, resultText.length.toLong())
+                                    if (existing == null) {
+                                        ingestDocumentUseCase.ingestScrapedText(resultText, result.url, finalLabel)
+                                        uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                                            id = java.util.UUID.randomUUID().toString(),
+                                            name = finalLabel,
+                                            format = "WEB_URL",
+                                            size = resultText.length.toLong(),
+                                            path = result.url,
+                                            timestamp = System.currentTimeMillis()
+                                        ))
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("SendMessageUseCase", "Failed to ingest web search results: ${e.message}")
+                            }
                         }
                     }
                 } catch (e: Exception) {

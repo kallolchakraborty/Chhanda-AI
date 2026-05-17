@@ -173,6 +173,19 @@ class ResponseProcessor @Inject constructor(
         val cleanupRegex = """</?(?:thought|think)[^>]*>""".toRegex(RegexOption.IGNORE_CASE)
         cleaned = cleaned.replace(cleanupRegex, "").trim()
 
+        // 1. Remove XML/HTML tags (like <retrieved_web_knowledge>, </retrieved_web_knowledge>, etc)
+        val htmlTagRegex = """<(?!thought|think|/thought|/think|CREATE_FILE|/CREATE_FILE|GENERATE_FILE|/GENERATE_FILE)[^>]+>""".toRegex(RegexOption.IGNORE_CASE)
+        cleaned = cleaned.replace(htmlTagRegex, "").trim()
+
+        // 2. Remove any leftover web search tags directly
+        cleaned = cleaned.replace("""</?retrieved_web_knowledge>""".toRegex(RegexOption.IGNORE_CASE), "")
+
+        // 3. Normalize multiple spaces into single spaces (excluding newlines)
+        cleaned = cleaned.replace("""[ \t]+""".toRegex(), " ")
+
+        // 4. Normalize multiple consecutive newlines (more than 2) into exactly 2 newlines to prevent weird layout spaces
+        cleaned = cleaned.replace("""\n{3,}""".toRegex(), "\n\n")
+
         val prefixesToStrip = listOf("Thinking...", "Thinking:", "Thought:", "Thought...")
         var changed = true
         while (changed) {

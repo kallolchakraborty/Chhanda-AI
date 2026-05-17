@@ -36,6 +36,7 @@ fun ChatInput(
     onVoiceClick: () -> Unit = {},
     appLanguage: String = "English",
     isReadOnly: Boolean = false,
+    hapticsEnabled: Boolean = true,
     topContent: @Composable () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
@@ -91,7 +92,9 @@ fun ChatInput(
                     
                     if (text.isNotEmpty() && !isGenerating) {
                         IconButton(onClick = { 
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (hapticsEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
                             onRefine() 
                         }) {
                             Icon(Icons.Default.AutoAwesome, "Refine", tint = MaterialTheme.colorScheme.secondary)
@@ -99,7 +102,9 @@ fun ChatInput(
                     }
 
                     IconButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (hapticsEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
                         onVoiceClick()
                     }) {
                         Icon(
@@ -113,7 +118,9 @@ fun ChatInput(
             
             IconButton(
                 onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (hapticsEnabled) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
                     if (isGenerating) onStop() else if (text.isNotBlank()) onSend()
                 },
                 modifier = Modifier

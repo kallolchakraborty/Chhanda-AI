@@ -104,6 +104,7 @@ fun MessageBubble(
     tts: android.speech.tts.TextToSpeech?,
     isActiveTts: Boolean = false,
     isGenerating: Boolean = false,
+    hapticsEnabled: Boolean = true,
     onTtsToggle: () -> Unit = {},
     onSourceClick: (String) -> Unit = {}
 ) {
@@ -252,7 +253,9 @@ fun MessageBubble(
                             val context = androidx.compose.ui.platform.LocalContext.current
                             Surface(
                                 onClick = { 
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (hapticsEnabled) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
                                     if (isWeb) {
                                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
                                         context.startActivity(intent)

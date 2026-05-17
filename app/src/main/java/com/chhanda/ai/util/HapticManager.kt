@@ -8,15 +8,49 @@ import android.os.VibratorManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import kotlinx.coroutines.launch
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
+
 @Singleton
 class HapticManager @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository? = null
 ) {
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface HapticEntryPoint {
+        fun settingsRepository(): com.chhanda.ai.data.repository.SettingsRepository
+    }
+
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
     } else {
         @Suppress("DEPRECATION")
         context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    private var isEnabled = true
+
+    init {
+        val repo = settingsRepository ?: try {
+            EntryPointAccessors.fromApplication(
+                context.applicationContext,
+                HapticEntryPoint::class.java
+            ).settingsRepository()
+        } catch (e: Exception) {
+            null
+        }
+
+        if (repo != null) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                repo.hapticsEnabledFlow.collect {
+                    isEnabled = it
+                }
+            }
+        }
     }
 
     enum class HapticPattern {
@@ -29,7 +63,7 @@ class HapticManager @Inject constructor(
     }
 
     fun play(pattern: HapticPattern) {
-        if (vibrator == null || !vibrator.hasVibrator()) return
+        if (!isEnabled || vibrator == null || !vibrator.hasVibrator()) return
 
         val effect = when (pattern) {
             HapticPattern.LIGHT_TICK -> {
@@ -84,7 +118,7 @@ class HapticManager @Inject constructor(
      * Uses a very light effect to avoid annoying the user.
      */
     fun streamingTick() {
-        if (vibrator == null || !vibrator.hasVibrator()) return
+        if (!isEnabled || vibrator == null || !vibrator.hasVibrator()) return
         
         val effect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)

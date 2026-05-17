@@ -45,6 +45,7 @@ fun ChatScreen(
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val systemViewModel: SystemViewModel = hiltViewModel()
     val selectedVoice by systemViewModel.selectedVoice.collectAsStateWithLifecycle()
+    val hapticsEnabled by systemViewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -71,7 +72,9 @@ fun ChatScreen(
 
     LaunchedEffect(voiceError) {
         voiceError?.let {
-            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            if (hapticsEnabled) {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            }
         }
     }
 
@@ -179,7 +182,7 @@ fun ChatScreen(
 
     // Haptic feedback for streaming tokens
     LaunchedEffect(uiState.currentPartialResponse) {
-        if (uiState.currentPartialResponse.isNotEmpty()) {
+        if (uiState.currentPartialResponse.isNotEmpty() && hapticsEnabled) {
             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
         }
     }
@@ -240,6 +243,7 @@ fun ChatScreen(
                         tts = tts,
                         isActiveTts = activeTtsMessageId == message.id.toString(),
                         isGenerating = index == uiState.messages.lastIndex && uiState.isGenerating,
+                        hapticsEnabled = hapticsEnabled,
                         onTtsToggle = {
                             val msgIdStr = message.id.toString()
                             if (activeTtsMessageId == msgIdStr) {
@@ -375,7 +379,8 @@ fun ChatScreen(
                     }
                 },
                 appLanguage = appLanguage,
-                isReadOnly = isReadOnly
+                isReadOnly = isReadOnly,
+                hapticsEnabled = hapticsEnabled
             )
         }
     }

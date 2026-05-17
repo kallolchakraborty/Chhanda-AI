@@ -41,6 +41,7 @@ class SettingsRepository @Inject constructor(
         val PRIVACY_SHIELD_ENABLED = booleanPreferencesKey("privacy_shield_enabled")
         val ACTIVE_MODEL = stringPreferencesKey("active_model")
         val APP_SECURITY_ENABLED = booleanPreferencesKey("app_security_enabled")
+        val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
     }
 
     val darkModeFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -107,9 +108,19 @@ class SettingsRepository @Inject constructor(
         preferences[PreferencesKeys.APP_SECURITY_ENABLED] ?: false
     }
 
+    val hapticsEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.HAPTICS_ENABLED] ?: true
+    }
+
     suspend fun setDarkMode(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.DARK_MODE] = enabled
+        }
+    }
+
+    suspend fun setHapticsEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.HAPTICS_ENABLED] = enabled
         }
     }
 
