@@ -1003,7 +1003,7 @@ fun DashboardScreen(
                                     Spacer(Modifier.width(16.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            model.name, 
+                                            formatModelDisplayName(model.name), 
                                             fontWeight = FontWeight.Bold, 
                                             color = MaterialTheme.colorScheme.onSurface
                                         )

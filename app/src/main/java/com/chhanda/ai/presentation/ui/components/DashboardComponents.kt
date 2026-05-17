@@ -276,7 +276,7 @@ private fun ActiveModelContent(
                 )
                 with(sharedTransitionScope) {
                     Text(
-                        if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else modelName, 
+                        if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else formatModelDisplayName(modelName), 
                         color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
                         fontSize = 20.sp, 
                         fontWeight = FontWeight.Black,

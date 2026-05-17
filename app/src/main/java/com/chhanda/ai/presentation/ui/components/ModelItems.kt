@@ -57,7 +57,7 @@ fun LocalModelItem(
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(formatModelDisplayName(model.name), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     if (model.isMultimodal) {
                         Spacer(Modifier.width(8.dp))
                         Surface(
@@ -220,7 +220,7 @@ fun DownloadableModelItem(
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(formatModelDisplayName(model.name), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         if (model.isMultimodal) {
                             Spacer(Modifier.width(8.dp))
                             Surface(
@@ -403,4 +403,27 @@ fun DownloadableModelItem(
             }
         }
     }
+}
+
+fun formatModelDisplayName(name: String): String {
+    if (name.equals("No Active Model", ignoreCase = true)) return name
+    
+    // 1. Strip extensions (.litertlm, .bin, .gguf)
+    val nameWithoutExt = name.substringBeforeLast('.')
+    
+    // 2. Beautiful default mappings for known models
+    if (nameWithoutExt.contains("Gemma-4-E2B-IT", ignoreCase = true) || nameWithoutExt.contains("gemma-4-E2B-it", ignoreCase = true)) {
+        return "Gemma-4 E2B IT"
+    }
+    if (nameWithoutExt.contains("Gemma-4-E4B-IT", ignoreCase = true) || nameWithoutExt.contains("gemma-4-E4B-it", ignoreCase = true)) {
+        return "Gemma-4 E4B IT"
+    }
+
+    // 3. Otherwise clean up hyphens and underscores
+    return nameWithoutExt
+        .replace("-", " ")
+        .replace("_", " ")
+        .split(" ")
+        .filter { it.isNotEmpty() }
+        .joinToString(" ") { it.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase() else char.toString() } }
 }
