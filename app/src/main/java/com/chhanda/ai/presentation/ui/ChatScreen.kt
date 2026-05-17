@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.chhanda.ai.presentation.ui.chat.components.*
 import com.chhanda.ai.presentation.ui.components.ChhandaLogo
+import com.chhanda.ai.presentation.ui.components.formatModelDisplayName
 import com.chhanda.ai.presentation.viewmodel.ChatViewModel
 import com.chhanda.ai.presentation.viewmodel.SystemViewModel
 import com.chhanda.ai.util.Localization
@@ -186,14 +187,23 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                ),
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         with(sharedTransitionScope) {
-                            ChhandaLogo(size = 32, modifier = Modifier.sharedElement(sharedTransitionScope.rememberSharedContentState(key = "model_logo_${viewModel.modelName}"), animatedVisibilityScope = animatedVisibilityScope))
+                            ChhandaLogo(size = 28, modifier = Modifier.sharedElement(sharedTransitionScope.rememberSharedContentState(key = "model_logo_${viewModel.modelName}"), animatedVisibilityScope = animatedVisibilityScope))
                         }
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(10.dp))
                         with(sharedTransitionScope) {
-                            Text(viewModel.modelName, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge, modifier = Modifier.sharedElement(sharedTransitionScope.rememberSharedContentState(key = "model_name_${viewModel.modelName}"), animatedVisibilityScope = animatedVisibilityScope)) 
+                            Text(
+                                formatModelDisplayName(viewModel.modelName), 
+                                fontWeight = FontWeight.ExtraBold, 
+                                fontSize = 18.sp, 
+                                modifier = Modifier.sharedElement(sharedTransitionScope.rememberSharedContentState(key = "model_name_${viewModel.modelName}"), animatedVisibilityScope = animatedVisibilityScope)
+                            ) 
                         }
                     }
                 },

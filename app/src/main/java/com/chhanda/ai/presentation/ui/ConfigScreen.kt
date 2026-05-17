@@ -72,14 +72,18 @@ fun ConfigScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                ),
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
-                            ChhandaLogo(size = 32)
+                            ChhandaLogo(size = 28)
                         }
 
-                        Spacer(Modifier.width(12.dp))
-                        Text(Localization.getString("settings", appLanguage), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(10.dp))
+                        Text(Localization.getString("settings", appLanguage), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
             )

@@ -319,14 +319,18 @@ fun DashboardScreen(
             containerColor = Color.Transparent,
             topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                ),
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ChhandaLogo(size = 32)
+                        ChhandaLogo(size = 28)
 
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(10.dp))
                         Text(
                             "Chhanda", 
-                            fontSize = 20.sp, 
+                            fontSize = 18.sp, 
                             fontWeight = FontWeight.ExtraBold, 
                             color = MaterialTheme.colorScheme.onSurface
                         )
