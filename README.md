@@ -1,6 +1,9 @@
 # Chhanda (ছন্দ) — The AI Gateway
 
 <div align="center">
+  <img src="Presentation/chhanda_card_thumbnail.png" width="560" alt="Chhanda AI Gateway Logo" />
+  <br/>
+  <br/>
   <h3>100% Offline · Privacy-First · Production-Hardened AI & RAG Ecosystem for Android</h3>
   <p><i>Solo-developed by <b>Kallol Chakraborty</b> | Dedicated to my beloved mother, <b>Chhanda Chakraborty</b>.</i></p>
   <br/>
