@@ -320,6 +320,7 @@ class ChhandaServer @Inject constructor(
             try {
                 val jsch = com.jcraft.jsch.JSch()
                 val session = jsch.getSession("nokey", "localhost.run", 22)
+                tunnelSession = session
                 val config = java.util.Properties()
                 config["StrictHostKeyChecking"] = "no"
                 session.setConfig(config)
@@ -341,11 +342,12 @@ class ChhandaServer @Inject constructor(
                         }
                     }
                 }
-                tunnelSession = session
                 while(session.isConnected) { Thread.sleep(5000) }
             } catch (e: Exception) {
                 tunnelActive = false
                 cachedPublicUrl = ""
+                try { tunnelSession?.disconnect() } catch (_: Exception) {}
+                tunnelSession = null
             }
         }.apply { name = "TunnelThread"; isDaemon = true }.start()
     }

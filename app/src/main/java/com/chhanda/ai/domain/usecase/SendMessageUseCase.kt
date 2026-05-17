@@ -54,17 +54,54 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
-            var currentHistorySize = 0
+            // Dynamic Token/Character Budget Allocation System to prevent prompt bloat and engine JNI crashes
             val ctxLen = settingsRepository.contextLengthFlow.firstOrNull()?.toIntOrNull() ?: 2048
-            val charBudget = (ctxLen * 3.5).toInt() 
+            // Total prompt character budget (reserving 512 tokens for model output generation)
+            val promptCharBudget = ((ctxLen - 512).coerceAtLeast(1024) * 3.5).toInt()
             
-            val prunedHistory = (externalHistory ?: dbHistory).takeLast(10).filter {
-                currentHistorySize += it.second.length
-                currentHistorySize < charBudget
+            // Allocate shares of promptCharBudget
+            val systemReserved = 1800
+            val remainingBudget = (promptCharBudget - systemReserved).coerceAtLeast(1500)
+            
+            // 1. Cap Current User Message (max 1200 characters)
+            val userTextLimit = (remainingBudget * 0.25).toInt().coerceAtMost(1200).coerceAtLeast(500)
+            val sanitizedUserText = com.chhanda.ai.util.SafetyGuardrails.sanitizeInput(userText)
+            val cappedUserText = if (sanitizedUserText.length > userTextLimit) {
+                sanitizedUserText.take(userTextLimit) + "... [truncated due to context limits]"
+            } else {
+                sanitizedUserText
             }
 
-            val longTermContext = if (ragEnabled) longTermContextRaw else ""
-            val history = prunedHistory
+            // 2. Cap Augmented Contexts (RAG, Web, Attachments)
+            val contextBudget = (remainingBudget * 0.45).toInt().coerceAtLeast(1000)
+            val singleContextLimit = (contextBudget / 3).coerceAtLeast(400)
+
+            // Process RAG long-term context
+            val longTermContext = if (ragEnabled && longTermContextRaw.isNotBlank()) {
+                val sourceSegments = longTermContextRaw
+                    .substringAfter("<retrieved_knowledge>\n")
+                    .substringBefore("</retrieved_knowledge>")
+                    .split("\n\n")
+                    .filter { it.isNotBlank() }
+                
+                if (sourceSegments.isNotEmpty()) {
+                    buildString {
+                        append("<retrieved_knowledge>\n")
+                        sourceSegments.take(3).forEach { segment ->
+                            val lines = segment.trim().lines()
+                            val header = lines.firstOrNull() ?: ""
+                            val content = lines.drop(1).joinToString("\n")
+                            val cappedContent = if (content.length > singleContextLimit) {
+                                content.take(singleContextLimit) + "... [truncated]"
+                            } else {
+                                content
+                            }
+                            append("$header\n$cappedContent\n\n")
+                        }
+                        append("</retrieved_knowledge>")
+                    }
+                } else ""
+            } else ""
 
             var hasDbKnowledge = longTermContext.isNotBlank()
             var hasAttachmentKnowledge = false 
@@ -74,7 +111,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             var webContext = ""
             val retrievedSourcesList = mutableListOf<String>()
 
-            // 1. Gather any sources from local database context
+            // Gather any sources from local database context
             if (hasDbKnowledge) {
                 val sourceRegex = """\[Source #\d+:\s*(.*?)\]""".toRegex()
                 sourceRegex.findAll(longTermContext).forEach { match ->
@@ -85,7 +122,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
             }
 
-            // 2. Perform web search if local database is empty and RAG is enabled
+            // Perform web search if local database is empty and RAG is enabled
             if (ragEnabled && !hasDbKnowledge) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches. Searching the web..."))
                 try {
@@ -94,14 +131,20 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         hasWebKnowledge = true
                         webContext = buildString {
                             append("<retrieved_web_knowledge>\n")
-                            searchResults.forEachIndexed { index, result ->
-                                append("[Source #$index: ${result.title}]\n")
-                                append("URL: ${result.url}\n")
-                                append("Content: ${result.snippet}\n\n")
+                            searchResults.take(3).forEachIndexed { index, result ->
                                 val combinedSource = "${result.title}|${result.url}"
                                 if (!retrievedSourcesList.contains(combinedSource)) {
                                     retrievedSourcesList.add(combinedSource)
                                 }
+                                val rawSnippet = result.snippet
+                                val cappedSnippet = if (rawSnippet.length > singleContextLimit) {
+                                    rawSnippet.take(singleContextLimit) + "... [truncated]"
+                                } else {
+                                    rawSnippet
+                                }
+                                append("[Source #$index: ${result.title}]\n")
+                                append("URL: ${result.url}\n")
+                                append("Content: $cappedSnippet\n\n")
                             }
                             append("</retrieved_web_knowledge>")
                         }
@@ -148,6 +191,15 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 attachmentPaths = attachmentPathsString
             ))
 
+            // 3. Process conversation history (cap at historyBudget)
+            val historyBudget = (remainingBudget * 0.30).toInt().coerceAtLeast(800)
+            var currentHistorySize = 0
+            val prunedHistory = (externalHistory ?: dbHistory).takeLast(4).filter {
+                currentHistorySize += it.second.length
+                currentHistorySize < historyBudget
+            }
+            val history = prunedHistory
+
             if (history.isEmpty()) {
                 llmEngine.resetSession(sessionId)
             }
@@ -158,16 +210,19 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 return@flow
             }
 
-            val sanitizedUserText = com.chhanda.ai.util.SafetyGuardrails.sanitizeInput(userText)
-            
             if (attachments.isNotEmpty()) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Processing ${attachments.size} attachments..."))
             }
-            val attachmentContext = turnContextIngestor.processTurnContext(userText, attachments)
-            if (attachmentContext.isNotBlank()) {
+            val attachmentContextRaw = turnContextIngestor.processTurnContext(userText, attachments)
+            val attachmentContext = if (attachmentContextRaw.isNotBlank()) {
                 hasAttachmentKnowledge = true
                 isContextFound = true
-            }
+                if (attachmentContextRaw.length > singleContextLimit) {
+                    attachmentContextRaw.take(singleContextLimit) + "... [truncated]"
+                } else {
+                    attachmentContextRaw
+                }
+            } else ""
 
             val isApiRequest = source.lowercase() == "api"
 
@@ -299,13 +354,13 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         append(webContext)
                         append("\n\n")
                     }
-                    append(sanitizedUserText)
+                    append(cappedUserText)
                 }
 
                 Triple(apiPrompt, history, systemInstruction)
             } else {
                 val promptText = if (attachmentContext.isBlank() && longTermContext.isBlank() && webContext.isBlank()) {
-                    sanitizedUserText
+                    cappedUserText
                 } else {
                     buildString {
                         if (attachmentContext.isNotBlank()) {
@@ -324,7 +379,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                             append("\n\n")
                         }
                         append("User Question: ")
-                        append(sanitizedUserText)
+                        append(cappedUserText)
                     }
                 }
                 Triple(promptText, history, systemInstruction)

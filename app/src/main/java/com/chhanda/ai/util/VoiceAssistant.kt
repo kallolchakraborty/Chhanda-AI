@@ -30,15 +30,17 @@ class VoiceAssistant(private val context: Context) {
     val error = _error.asStateFlow()
 
     fun startListening(language: String = "en-US") {
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            _error.value = "Speech recognition not available on this device"
-            return
-        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                _error.value = "Speech recognition not available on this device"
+                return@post
+            }
 
-        stopListening() // Reset any previous session
+            stopListening() // Reset any previous session on main thread
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(object : RecognitionListener {
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            speechRecognizer = recognizer
+            recognizer.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
                     _isListening.value = true
                     _error.value = null
@@ -81,33 +83,40 @@ class VoiceAssistant(private val context: Context) {
 
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
-        }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            // Force on-device if possible (API 31+)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                // Force on-device if possible (API 31+)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                }
             }
-        }
 
-        try {
-            hapticManager.play(HapticManager.HapticPattern.HEAVY_CLICK)
-            speechRecognizer?.startListening(intent)
-        } catch (e: Exception) {
-            _error.value = "Failed to start recognizer: ${e.message}"
-            _isListening.value = false
+            try {
+                hapticManager.play(HapticManager.HapticPattern.HEAVY_CLICK)
+                recognizer.startListening(intent)
+            } catch (e: Exception) {
+                _error.value = "Failed to start recognizer: ${e.message}"
+                _isListening.value = false
+            }
         }
     }
 
     fun stopListening() {
-        hapticManager.play(HapticManager.HapticPattern.LIGHT_TICK)
-        speechRecognizer?.stopListening()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
-        _isListening.value = false
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                hapticManager.play(HapticManager.HapticPattern.LIGHT_TICK)
+                speechRecognizer?.stopListening()
+                speechRecognizer?.destroy()
+            } catch (e: Exception) {
+                Log.w("VoiceAssistant", "Failed to stop/destroy SpeechRecognizer cleanly: ${e.message}")
+            } finally {
+                speechRecognizer = null
+                _isListening.value = false
+            }
+        }
     }
     
     fun clearResults() {

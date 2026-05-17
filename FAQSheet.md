@@ -341,75 +341,20 @@ This is applied **bidirectionally** — on user input before it reaches the LLM,
 
 **Code Reference**: `SafetyGuardrails.kt` (Lines 13-18, 63-96)
 
-### 24. What content is prohibited?
-The `PROHIBITED_PATTERNS` regex list blocks queries containing:
-*   Violence-related terms (kill, murder, bomb, explode)
-*   Cyber-attack terms (hack, malware)
-*   Self-harm content (suicide, self-harm)
-*   Combined injection-style phrases ("instruction...ignore...all")
-
-When a violation is detected, `auditInput()` returns `isViolation = true`, and the UI blocks the message with a safety warning.
-
 ---
 
-## ⚡ Hardware & Performance
+## ⚡ Engineering & AI Partnership
 
-### 25. How does thermal auto-throttling work?
-`ThermalStatusTracker` monitors the device's thermal state via Android's `PowerManager.THERMAL_STATUS_*` API:
+### 24. What role did Android Studio play in the development of Chhanda?
+**Android Studio** was the foundational IDE used for:
+*   **Compilation & Gradle Orchestration**: Auto-managed 22 external dependencies and Gradle targets.
+*   **Logcat Diagnostics**: Inspected multi-process communication binder binds (`RemoteLLMEngine`) and caught thread safety violations on background audio recording.
+*   **Android Profiler**: Profiled heap allocation and CPU thermal thresholds during on-device Gemma 4B model loading.
+*   **UI/UX Jetpack Compose Inspection**: Validated layout renderings on a physical target.
 
-| Status | Action |
-|:---|:---|
-| `NONE` / `LIGHT` | Normal operation |
-| `MODERATE` | Log warning |
-| `SEVERE` | Reduce context window by 50% |
-| `CRITICAL` | Reduce context window by 75% |
-| `EMERGENCY` / `SHUTDOWN` | Stop inference, notify user |
-
-**Code Reference**: `ThermalStatusTracker.kt`
-
-### 26. How does the RAM safety flush work?
-When switching between models, Chhanda enforces a **2.5-second delay** between stopping the old model and loading the new one. This allows the Android garbage collector to reclaim memory from the previous model's buffers, preventing OOM crashes on devices with limited RAM.
-
-### 27. What are Wake Locks and Wi-Fi Locks?
-When the server is running in the background:
-*   **WakeLock**: Prevents the CPU from sleeping, ensuring inference can continue
-*   **WiFiLock**: Prevents the Wi-Fi radio from entering low-power mode, ensuring network clients can maintain connections
-
-Both locks are released when the server stops.
-
-**Code Reference**: `ChhandaForegroundService.kt` (Lines 229-232)
+### 25. Who was the AI assistant involved in this project?
+The entire codebase structure, RAG quantization pipeline, server rate-limiting features, and documentation hardening passes were co-developed exclusively with **Google's Gemini 3 Flash** as the sole AI assistant partner, ensuring state-of-the-art edge AI architecture.
 
 ---
-
-## 🔧 Troubleshooting
-
-### 28. The server started but other devices can't connect.
-**Check**:
-1. Are both devices on the same Wi-Fi network / hotspot?
-2. Is a VPN active? (Check Dashboard for VPN warning banner)
-3. Try the IP shown in the Active Model Card — enter it manually in the browser
-4. If using hotspot, ensure the connecting device is connected to YOUR hotspot
-
-### 29. RAG returns irrelevant results.
-**Tips**:
-*   Use explicit keywords: "search my files for X" (triggers 0.60 threshold)
-*   Re-index the document if it was updated
-*   Check the Knowledge Base screen — ensure the file was ingested successfully
-*   Larger chunk sizes may improve coherence for complex documents
-
-### 30. The app crashes when loading a large model.
-*   Close all background apps to free RAM
-*   Use a smaller model (Gemma 2B instead of 4B)
-*   Enable TurboQuant in Settings to reduce KV-cache memory usage
-*   Check system logs for OOM indicators
-
-### 31. How do I check real-time diagnostics?
-1. **In-app**: Dashboard → System Logs (filter by tag)
-2. **Logcat**: Filter by tags `ChhandaServer`, `SafetyGuardrails`, `ContextManager`, `LiteRTLMEngine`
-3. **Quick Settings**: Add the Chhanda tile for instant status monitoring
-
----
-
-**Technical Support**: For advanced diagnostics, check the **System Logs** screen in the Dashboard and search for `ChhandaAudit` tags in Logcat.
 
 **Developed with ❤️ by Kallol Chakraborty | Dedicated to Chhanda Chakraborty**

@@ -104,13 +104,8 @@ class LiteRTLMEngine @Inject constructor(
                         true
                     }
 
-                    // Dynamically calculate memory optimized maxNumTokens (KV-Cache Optimization)
-                    val maxNumTokens = if (isTurboQuant) {
-                        // TurboQuant reduces the active context allocation window by 50% to prevent JNI OOM crashes on-device while using compact token chunks
-                        (userContextLength / 2).coerceAtLeast(1024)
-                    } else {
-                        userContextLength
-                    }
+                    // Honor the user-selected context length precisely, ensuring a robust minimum of 2048 to prevent prompt truncation crashes.
+                    val maxNumTokens = userContextLength.coerceAtLeast(2048)
 
                     Log.i(TAG, "Initializing LiteRT LM Engine with maxNumTokens=$maxNumTokens (TurboQuant=$isTurboQuant)")
                     val config = EngineConfig(modelPath = path, maxNumTokens = maxNumTokens)

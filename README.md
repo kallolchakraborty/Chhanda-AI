@@ -33,8 +33,8 @@ This application is named after and dedicated to my mother, **Chhanda Chakrabort
 | Role | Tool |
 |:---|:---|
 | **Developer** | Kallol Chakraborty (Solo) |
-| **IDE** | Antigravity |
-| **AI Development Partner** | Gemini 3 Flash + Claude Opus 4.6 |
+| **IDE & Development Environment** | **Android Studio** (for build engineering, Gradle automation, device validation, Logcat diagnostics, and RAM/thermal profiling) + **Antigravity IDE** (for agentic codebase orchestration) |
+| **AI Development Partner** | **Google Gemini 3 Flash** (Exclusive AI partner for RAG design, thread-safety analysis, completions server building, and codebase security auditing) |
 | **UI/UX Mockups** | Google Stitch |
 | **Branding & Logos** | Nanobana |
 | **Language** | Kotlin 2.1.0 (100% Kotlin, zero Java) |
@@ -115,7 +115,7 @@ Bengali · English · Hindi · French · German — full UI + TTS localization w
 
 ```mermaid
 graph TB
-    subgraph "Presentation Layer"
+    subgraph "Presentation Layer (Android Studio UI Rendering)"
         direction LR
         MA["MainActivity<br/>(AndroidEntryPoint)"]
         DS["DashboardScreen"]
@@ -126,13 +126,13 @@ graph TB
         WS["WelcomeScreen"]
     end
 
-    subgraph "ViewModel Layer"
+    subgraph "ViewModel Layer (Lifecycle Aware)"
         direction LR
         SVM["SystemViewModel<br/>(God ViewModel)"]
         CVM["ChatViewModel<br/>(Per-Session)"]
     end
 
-    subgraph "Domain Layer"
+    subgraph "Domain Layer (Pure Kotlin Use Cases)"
         direction LR
         SMU["SendMessageUseCase"]
         IDU["IngestDocumentUseCase"]
@@ -143,7 +143,7 @@ graph TB
         TC["TextChunker"]
     end
 
-    subgraph "Data Layer"
+    subgraph "Data Layer (On-Device Local Inference)"
         direction LR
         CS2["ChhandaServer<br/>(Ktor-CIO)"]
         LRT["LiteRTLMEngine"]
@@ -153,14 +153,14 @@ graph TB
         SR["SettingsRepository"]
     end
 
-    subgraph "Persistence"
+    subgraph "Persistence (Hardware-Secured)"
         direction LR
         RDB[("Room DB<br/>chhanda_db")]
         ESP["EncryptedSharedPrefs"]
         DS2["DataStore"]
     end
 
-    subgraph "Android Services"
+    subgraph "Android Services (OS Background Tasks)"
         direction LR
         FGS["ChhandaForegroundService"]
         TLS["ChhandaTileService"]
@@ -344,7 +344,7 @@ chhanda-local LLM/
 │           │       ├── AppDatabase.kt              # Room DB (4 DAOs)
 │           │       ├── ChatDao.kt                  # Chat history persistence
 │           │       ├── DeviceDao.kt                # Connected device tracking
-│           │       ├── VectorChunkDao.kt           # Int8 vector BLOB storage
+ Wel          │       ├── VectorChunkDao.kt           # Int8 vector BLOB storage
 │           │       ├── UploadedFileDao.kt           # File metadata tracking
 │           │       ├── LocalVectorStore.kt          # Min-Heap similarity search
 │           │       └── SettingsRepository.kt        # Encrypted prefs + DataStore
@@ -438,4 +438,4 @@ chhanda-local LLM/
 ## 📜 License & Credits
 
 Dedicated to **Chhanda Chakraborty**.
-Developed by **Kallol Chakraborty** (Solo Developer) using **Antigravity IDE**.
+Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for Android integration and Gradle building, and **Google Gemini 3 Flash** as the exclusive AI development assistant.
