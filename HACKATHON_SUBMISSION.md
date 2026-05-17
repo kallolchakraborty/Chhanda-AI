@@ -322,12 +322,15 @@ graph TD
 
     B1 -->|HTTP| KTOR
     B2 -->|HTTP + X-API-Key| KTOR
-    B3 -->|mDNS| NSD --> KTOR
+    B3 -->|mDNS| NSD
+    NSD --> KTOR
     TUNNEL -.->|Reverse SSH| KTOR
 
-    KTOR --> AUTH --> RATE --> SEM
+    KTOR --> AUTH
+    AUTH --> RATE
+    RATE --> SEM
     SEM --> LLM2
-    LLM2 <--> RAG2
+    LLM2 --> RAG2
     THERM -.->|Context Reduction| LLM2
     FGS3 --> KTOR
     TILE2 -.->|isServerActive()| FGS3
