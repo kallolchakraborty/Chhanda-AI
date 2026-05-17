@@ -76,7 +76,10 @@ class IngestionManager @Inject constructor(
                         return@forEachIndexed
                     }
 
-                    ingestDocumentUseCase(uri, docType)
+                    val baseProgress = index.toFloat() / uris.size
+                    ingestDocumentUseCase(uri, docType) { fileProgress ->
+                        _ingestionProgress.value = baseProgress + (fileProgress / uris.size)
+                    }
                     
                     uploadedFileDao.insertFile(UploadedFileEntity(
                         id = UUID.randomUUID().toString(),
