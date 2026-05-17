@@ -394,7 +394,9 @@ class ChhandaServer @Inject constructor(
                         false
                     } else {
                         // Secure remote verification: remote hosts (not loopback) must have scanned the QR code
-                        if (!isLoopback(remoteHost) && !authorizedQrIps.contains(remoteHost)) {
+                        // However, exempt standard programmatic API endpoints (/v1/*) where clients supply the API key directly.
+                        val isApiEndpoint = call.request.path().startsWith("/v1/")
+                        if (!isApiEndpoint && !isLoopback(remoteHost) && !authorizedQrIps.contains(remoteHost)) {
                             call.respond(io.ktor.http.HttpStatusCode.Forbidden, mapOf("error" to "Forbidden: Device not authorized via QR code scan."))
                             false
                         } else true
