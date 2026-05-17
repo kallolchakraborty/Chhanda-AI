@@ -125,6 +125,7 @@ English · Hindi · Bengali — full UI + TTS localization with voice persona sy
 | **HF Authenticated Downloader** | Prompts for a HuggingFace Read-Only API token on download failure, safely storing it inside Android KeyStore Encrypted SharedPreferences for subsequent runs. |
 | **Google Drive Cloud Sync** | Auto-syncs chats offline-to-online daily by default. Supports user configurations (custom schedules, no sync, Google account binding check). |
 | **Hot Model Swapping & Reload** | Swaps active running models directly from the active card. Automatically stops the server, tears down the C++ engine instance, swaps models, and starts back online with zero manual restarts. |
+| **Internet Search Toggle Switch** | A premium Material 3 configuration switch enabling users to completely turn off the LLM's external web search/scraping fallback. When disabled, the system operates as a 100% offline local brain, bypassing any internet calls with real-time status banners. |
 
 ---
 
@@ -456,6 +457,7 @@ chhanda-local LLM/
 | **Few-Shot Prompt Learning** | ❌ | ✅ User bubble feedback loop with real-time prompt injects |
 | **In-Context Read-Only Sessions**| ❌ | ✅ Server-aware security layer for reading session histories |
 | **Offline Hotspot Discovery** | ❌ | ✅ Automated tether settings launcher & join validation |
+| **Internet Search Toggle** | ❌ | ✅ Premium UI toggle to enable/disable external web query fallback |
 
 ---
 

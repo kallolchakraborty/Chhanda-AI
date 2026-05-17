@@ -347,6 +347,12 @@ Augmented: "quantum computing research Tell me more about it"
 2. **HF Authenticated Downloader**: Seamless retry-gate where downloading models failing normally prompts for a HuggingFace read-only token, encrypting and storing it inside Android KeyStore Encrypted SharedPreferences.
 *   **Code Reference**: `SettingsRepository.kt`, `DownloadWorker.kt`, `ConfigScreen.kt`.
 
+### Innovation 10: Internet Search Capability Settings Toggle
+**The Problem**: Users want complete cloud disconnection and absolute control over their local model's external network footprint. RAG platforms often silently ping external web crawlers, breaking zero-cloud compliance.
+
+**The Solution**: Developed a premium Material 3 configuration switch directly controlling the LLM's fallback web-search scraping logic. When toggled "OFF", all Jsoup and query fallbacks are completely bypassed in the domain layer, keeping all data flows 100% locally contained.
+*   **Code Reference**: `ConfigScreen.kt` (UI preference switch), `SendMessageUseCase.kt` (conditional execution guarding).
+
 ---
 
 ## 🌟 Social Impact: "Gemma 4 Good"

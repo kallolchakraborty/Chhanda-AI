@@ -126,6 +126,7 @@ This document outlines the architectural, security, and performance refinements 
     - [x] Add **Multi-Modal Support** (Vision) for image analysis (Llava/Moondream).
     - [x] Implement **Encrypted Cloud Sync** (Google Drive) for cross-device history.
 - [x] Implement **Automated Database Migrations** (Room AutoMigrations).
+- [x] Implement **Internet Search Capability Toggle** (Material 3 setting with persistent storage & domain guarding).
 
 ---
 

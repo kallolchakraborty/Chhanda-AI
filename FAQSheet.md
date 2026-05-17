@@ -405,18 +405,24 @@ This is applied **bidirectionally** — on user input before it reaches the LLM,
   * **High-End (>= 8GB RAM)**: Default 4,096 tokens (up to 32,768).
 * This guarantees that devices automatically bootstrap themselves with safe inference sizes.
 
+### 30. How does the Internet Search Capability Toggle enforce zero-cloud privacy?
+**Domain-Level Guarding.** 
+* When the "Internet Search Capability" switch in Settings is disabled, Chhanda completely bypasses the external web scraper and query expansion pipeline.
+* Even if the device has an active internet connection, no web scraping network requests are initiated.
+* The domain-layer orchestrator (`SendMessageUseCase`) forces all inferences directly down the pre-trained path, displaying an instant offline status banner to the user to guarantee 100% disconnected data safety.
+
 ---
 
 ## ⚡ Engineering & AI Partnership
 
-### 30. What role did Android Studio play in the development of Chhanda?
+### 31. What role did Android Studio play in the development of Chhanda?
 **Android Studio** was the foundational IDE used for:
 *   **Compilation & Gradle Orchestration**: Auto-managed 22 external dependencies and Gradle targets.
 *   **Logcat Diagnostics**: Inspected multi-process communication binder binds (`RemoteLLMEngine`) and caught thread safety violations on background audio recording.
 *   **Android Profiler**: Profiled heap allocation and CPU thermal thresholds during on-device Gemma 4B model loading.
 *   **UI/UX Jetpack Compose Inspection**: Validated layout renderings on a physical target.
 
-### 31. Who was the AI assistant involved in this project?
+### 32. Who was the AI assistant involved in this project?
 The entire codebase structure, RAG quantization pipeline, server rate-limiting features, and documentation hardening passes were co-developed exclusively with **Google's Gemini 3 Flash** as the sole AI assistant partner, ensuring state-of-the-art edge AI architecture.
 
 ---

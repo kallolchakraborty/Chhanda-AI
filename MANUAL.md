@@ -386,14 +386,24 @@ If a VPN is detected (TUN/PPP/IPSec interface), a warning banner appears on the 
 | **Max Devices** | 1–20 | Maximum simultaneous client connections |
 | **Vector Database (RAG)** | Toggle | Enable/disable the entire RAG pipeline |
 | **DB Capacity** | Auto-calculated | 1 GB min, up to 15% of free storage |
+| **Internet Search Capability** | Toggle | Enable or completely disable the external Google Web Search fallback querying pipeline |
 
-### 7.3 Auto-Delete Settings
+### 7.3 Fallback Web Search Logic
+
+The **Internet Search Capability** toggle provides complete digital sovereignty. When enabled:
+* If a query yields poor similarity matches in the local RAG knowledge base, Chhanda attempts to query Google Search dynamically to augment its response.
+* This operates purely on an online connection. If the device goes offline, search transitions gracefully back to pre-trained parameters.
+
+When disabled:
+* Chhanda acts as a **100% disconnected local bubble**, completely ignoring the web scraper regardless of your internet connection or search queries. Any fallback triggers pre-trained parameters with immediate notification banners on the screen.
+
+### 7.4 Auto-Delete Settings
 | Setting | Options | Effect |
 |:---|:---|:---|
 | **Auto Delete** | Toggle | Enable automatic cleanup of old RAG data |
 | **Delete After** | 1–30 days | Files older than this threshold are purged |
 
-### 7.4 Security
+### 7.5 Security
 | Setting | Details |
 |:---|:---|
 | **API Key** | Auto-generated `CH-XXXXXXXX` format; copy, regenerate, or set custom |
