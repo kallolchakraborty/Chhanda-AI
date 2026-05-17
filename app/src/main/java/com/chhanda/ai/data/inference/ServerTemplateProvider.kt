@@ -369,80 +369,121 @@ function toggleDislike(btn) {
   }
 }
 
-function md(src){
-src=src.replace(/\r\n/g,'\n');
-const occurrences = (src.match(/```/g) || []).length;
-if (occurrences % 2 !== 0) {
-  src += '\n```';
-}
-src=src.replace(/```(\w*)\n([\s\S]*?)```/g,function(_,lang,code){
-const l=lang||'code';
-return '<div class="cb-wrap"><div class="cb-hdr"><span>'+esc(l)+'</span><button onclick="cpCode(this)">Copy</button></div><pre><code>'+esc(code.replace(/\n$/,''))+'</code></pre></div>';
-});
-const lines=src.split('\n');let html='',inUl=false,inOl=false,inBq=false,inP=false,inTable=false,tableRows=[];
-function closeAll(){
-if(inUl){html+='</ul>';inUl=false}
-if(inOl){html+='</ol>';inOl=false}
-if(inBq){html+='</blockquote>';inBq=false}
-if(inP){html+='</p>';inP=false}
-if(inTable){html+=buildTable(tableRows);tableRows=[];inTable=false}
-}
-function buildTable(rows){
-if(!rows.length)return'';
-let t='<table>';
-const hdr=rows[0];
-t+='<tr>'+hdr.map(c=>'<th>'+inline(c.trim())+'</th>').join('')+'</tr>';
-for(let i=2;i<rows.length;i++){
-t+='<tr>'+rows[i].map(c=>'<td>'+inline(c.trim())+'</td>').join('')+'</tr>';
-}
-return t+'</table>';
-}
-function inline(s){
-s=esc(s);
-s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
-s=s.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
-s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-s=s.replace(/__(.+?)__/g,'<strong>$1</strong>');
-s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');
-s=s.replace(/_(.+?)_/g,'<em>$1</em>');
-s=s.replace(/~~(.+?)~~/g,'<del>$1</del>');
-s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,function(_,text,url){
-var u=url.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/"/g,'');
-if(!/^https?:\/\//i.test(u))return text;
-return '<a href="'+esc(u)+'" target="_blank" rel="noopener">'+text+'</a>';
-});
-s=s.replace(/\[Source #(\d+)(?:,\s*Source #(\d+))*\]/g, function(match) {
-    const numbers = match.match(/\d+/g);
-    if (numbers && numbers.length > 0) {
-        return '<sup style="color:#8ab4f8; font-weight:bold; font-size:10px; margin-left:2px;">[' + numbers.join(', ') + ']</sup>';
+function md(src) {
+  src = src.replace(/\r\n/g, '\n');
+  const occurrences = (src.match(/```/g) || []).length;
+  if (occurrences % 2 !== 0) {
+    src += '\n```';
+  }
+  const codeBlocks = [];
+  src = src.replace(/```(\w*)\n([\s\S]*?)```/g, function(_, lang, code) {
+    const l = lang || 'code';
+    const index = codeBlocks.length;
+    const formatted = '<div class="cb-wrap"><div class="cb-hdr"><span>' + esc(l) + '</span><button onclick="cpCode(this)">Copy</button></div><pre><code>' + esc(code.replace(/\n$/, '')) + '</code></pre></div>';
+    codeBlocks.push(formatted);
+    return '___CODE_BLOCK_' + index + '___';
+  });
+  const lines = src.split('\n');
+  let html = '', inUl = false, inOl = false, inBq = false, inP = false, inTable = false, tableRows = [];
+  function closeAll() {
+    if (inUl) { html += '</ul>'; inUl = false; }
+    if (inOl) { html += '</ol>'; inOl = false; }
+    if (inBq) { html += '</blockquote>'; inBq = false; }
+    if (inP) { html += '</p>'; inP = false; }
+    if (inTable) { html += buildTable(tableRows); tableRows = []; inTable = false; }
+  }
+  function buildTable(rows) {
+    if (!rows.length) return '';
+    let t = '<table>';
+    const hdr = rows[0];
+    t += '<tr>' + hdr.map(c => '<th>' + inline(c.trim()) + '</th>').join('') + '</tr>';
+    for (let i = 2; i < rows.length; i++) {
+      t += '<tr>' + rows[i].map(c => '<td>' + inline(c.trim()) + '</td>').join('') + '</tr>';
     }
-    return match;
-});
-return s;
-}
-for(let i=0;i<lines.length;i++){
-const L=lines[i];
-if(L.trim().startsWith('|')&&L.trim().endsWith('|')){
-if(!inTable){closeAll();inTable=true;tableRows=[]}
-const cells=L.trim().slice(1,-1).split('|');
-tableRows.push(cells);continue;
-}else if(inTable){html+=buildTable(tableRows);tableRows=[];inTable=false}
-if(/^[-*_]{3,}\s*$/.test(L)){closeAll();html+='<hr>';continue}
-const hm=L.match(/^(#{1,4})\s+(.+)/);
-if(hm){closeAll();const lv=hm[1].length;html+='<h'+lv+'>'+inline(hm[2])+'</h'+lv+'>';continue}
-const ulm=L.match(/^[\s]*[-*+]\s+(.+)/);
-if(ulm){if(inOl){html+='</ol>';inOl=false}if(inP){html+='</p>';inP=false}if(!inUl){html+='<ul>';inUl=true}html+='<li>'+inline(ulm[1])+'</li>';continue}
-const olm=L.match(/^[\s]*\d+\.\s+(.+)/);
-if(olm){if(inUl){html+='</ul>';inUl=false}if(inP){html+='</p>';inP=false}if(!inOl){html+='<ol>';inOl=true}html+='<li>'+inline(olm[1])+'</li>';continue}
-if(L.startsWith('>')){const t=L.replace(/^>\s?/,'');if(!inBq){closeAll();html+='<blockquote>';inBq=true}html+=inline(t)+' ';continue}else if(inBq){html+='</blockquote>';inBq=false}
-if(inUl&&!ulm){html+='</ul>';inUl=false}
-if(inOl&&!olm){html+='</ol>';inOl=false}
-if(!L.trim()){closeAll();continue}
-if(!inP){html+='<p>';inP=true}else{html+=' '}
-html+=inline(L);
-}
-closeAll();
-return html;
+    return t + '</table>';
+  }
+  function inline(s) {
+    if (s.startsWith('___CODE_BLOCK_') && s.endsWith('___')) {
+      return s;
+    }
+    s = esc(s);
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    s = s.replace(/_(.+?)_/g, '<em>$1</em>');
+    s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_, text, url) {
+      var u = url.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/"/g, '');
+      if (!/^https?:\/\//i.test(u)) return text;
+      return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + text + '</a>';
+    });
+    s = s.replace(/\[Source #(\d+)(?:,\s*Source #(\d+))*\]/g, function(match) {
+      const numbers = match.match(/\d+/g);
+      if (numbers && numbers.length > 0) {
+        return '<sup style="color:#8ab4f8; font-weight:bold; font-size:10px; margin-left:2px;">[' + numbers.join(', ') + ']</sup>';
+      }
+      return match;
+    });
+    return s;
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
+    if (L.trim().startsWith('___CODE_BLOCK_') && L.trim().endsWith('___')) {
+      closeAll();
+      html += L.trim();
+      continue;
+    }
+    if (L.trim().startsWith('|') && L.trim().endsWith('|')) {
+      if (!inTable) { closeAll(); inTable = true; tableRows = []; }
+      const cells = L.trim().slice(1, -1).split('|');
+      tableRows.push(cells);
+      continue;
+    } else if (inTable) {
+      html += buildTable(tableRows);
+      tableRows = [];
+      inTable = false;
+    }
+    if (/^[-*_]{3,}\s*$/.test(L)) { closeAll(); html += '<hr>'; continue; }
+    const hm = L.match(/^(#{1,4})\s+(.+)/);
+    if (hm) { closeAll(); const lv = hm[1].length; html += '<h' + lv + '>' + inline(hm[2]) + '</h' + lv + '>'; continue; }
+    const ulm = L.match(/^[\s]*[-*+]\s+(.+)/);
+    if (ulm) {
+      if (inOl) { html += '</ol>'; inOl = false; }
+      if (inP) { html += '</p>'; inP = false; }
+      if (!inUl) { html += '<ul>'; inUl = true; }
+      html += '<li>' + inline(ulm[1]) + '</li>';
+      continue;
+    }
+    const olm = L.match(/^[\s]*\d+\.\s+(.+)/);
+    if (olm) {
+      if (inUl) { html += '</ul>'; inUl = false; }
+      if (inP) { html += '</p>'; inP = false; }
+      if (!inOl) { html += '<ol>'; inOl = true; }
+      html += '<li>' + inline(olm[1]) + '</li>';
+      continue;
+    }
+    if (L.startsWith('>')) {
+      const t = L.replace(/^>\s?/, '');
+      if (!inBq) { closeAll(); html += '<blockquote>'; inBq = true; }
+      html += inline(t) + ' ';
+      continue;
+    } else if (inBq) {
+      html += '</blockquote>';
+      inBq = false;
+    }
+    if (inUl && !ulm) { html += '</ul>'; inUl = false; }
+    if (inOl && !olm) { html += '</ol>'; inOl = false; }
+    if (!L.trim()) { closeAll(); continue; }
+    if (!inP) { html += '<p>'; inP = true; } else { html += ' '; }
+    html += inline(L);
+  }
+  closeAll();
+  for (let i = 0; i < codeBlocks.length; i++) {
+    html = html.replace('___CODE_BLOCK_' + i + '___', codeBlocks[i]);
+  }
+  return html;
 }
 
 function cpCode(b){const code=b.closest('.cb-wrap').querySelector('code');navigator.clipboard.writeText(code.textContent).then(()=>{b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',1500)}).catch(()=>{})}
