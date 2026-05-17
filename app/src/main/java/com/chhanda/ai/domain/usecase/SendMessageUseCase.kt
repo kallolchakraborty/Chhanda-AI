@@ -168,7 +168,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     append("LOCAL KNOWLEDGE BASE RETRIEVED: Use the provided local database context in the <retrieved_knowledge> section as your primary source of truth. Ground your response heavily in this facts list first.\n")
                 }
                 if (hasWebKnowledge) {
-                    append("WEB SEARCH RESULTS RETRIEVED: Real-time search results are provided in <retrieved_web_knowledge> because no local database matches were found. Use this web context to answer the query accurately.\n")
+                    append("WEB SEARCH RESULTS RETRIEVED: Real-time search results are provided in <retrieved_web_knowledge> because no local database matches were found. Synthesize these results into a highly structured, cohesive, and fully integrated explanation. Avoid providing scattered, disjointed snippets or bullet points without context. Write in a clear, easy-to-understand manner so the user can easily check and verify the information. Group related details logically under clear section headers.\n")
                 }
                 if (hasAttachmentKnowledge) {
                     append("ATTACHMENT DATA RETRIEVED: Use the text extracted from the user's uploaded attachment files to answer the query.\n")
