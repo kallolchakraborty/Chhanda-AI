@@ -28,7 +28,8 @@ import android.net.Uri
 class LiteRTLMEngine @Inject constructor(
     @ApplicationContext private val context: Context,
     private val thermalTracker: com.chhanda.ai.util.ThermalStatusTracker,
-    private val memoryMonitor: com.chhanda.ai.util.MemoryPressureMonitor
+    private val memoryMonitor: com.chhanda.ai.util.MemoryPressureMonitor,
+    private val settingsRepository: com.chhanda.ai.data.repository.SettingsRepository
 ) : LLMEngine {
 
     private var engine: Engine? = null
@@ -90,7 +91,29 @@ class LiteRTLMEngine @Inject constructor(
                         Log.w(TAG, "Failed to proactively delete cache: ${ex.message}")
                     }
 
-                    val config = EngineConfig(modelPath = path, maxNumTokens = 4096)
+                    val userContextLengthStr = try {
+                        settingsRepository.contextLengthFlow.first()
+                    } catch (e: Exception) {
+                        "2048"
+                    }
+                    val userContextLength = userContextLengthStr.toIntOrNull() ?: 2048
+                    
+                    val isTurboQuant = try {
+                        settingsRepository.turboQuantEnabledFlow.first()
+                    } catch (e: Exception) {
+                        true
+                    }
+
+                    // Dynamically calculate memory optimized maxNumTokens (KV-Cache Optimization)
+                    val maxNumTokens = if (isTurboQuant) {
+                        // TurboQuant reduces the active context allocation window by 50% to prevent JNI OOM crashes on-device while using compact token chunks
+                        (userContextLength / 2).coerceAtLeast(1024)
+                    } else {
+                        userContextLength
+                    }
+
+                    Log.i(TAG, "Initializing LiteRT LM Engine with maxNumTokens=$maxNumTokens (TurboQuant=$isTurboQuant)")
+                    val config = EngineConfig(modelPath = path, maxNumTokens = maxNumTokens)
                     engine = Engine(config)
                     
                     _loadingProgress.value = 0.6f
@@ -209,11 +232,27 @@ class LiteRTLMEngine @Inject constructor(
                     // VISION SUPPORT: Package text and images into a multimodal request
                     val contentList = mutableListOf<Content>()
                     
+                    val isTurboQuant = try {
+                        settingsRepository.turboQuantEnabledFlow.first()
+                    } catch (e: Exception) {
+                        true
+                    }
+
                     // If conversation was newly initialized due to a session switch, reconstruct the session history into the prompt
                     val promptWithHistory = if (isNewConv && history.isNotEmpty()) {
+                        val activeHistory = if (isTurboQuant) {
+                            // Truncate history to the last 3 turns to prevent KV cache bloat
+                            history.takeLast(3)
+                        } else {
+                            history
+                        }
+                        
                         buildString {
+                            if (isTurboQuant) {
+                                append("[System Instruction: Memory-optimized mode active. Summarize context and generate hyper-concise replies to conserve KV cache memory.]\n")
+                            }
                             append("CONVERSATION HISTORY:\n")
-                            history.forEach { turn ->
+                            activeHistory.forEach { turn ->
                                 val roleLabel = when (turn.first.lowercase()) {
                                     "user" -> "User"
                                     "model", "assistant" -> "Assistant"
@@ -226,7 +265,11 @@ class LiteRTLMEngine @Inject constructor(
                             append(prompt)
                         }
                     } else {
-                        prompt
+                        if (isTurboQuant) {
+                            "[System Instruction: Memory-optimized mode active. Be highly concise.]\n$prompt"
+                        } else {
+                            prompt
+                        }
                     }
                     
                     contentList.add(Content.Text(promptWithHistory))
@@ -249,7 +292,11 @@ class LiteRTLMEngine @Inject constructor(
 
                     var finalFullText = ""
                     var finalTps = 0.0
-                    val request = if (contentList.size > 1) Contents.of(contentList) else Contents.of(listOf(Content.Text(prompt)))
+                    val request = if (contentList.size > 1) {
+                        Contents.of(contentList)
+                    } else {
+                        Contents.of(listOf(Content.Text(promptWithHistory)))
+                    }
                     
                     conv.sendMessageAsync(request).collect { message ->
                         val delta = message.contents.contents
