@@ -120,7 +120,11 @@ body{background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,'S
 .persona-chip.active{background:rgba(138,180,248,0.1);border-color:rgba(138,180,248,0.3);color:var(--p)}
 .tts-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--tx2);padding:6px 12px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;margin-top:12px;display:inline-flex;align-items:center;gap:6px;transition:all 0.15s;font-family:inherit}
 .tts-btn:hover{background:rgba(138,180,248,0.1);border-color:rgba(138,180,248,0.3);color:var(--p)}
-#micBtn.recording{color:var(--r); animation:pulse 1.5s infinite;}
+/* Message actions styling */
+.msg-actions{display:flex;align-items:center;gap:12px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);flex-wrap:wrap}
+.action-btn{background:0 0;border:none;color:var(--tx2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:6px;border-radius:8px;transition:all 0.15s;outline:none}
+.action-btn:hover{background:rgba(255,255,255,0.08);color:var(--p)}
+.action-btn svg{width:15px;height:15px}
 
 /* Name Overlay Modal style */
 #nameModal{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;z-index:99999}
@@ -305,8 +309,72 @@ micBtn.onclick = () => {
   }
 };
 
+function getActionsHtml(txt) {
+  const cleanTxt = txt.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  return '<div class="msg-actions">' +
+    '<button class="action-btn" onclick="copyResponse(this, \\`' + cleanTxt + '\\`)" title="Copy Response"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+    '<button class="action-btn" onclick="shareResponse(\\`' + cleanTxt + '\\`)" title="Share Response"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>' +
+    '<button class="action-btn" onclick="toggleLike(this)" title="Like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg></button>' +
+    '<button class="action-btn" onclick="toggleDislike(this)" title="Dislike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"/></svg></button>' +
+    '</div>';
+}
+
+function copyResponse(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✓';
+    btn.style.color = 'var(--g)';
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.style.color = '';
+    }, 2000);
+  }).catch(() => {});
+}
+
+function shareResponse(text) {
+  if (navigator.share) {
+    navigator.share({ title: 'Chhanda AI Response', text: text }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Response copied to clipboard for sharing!');
+    }).catch(() => {});
+  }
+}
+
+function toggleLike(btn) {
+  const isLiked = btn.classList.toggle('active');
+  if (isLiked) {
+    btn.style.color = 'var(--g)';
+    const dislikeBtn = btn.nextElementSibling;
+    if (dislikeBtn) {
+      dislikeBtn.classList.remove('active');
+      dislikeBtn.style.color = '';
+    }
+  } else {
+    btn.style.color = '';
+  }
+}
+
+function toggleDislike(btn) {
+  const isDisliked = btn.classList.toggle('active');
+  if (isDisliked) {
+    btn.style.color = 'var(--r)';
+    const likeBtn = btn.previousElementSibling;
+    if (likeBtn) {
+      likeBtn.classList.remove('active');
+      likeBtn.style.color = '';
+    }
+  } else {
+    btn.style.color = '';
+  }
+}
+
 function md(src){
 src=src.replace(/\r\n/g,'\n');
+const occurrences = (src.match(/```/g) || []).length;
+if (occurrences % 2 !== 0) {
+  src += '\n```';
+}
 src=src.replace(/```(\w*)\n([\s\S]*?)```/g,function(_,lang,code){
 const l=lang||'code';
 return '<div class="cb-wrap"><div class="cb-hdr"><span>'+esc(l)+'</span><button onclick="cpCode(this)">Copy</button></div><pre><code>'+esc(code.replace(/\n$/,''))+'</code></pre></div>';
@@ -504,7 +572,7 @@ function addMsg(t,c){
   const m=document.createElement('div');m.className='m '+c;
   if(c==='u')m.innerHTML=esc(t).replace(/\n/g,'<br>');
   else if(c==='s')m.textContent=t;
-  else m.innerHTML=md(t);
+  else m.innerHTML=md(t) + getActionsHtml(t);
   ct.appendChild(m);msgs.appendChild(ct);msgs.scrollTop=msgs.scrollHeight;return m;
 }
 
@@ -620,7 +688,7 @@ msgs.scrollTop=msgs.scrollHeight;
 }
 if(raw){
   const{thought,response}=parseThinking(raw);
-  aiMsg.innerHTML=renderThinking(thought,response) + getTtsBtnHtml(response);
+  aiMsg.innerHTML=renderThinking(thought,response) + getTtsBtnHtml(response) + getActionsHtml(response);
   if(autoSpeak){ speakText(response); autoSpeak=false; }
 }
 }catch(e){aiMsg.innerHTML='<span style="color:var(--r)">Connection error: '+esc(e.message)+'</span>'}
