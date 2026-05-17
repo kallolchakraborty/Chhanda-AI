@@ -2,6 +2,9 @@
 
 ## Harnessing Gemma 4 for 100% Offline, Privacy-First AI Accessibility
 
+> [!NOTE]
+> **Dedication**: This entire platform is solo-developed by **Kallol Chakraborty** and is named after and dedicated to my beloved mother, **Chhanda Chakraborty**, representing the harmony between the foundational, rhythmic structure of language and the beautiful flow of intelligence.
+
 ---
 
 ## 📽️ Project Video

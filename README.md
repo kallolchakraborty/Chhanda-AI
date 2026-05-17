@@ -2,7 +2,7 @@
 
 <div align="center">
   <h3>100% Offline · Privacy-First · Production-Hardened AI & RAG Ecosystem for Android</h3>
-  <p><i>Solo-developed by <b>Kallol Chakraborty</b> | Dedicated to my mother, <b>Chhanda</b>.</i></p>
+  <p><i>Solo-developed by <b>Kallol Chakraborty</b> | Dedicated to my beloved mother, <b>Chhanda Chakraborty</b>.</i></p>
   <br/>
 
   ![Android](https://img.shields.io/badge/Platform-Android_8.0+-3DDC84?logo=android&logoColor=white)
@@ -12,6 +12,9 @@
   ![LOC](https://img.shields.io/badge/LOC-14%2C500+-blue)
   ![License](https://img.shields.io/badge/License-Proprietary-red)
 </div>
+
+> [!NOTE]
+> **Dedication**: This entire platform is named after and dedicated to my beloved mother, **Chhanda Chakraborty**, representing the harmony between the foundational, rhythmic structure of language and the beautiful flow of intelligence.
 
 ---
 
