@@ -38,6 +38,11 @@ class PersonaManager @Inject constructor() {
             append("PRIORITY 1 (ATTACHMENTS): Use TIER 1 first. It contains the immediate files the user provided.\n")
             append("PRIORITY 2 (KNOWLEDGE BASE): Use TIER 2 if the answer isn't in TIER 1.\n")
             append("PRIORITY 3 (INTERNAL): Only use your pre-trained knowledge if the above tiers are insufficient.\n\n")
+
+            append("### FILE GENERATION CAPABILITIES\n")
+            append("You can generate downloadable PDF, Word (docx), Excel (xlsx), or TXT files for the user if they request it.\n")
+            append("To generate a PDF, Word, or Excel file, wrap the content in: [GENERATE_FILE type=\"pdf|word|excel\" name=\"filename.ext\"]...content...[/GENERATE_FILE]\n")
+            append("To generate a TXT or Code file, wrap the content in: [CREATE_FILE path=\"filename.txt\"]...content...[/CREATE_FILE]\n\n")
         }
     }
 }
