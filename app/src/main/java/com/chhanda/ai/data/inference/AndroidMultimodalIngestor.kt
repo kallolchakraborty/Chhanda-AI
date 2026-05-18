@@ -107,42 +107,51 @@ class AndroidMultimodalIngestor @Inject constructor(
             }
     }
 
-    override suspend fun ingestImage(uri: Uri): String = suspendCancellableCoroutine { continuation ->
-        try {
-            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
-            } else {
-                @Suppress("DEPRECATION")
-                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-            }
-
-            if (bitmap == null) {
-                continuation.resumeWithException(Exception("Failed to decode bitmap from URI: $uri"))
-                return@suspendCancellableCoroutine
-            }
-
-            val scaledBitmap = if (bitmap.width > 2000 || bitmap.height > 2000) {
-                val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
-                bitmap.recycle() // Recycle original to free native memory
-                scaled
-            } else bitmap
-
-            val image = InputImage.fromBitmap(scaledBitmap, 0)
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    scaledBitmap.recycle() // Recycle to prevent memory leak
-                    if (visionText.text.isEmpty()) {
-                        continuation.resume("No text detected in image.")
-                    } else {
-                        continuation.resume(visionText.text)
+    override suspend fun ingestImage(uri: Uri): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        suspendCancellableCoroutine { continuation ->
+            try {
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, _, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        decoder.isMutableRequired = true
                     }
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
                 }
-                .addOnFailureListener { e ->
-                    scaledBitmap.recycle() // Recycle to prevent memory leak
-                    continuation.resumeWithException(e)
+
+                if (bitmap == null) {
+                    continuation.resumeWithException(Exception("Failed to decode bitmap from URI: $uri"))
+                    return@suspendCancellableCoroutine
                 }
-        } catch (e: Exception) {
-            continuation.resumeWithException(e)
+
+                var workingBitmap = bitmap
+                if (bitmap.width > 2048 || bitmap.height > 2048) {
+                    val scale = 2048f / Math.max(bitmap.width, bitmap.height)
+                    val newWidth = (bitmap.width * scale).toInt()
+                    val newHeight = (bitmap.height * scale).toInt()
+                    val scaled = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                    bitmap.recycle() // Recycle original to free native memory
+                    workingBitmap = scaled
+                }
+
+                val image = InputImage.fromBitmap(workingBitmap, 0)
+                recognizer.process(image)
+                    .addOnSuccessListener { visionText ->
+                        workingBitmap.recycle() // Recycle to prevent memory leak
+                        if (visionText.text.isEmpty()) {
+                            continuation.resume("No text detected in image.")
+                        } else {
+                            continuation.resume(visionText.text)
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        workingBitmap.recycle() // Recycle to prevent memory leak
+                        continuation.resumeWithException(e)
+                    }
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
         }
     }
 

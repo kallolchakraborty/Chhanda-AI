@@ -622,7 +622,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
             }
         }
-    }
+    }.flowOn(kotlinx.coroutines.Dispatchers.IO)
 
     private fun compactPastMessage(text: String): String {
         val codeRegex = "(?s)```.*?```".toRegex()
