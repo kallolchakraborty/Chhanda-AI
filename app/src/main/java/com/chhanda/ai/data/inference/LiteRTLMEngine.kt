@@ -277,6 +277,7 @@ class LiteRTLMEngine @Inject constructor(
                                       val stream = ByteArrayOutputStream()
                                       bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
                                       contentList.add(Content.ImageBytes(stream.toByteArray()))
+                                      bitmap.recycle() // PROACTIVE MEMORY RECOVERY: Prevent OOM on consecutive inference turns
                                       Log.d(TAG, "Attached image to inference: $uri")
                                   }
                             }

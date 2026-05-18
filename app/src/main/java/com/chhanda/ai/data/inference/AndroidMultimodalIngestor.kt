@@ -122,12 +122,15 @@ class AndroidMultimodalIngestor @Inject constructor(
             }
 
             val scaledBitmap = if (bitmap.width > 2000 || bitmap.height > 2000) {
-                Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
+                val scaled = Bitmap.createScaledBitmap(bitmap, bitmap.width / 2, bitmap.height / 2, true)
+                bitmap.recycle() // Recycle original to free native memory
+                scaled
             } else bitmap
 
             val image = InputImage.fromBitmap(scaledBitmap, 0)
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
+                    scaledBitmap.recycle() // Recycle to prevent memory leak
                     if (visionText.text.isEmpty()) {
                         continuation.resume("No text detected in image.")
                     } else {
@@ -135,6 +138,7 @@ class AndroidMultimodalIngestor @Inject constructor(
                     }
                 }
                 .addOnFailureListener { e ->
+                    scaledBitmap.recycle() // Recycle to prevent memory leak
                     continuation.resumeWithException(e)
                 }
         } catch (e: Exception) {
