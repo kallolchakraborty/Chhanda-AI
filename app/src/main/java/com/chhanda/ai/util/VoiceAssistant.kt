@@ -174,11 +174,11 @@ class VoiceAssistant(private val context: Context) {
                     }
                     
                     _isListening.value = false
-                    cancelActiveSession()
-
-                    // If recognizer is locked or busy, perform dynamic self-healing reset
-                    if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                    
+                    // Eagerly recycle SpeechRecognizer on error to keep the next session warm and avoid state bugs
+                    runOnMainThread {
                         cleanUpSession()
+                        warmUp()
                     }
                 }
 
@@ -187,6 +187,12 @@ class VoiceAssistant(private val context: Context) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     if (!matches.isNullOrEmpty()) {
                         _partialResult.value = matches[0]
+                    }
+                    
+                    // Eagerly recycle SpeechRecognizer on completion to keep the next session warm and avoid state bugs
+                    runOnMainThread {
+                        cleanUpSession()
+                        warmUp()
                     }
                 }
 
@@ -232,8 +238,9 @@ class VoiceAssistant(private val context: Context) {
     fun stopListening() {
         runOnMainThread {
             hapticManager.play(HapticManager.HapticPattern.LIGHT_TICK)
-            cancelActiveSession()
+            cleanUpSession()
             _isListening.value = false
+            warmUp()
         }
     }
 
