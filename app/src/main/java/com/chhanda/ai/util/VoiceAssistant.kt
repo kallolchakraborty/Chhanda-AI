@@ -62,29 +62,33 @@ class VoiceAssistant(private val context: Context) {
                 return@runOnMainThread
             }
 
-            // Clean up any stale sessions synchronously BEFORE creating a new one.
-            // This prevents concurrent SpeechRecognizer binder allocations.
-            cleanUpSession()
-
-            // Senior Best Practice: Attempt offline-first on-device speech recognition (Android 12+)
-            // to preserve absolute privacy and local speed. If forceStandard is active, or if
-            // creating the offline engine fails, fall back to the standard recognizer.
-            val recognizer = if (!forceStandard && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && 
-                                  SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
-                try {
-                    Log.d("VoiceAssistant", "Initializing local on-device SpeechRecognizer")
-                    isOnDeviceRecognizer = true
-                    SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-                } catch (e: Exception) {
-                    Log.w("VoiceAssistant", "Failed to create on-device recognizer: ${e.message}. Falling back to default.")
+            // Re-use the existing recognizer to prevent binder deadlocks during continuous conversation loops,
+            // unless we are explicitly forced to fallback to the standard recognizer from the on-device one.
+            val needsRecreation = speechRecognizer == null || (forceStandard && isOnDeviceRecognizer)
+            
+            if (needsRecreation) {
+                cleanUpSession()
+                
+                val newRecognizer = if (!forceStandard && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && 
+                                      SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                    try {
+                        Log.d("VoiceAssistant", "Initializing local on-device SpeechRecognizer")
+                        isOnDeviceRecognizer = true
+                        SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                    } catch (e: Exception) {
+                        Log.w("VoiceAssistant", "Failed to create on-device recognizer. Falling back.")
+                        isOnDeviceRecognizer = false
+                        SpeechRecognizer.createSpeechRecognizer(context)
+                    }
+                } else {
+                    Log.d("VoiceAssistant", "Initializing default system SpeechRecognizer")
                     isOnDeviceRecognizer = false
                     SpeechRecognizer.createSpeechRecognizer(context)
                 }
-            } else {
-                Log.d("VoiceAssistant", "Initializing default system SpeechRecognizer")
-                isOnDeviceRecognizer = false
-                SpeechRecognizer.createSpeechRecognizer(context)
+                speechRecognizer = newRecognizer
             }
+            
+            val recognizer = speechRecognizer ?: return@runOnMainThread
 
             speechRecognizer = recognizer
             recognizer.setRecognitionListener(object : RecognitionListener {

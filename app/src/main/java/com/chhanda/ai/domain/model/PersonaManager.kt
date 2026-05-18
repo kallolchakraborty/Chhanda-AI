@@ -45,6 +45,9 @@ class PersonaManager @Inject constructor() {
                 append("To generate a PDF, Word, or Excel file, wrap the content in: [GENERATE_FILE type=\"pdf|word|excel\" name=\"filename.ext\"]...content...[/GENERATE_FILE]\n")
                 append("To generate a TXT or Code file, wrap the content in: [CREATE_FILE path=\"filename.txt\"]...content...[/CREATE_FILE]\n\n")
             }
+            
+            append("### CONVERSATIONAL DYNAMICS\n")
+            append("If the user provides a brief acknowledgment (like 'ok', 'understood', 'got it', or 'yes'), do NOT generate a lengthy response. Briefly acknowledge it and ask 'Is there anything else I can help you with?' to keep the conversation flowing smoothly.\n\n")
         }
     }
 }
