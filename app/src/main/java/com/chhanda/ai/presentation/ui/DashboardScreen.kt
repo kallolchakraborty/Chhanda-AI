@@ -247,6 +247,7 @@ fun DashboardScreen(
     val activeModelName = remember(ownedModels, sharedModels, isServerRunning, isModelLoaded, isModelLoading) {
         when {
             isModelLoading -> "Loading Model..."
+            !isServerRunning || !isModelLoaded -> "No Active Model"
             else -> {
                 (ownedModels + sharedModels).firstOrNull { it.isActive }?.name ?: "No Active Model"
             }
