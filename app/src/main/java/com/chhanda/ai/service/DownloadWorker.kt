@@ -64,7 +64,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
             connection = url.openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = false
             
-            if (currentUrl.contains("huggingface.co") && useToken) {
+            if (redirectCount == 0 && currentUrl.contains("huggingface.co") && useToken) {
                 connection.setRequestProperty("Authorization", "Bearer $token")
             }
             

@@ -455,6 +455,7 @@ fun ConfigScreen(
             item {
                 Column {
                     var isKeyVisible by remember { mutableStateOf(false) }
+                    var isHfTokenVisible by remember { mutableStateOf(false) }
 
                     ChhandaSectionHeader(icon = Icons.Default.Lock, title = Localization.getString("security", appLanguage))
                     Spacer(Modifier.height(12.dp))
@@ -547,11 +548,18 @@ fun ConfigScreen(
                         OutlinedTextField(
                             value = tempHfToken,
                             onValueChange = { tempHfToken = it },
+                            visualTransformation = if (isHfTokenVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             placeholder = { Text("hf_...") },
                             trailingIcon = {
                                 Row {
+                                    IconButton(onClick = {
+                                        hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
+                                        isHfTokenVisible = !isHfTokenVisible
+                                    }) {
+                                        Icon(if (isHfTokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, contentDescription = if (isHfTokenVisible) "Hide HF Token" else "Show HF Token")
+                                    }
                                     IconButton(onClick = {
                                         hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(tempHfToken))

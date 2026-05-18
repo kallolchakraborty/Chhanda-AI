@@ -973,19 +973,39 @@ class SystemViewModel @Inject constructor(
                     val urlStr = getUrlForModel(model.name)
                     if (urlStr.isBlank()) return@forEachIndexed
 
-                    val url = URL(urlStr)
-                    val connection = url.openConnection() as HttpURLConnection
-                    connection.requestMethod = "HEAD"
-                    connection.connectTimeout = 5000
-                    connection.readTimeout = 5000
+                    var currentUrl = urlStr
+                    var redirectCount = 0
+                    var responseCode = -1
+                    var connection: HttpURLConnection = URL(currentUrl).openConnection() as HttpURLConnection
+                    var remoteSize = -1L
 
-                    if (urlStr.contains("huggingface.co")) {
-                        connection.setRequestProperty("Authorization", "Bearer ${hfToken.value}")
-                    }
+                    do {
+                        val tempUrl = URL(currentUrl)
+                        connection = tempUrl.openConnection() as HttpURLConnection
+                        connection.requestMethod = "HEAD"
+                        connection.connectTimeout = 5000
+                        connection.readTimeout = 5000
+                        connection.instanceFollowRedirects = false
 
-                    val responseCode = connection.responseCode
+                        if (redirectCount == 0 && currentUrl.contains("huggingface.co") && hfToken.value.isNotEmpty()) {
+                            connection.setRequestProperty("Authorization", "Bearer ${hfToken.value}")
+                        }
+
+                        responseCode = connection.responseCode
+                        if (responseCode in 300..399) {
+                            val loc = connection.getHeaderField("Location") ?: break
+                            currentUrl = URL(URL(currentUrl), loc).toString()
+                            redirectCount++
+                            connection.disconnect()
+                        } else {
+                            if (responseCode == 200) {
+                                remoteSize = connection.contentLengthLong
+                            }
+                            break
+                        }
+                    } while (redirectCount < 5)
+
                     if (responseCode == 200) {
-                        val remoteSize = connection.contentLengthLong
 
                         val dir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
                         val filename = getFilenameForModel(model.name)
