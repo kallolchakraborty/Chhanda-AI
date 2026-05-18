@@ -144,11 +144,17 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             }
 
             // Web Search Fallback or forced Real-Time query search
-            if (isInternetPresent && webSearchEnabled) {
+            // Web Search Fallback or forced Real-Time query search
+            // ONLY triggered if: 
+            // 1. It is a forced news/weather query (isRealTime is true)
+            // 2. OR local RAG retrieved no relevant facts/context (hasDbKnowledge is false)
+            val shouldTriggerWebSearch = isInternetPresent && webSearchEnabled && (isRealTime || !hasDbKnowledge)
+
+            if (shouldTriggerWebSearch) {
                 if (isRealTime) {
                     emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Fetching real-time updates for news/weather..."))
                 } else {
-                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Searching the web for answers..."))
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Local database yielded no results. Searching the web..."))
                 }
                 try {
                     val searchResults = webSearchUseCase(userText)
@@ -211,14 +217,17 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
                     emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search error. Answering from pre-trained knowledge..."))
                 }
-            } else if (isRealTime && !webSearchEnabled) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but web search is disabled. Answering from pre-trained knowledge..."))
-            } else if (!isInternetPresent && isRealTime) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but device is offline. Answering from pre-trained knowledge..."))
-            } else if (isInternetPresent && !webSearchEnabled) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches & web search disabled. Answering from pre-trained knowledge..."))
-            } else if (!isInternetPresent) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
+            } else if (!hasDbKnowledge) {
+                // If local RAG has no matches, and web search was not run, report why and fallback to pre-trained weights
+                if (isRealTime && !webSearchEnabled) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but web search is disabled. Answering from pre-trained knowledge..."))
+                } else if (!isInternetPresent && isRealTime) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but device is offline. Answering from pre-trained knowledge..."))
+                } else if (isInternetPresent && !webSearchEnabled) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches & web search disabled. Answering from pre-trained knowledge..."))
+                } else if (!isInternetPresent) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
+                }
             }
 
             isContextFound = hasDbKnowledge || hasWebKnowledge
