@@ -318,16 +318,11 @@ private fun ActiveModelContent(
                 .clickable(enabled = isLocalModelPresent) { onSelectModel() }
                 .padding(vertical = 4.dp)
         ) {
-            with(sharedTransitionScope) {
-                ChhandaLogo(
-                    size = 32, 
-                    modelName = modelName,
-                    modifier = Modifier.sharedElement(
-                        sharedTransitionScope.rememberSharedContentState(key = "model_logo_$modelName"),
-                        animatedVisibilityScope = animatedVisibilityScope
-                    )
-                )
-            }
+            ChhandaLogo(
+                size = 32, 
+                modelName = modelName,
+                modifier = Modifier
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -337,20 +332,15 @@ private fun ActiveModelContent(
                     fontWeight = FontWeight.Bold
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    with(sharedTransitionScope) {
-                        Text(
-                            if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else formatModelDisplayName(modelName), 
-                            color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
-                            fontSize = 20.sp, 
-                            fontWeight = FontWeight.Black,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.sharedElement(
-                                sharedTransitionScope.rememberSharedContentState(key = "model_name_$modelName"),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            )
-                        )
-                    }
+                    Text(
+                        if(modelName == "No Active Model") Localization.getString("no_active_model", appLanguage) else formatModelDisplayName(modelName), 
+                        color = if (isRunning) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, 
+                        fontSize = 20.sp, 
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier
+                    )
                     if (isLocalModelPresent) {
                         Spacer(Modifier.width(8.dp))
                         Icon(

@@ -74,7 +74,9 @@ class RemoteLLMEngine @Inject constructor(
                 } else {
                     _loadingProgress.value = 0f
                     _performanceMetrics.value = 0.0
-                    _isLoaded.value = false
+                    if (lastModelPath == null) {
+                        _isLoaded.value = false
+                    }
                     _isLoading.value = false
                 }
                 delay(500)
@@ -118,7 +120,9 @@ class RemoteLLMEngine @Inject constructor(
             connectionState.value = false
             isBound = false
             Log.w(TAG, "Disconnected from InferenceService, reconnecting...")
-            _isLoaded.value = false
+            if (lastModelPath == null) {
+                _isLoaded.value = false
+            }
             _isLoading.value = false
             _loadingProgress.value = 0f
             _performanceMetrics.value = 0.0

@@ -30,6 +30,7 @@ fun ModelComparisonScreen(
     val sharedModels by viewModel.sharedModels.collectAsState()
     val allModels = (ownedModels + sharedModels).distinctBy { it.name }
     val appLanguage by viewModel.appLanguage.collectAsState()
+    val isModelLoaded by viewModel.isModelLoaded.collectAsState()
 
     Scaffold(
         topBar = {
@@ -64,7 +65,7 @@ fun ModelComparisonScreen(
                 }
             } else {
                 items(allModels) { model ->
-                    ComparisonCard(model, appLanguage)
+                    ComparisonCard(model, appLanguage, isModelLoaded)
                 }
             }
         }
@@ -74,7 +75,8 @@ fun ModelComparisonScreen(
 @Composable
 private fun ComparisonCard(
     model: ModelInfo,
-    appLanguage: String
+    appLanguage: String,
+    isModelLoaded: Boolean
 ) {
     val modelSize = model.details
     val ramRequirement = when {
@@ -108,12 +110,24 @@ private fun ComparisonCard(
                 Icon(Icons.Default.ModelTraining, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(12.dp))
                 Text(model.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                if (model.isActive) {
-                    Spacer(Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
+                if (model.isActive && isModelLoaded) {
                     AssistChip(
                         onClick = {},
                         label = { Text("Active", fontSize = 10.sp) },
-                        colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                } else {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("Downloaded", fontSize = 10.sp) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }

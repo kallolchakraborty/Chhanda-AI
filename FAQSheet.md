@@ -352,18 +352,17 @@ This is applied **bidirectionally** — on user input before it reaches the LLM,
 
 ## 🛠️ Production-Hardening & UX Enhancements (May 2026)
 
-### 24. How does Interactive Model Swapping (Hot Reloading) work?
-**Safe Multi-Engine IPC Cleanup.** 
-* When the user clicks on the active model name in `ActiveModelCard` (equipped with `Icons.Default.SwapHoriz` as a visual cue), it triggers the Model Picker bottom sheet containing all local (`owned + shared`) models.
-* If a model is chosen, Chhanda evaluates whether the model gateway server is actively running.
-* If the server is stopped, Chhanda simply updates the active model state in the view model.
-* If the server is active, Chhanda executes a **hot-reloading pipeline** (`switchModelAndRestartServer`):
+### 24. How does Interactive Model Swapping and the Unified Selection Flow work?
+**Consolidated Gateway Control & Safe Multi-Engine IPC Cleanup.** 
+* **Unified Selection Flow**: To prevent accidental start-ups and redundant states, pressing the main "Start Server" button on the active model card always prompts the user with the Material 3 Model Picker bottom sheet containing all downloaded (`owned + shared`) local models. The user selects the exact model they want to deploy, which then automatically bootstraps the engine and brings the gateway server online in a single, unified action.
+* **Decluttered Model List UX**: To reduce visual complexity and UI duplication, the individual local model card items have been streamlined. Redundant play/stop and chat buttons have been removed from the list items, keeping the server-wide gateway controls cleanly localized in the header card and bottom navigation. A single Delete action is retained for storage management.
+* **IPC Hot Reloading**: If a user selects a model while the server is active, Chhanda executes an automated hot-reloading pipeline (`switchModelAndRestartServer`):
   1. Stops the Ktor-CIO server instance.
   2. Tears down the underlying binder client IPC connection to the native C++ engine (`RemoteLLMEngine`).
   3. Awaits resource release (2.5-second lazy flush buffer) to ensure 0% socket collisions or Android OOM errors.
   4. Activates the newly chosen model.
   5. Automatically brings the Ktor-CIO server back online with the fresh model parameters.
-* If the selected model is already the active one, the operation is dismissed with zero redundant server cycles.
+* If the selected model is already active, the operation is safely dismissed with zero redundant server cycles.
 
 ### 25. How does Hierarchical Search Priority handle connectivity drops?
 **Precedence-Driven Fallbacks.** The `SendMessageUseCase` queries `NetworkManager` to dynamically govern search precedence before prompt formulation:
@@ -410,24 +409,62 @@ This is applied **bidirectionally** — on user input before it reaches the LLM,
   * **High-End (>= 8GB RAM)**: Default 4,096 tokens (up to 32,768).
 * This guarantees that devices automatically bootstrap themselves with safe inference sizes.
 
-### 30. How does the Internet Search Capability Toggle enforce zero-cloud privacy?
-**Domain-Level Guarding.** 
-* When the "Internet Search Capability" switch in Settings is disabled, Chhanda completely bypasses the external web scraper and query expansion pipeline.
-* Even if the device has an active internet connection, no web scraping network requests are initiated.
-* The domain-layer orchestrator (`SendMessageUseCase`) forces all inferences directly down the pre-trained path, displaying an instant offline status banner to the user to guarantee 100% disconnected data safety.
+### 31. How does the Voice Assistant handle offline Speech Recognition Errors (Error 12 & 13)?
+**Dynamic Cloud Fallback & Thread-Safety Isolation.**
+*   **The Cause**: Android's `SpeechRecognizer` returns `ERROR_LANGUAGE_UNAVAILABLE` (Error 13) or `ERROR_LANGUAGE_NOT_SUPPORTED` (Error 12) when the required language pack (English, Hindi, or Bengali) is missing, corrupted, or unsupported in the device's local offline speech engine.
+*   **The Solution**: We engineered an automatic offline-to-online self-healing speech recognition pipeline. If the local speech recognizer throws Error 12, Error 13, or fails to initialize, Chhanda instantly switches context to use Google's cloud-backed speech recognition services.
+*   **Thread Safety**: To resolve main-thread blockages, we isolated all speech recognition callbacks and Text-To-Speech (TTS) engine state transitions away from the main thread using low-latency coroutine context dispatchers.
+
+### 32. How does the Human-like Synthesizer eliminate source numbers and citation bloat from TTS output?
+**Aggressive Pre-Synthesizer Text Scrubbing (Complete Vocal Harmony).**
+*   **The Problem**: RAG and web search outputs contain citation references (e.g. `[1]`, `[Source #2]`, `(1)`, `(Source 1)`) and spoken source references (e.g., *"according to source one"*, *"source two"*). Speaking these raw elements makes the voice assistant sound mechanical and disjointed.
+*   **The Solution**: We re-engineered the `cleanTextForTts` parser inside `ChatUtils.kt` to run highly aggressive, recursive regex filters. It immediately strips all citation brackets, parenthetical citations, spoken source phrases, and source-based list prefixes (e.g., `Source 1:` or `Source two -`).
+*   **Conversational Conversion**: The parser replaces Markdown bullets and numeric list headers with clean conversational pause delimiters, transforming dry technical text blocks into completely fluid, natural speech.
+
+### 33. How does the low-latency Web Search pipeline fetch real-time weather and news flawlessly in both English and Indic scripts (Hindi/Bengali)?
+**Dynamic Multi-Engine Web Searches and LLM-First Context Synthesis.**
+*   **The Problem**: Rigid API integration (like Open-Meteo) and hardcoded XML RSS feeds (like BBC/The Hindu) constrain the application to preselected websites, breaking down when users ask for hyper-local updates, specific regional outlets, or dynamic weather comparisons.
+*   **The Solution**: We completely decoupled the search subsystem from hardcoded endpoints:
+    *   **Decentralized Web Search**: All weather, news, and general requests are processed as live, multi-stage search queries. The engine dynamically checks the character range of the query to route Latin scripts through unblocked privacy indexes (Mojeek) and Indic scripts (Hindi/Bengali) through comprehensive regional indexes (DuckDuckGo/Google).
+    *   **LLM-First Synthesis**: Instead of returning pre-formatted JSON structures or parsing rigid RSS feeds, the search engine fetches dynamic, raw web snippets. The local Gemma LLM then dynamically parses, validates, and synthesizes the news or weather report in real time by itself.
+*   **Zero Hardcoding**: Ensures that news and weather coverage is globally available, dynamically sourced, and organically translated without manual domain restriction.
+
+### 34. How does the Network Startup Manager resolve Android's NetworkCallback race condition?
+**Active Network Probe Injection.**
+*   **The Problem**: Android's `ConnectivityManager.NetworkCallback` only fires on network state transitions (e.g. when connecting or disconnecting). If the app is launched while already connected to a stable network, the callback is skipped, leaving network flags in their default `false` state and disabling web searches.
+*   **The Solution**: Hardened the system network initialization process. Inside the `init` block of the `NetworkManager` and during message use-case processing, the app performs a direct, synchronous query on `connectivityManager.activeNetwork` and checks `NetworkCapabilities.NET_CAPABILITY_INTERNET`. This seeds and refreshes the live internet connection status instantly at launch, ensuring search triggers flawlessly.
+
+### 37. How does the Hands-Free Continuous Voice loop operate without any manual user input?
+**UtteranceProgressListener Cooldown & Auto-Mic Triggers.**
+*   **Hands-Free Interaction**: When the user enters continuous voice mode (by tapping the microphone icon in Chat), they do not need to tap any buttons to submit prompts or hear replies.
+*   **The Workflow**:
+    1. The user speaks their query; silence is automatically detected via the offline `SpeechRecognizer`.
+    2. Prompt is automatically submitted to Gemma, setting `wasSentViaVoice = true`.
+    3. Response is generated; `ChatScreen.kt` intercepts completion, cleans the text using `cleanTextForTts`, and streams it to Android's `TextToSpeech` engine.
+    4. Inside the `UtteranceProgressListener.onDone` callback, the screen catches TTS completion. If `isContinuousVoiceActive` is true, it triggers a 500ms delay to cleanly clear the audio channel and automatically launches `viewModel.startVoiceInput()` to listen to the user's next question.
+*   **Interruption Recovery**: If the user starts typing manually or taps the stop button in the TTS player, the continuous voice state is cleanly turned off (`isContinuousVoiceActive = false`), handing back normal keyboard-based chat controls.
+
+### 38. How does Chhanda achieve flawless, low-latency multilingual speech playback in Hindi and Bengali?
+**Dynamic Character-Range Language Detection & Multi-tier Locale Fallbacks.**
+*   **The Problem**: Android's `TextToSpeech` engine default system locale is set to English (`en-IN` or `en-US`). If a message response contains Hindi (Devanagari) or Bengali script characters, speaking them with an English engine results in complete silence, garbled audio, or spelling letters out loud.
+*   **The Solution**: We engineered an automatic, character-range-based dynamic language detection pipeline inside `ChatScreen.kt` and `SystemViewModel.kt`:
+    *   **Bengali Script Detection**: Checks text against the Bengali Unicode block `\u0980-\u09FF`. If detected, sets TTS to `Locale("bn", "IN")`.
+    *   **Hindi Script Detection**: Checks text against the Devanagari Unicode block `\u0900-\u097F`. If detected, sets TTS to `Locale("hi", "IN")`.
+    *   **Multi-tier Locale Fallbacks**: If the device's TTS engine reports that a specific country locale (like `bn-BD` or `bn-IN`) is unsupported, Chhanda runs self-healing fallbacks first trying language-level locales (`Locale("bn")` / `Locale("hi")`), and then falls back cleanly to English (`Locale.ENGLISH`) instead of crashing or silent-failing.
+*   **Dynamic Voice Assignment**: After resolving the active spoken language, Chhanda filters the Android system voice pool to select the best corresponding high-quality male or female voice matching the user's selected voice settings.
 
 ---
 
 ## ⚡ Engineering & AI Partnership
 
-### 31. What role did Android Studio play in the development of Chhanda?
+### 35. What role did Android Studio play in the development of Chhanda?
 **Android Studio** was the foundational IDE used for:
 *   **Compilation & Gradle Orchestration**: Auto-managed 22 external dependencies and Gradle targets.
 *   **Logcat Diagnostics**: Inspected multi-process communication binder binds (`RemoteLLMEngine`) and caught thread safety violations on background audio recording.
 *   **Android Profiler**: Profiled heap allocation and CPU thermal thresholds during on-device Gemma 4B model loading.
 *   **UI/UX Jetpack Compose Inspection**: Validated layout renderings on a physical target.
 
-### 32. Who was the AI assistant involved in this project?
+### 36. Who was the AI assistant involved in this project?
 The entire codebase structure, RAG quantization pipeline, server rate-limiting features, and documentation hardening passes were co-developed exclusively with **Google's Gemini 3 Flash** as the sole AI assistant partner, ensuring state-of-the-art edge AI architecture.
 
 ---

@@ -129,23 +129,25 @@ graph LR
 4. Controls: **Pause** / **Resume** / **Cancel**
 5. Progress is shown as a percentage bar with download speed
 
-### 3.3 Model Activation
-1. Tap **Activate** on any model card (or use the model picker dialog)
-2. **Zero-Default Selection Enforcement**: Previously, the app would auto-select a default model (such as Gemma-4) on first start. This has been completely hardened. Chhanda now enforces a strict **Zero-Default Selection** model: no assumptions are made. The user must explicitly tap to select and activate their preferred model from the list. If starting without a selected model, startup cleanly aborts with the instruction: *"Startup aborted: No LLM model has been selected. Please tap a model from the list to activate it."*
-3. **Glowing State Icon Indicators**: Instead of old flat text status badges (`SELECTED`, `RUNNING`, `LOADING`), Chhanda presents modern dynamic icons beside local model names:
+### 3.3 Model Activation & Unified Startup
+1. Tap **Start Server** on the main active model card or click the active model name to present the Material 3 Model Picker window containing all downloaded models.
+2. **Unified Selection Flow**: Pressing the main "Start Server" button always presents the downloaded models selection sheet first. Selecting a model from the picker automatically boots the underlying LiteRT C++ engine, activates the model, and brings the Ktor-CIO server gateway online in a single tap.
+3. **Zero-Default Selection Enforcement**: Previously, the app would auto-select a default model on first start. This has been completely hardened. Chhanda enforces a strict Zero-Default Selection model: no assumptions are made. The user is always prompted with the downloaded model selection window to consciously choose their model.
+4. **Decluttered Model List UX**: The individual local model list card items are cleanly streamlined. Redundant play/stop and chat icons have been removed from the list items, keeping the server-wide gateway controls cleanly consolidated in the header card and bottom navigation. A single Delete action is retained for storage management.
+5. **Glowing State Icon Indicators**: Instead of old flat text status badges (`SELECTED`, `RUNNING`, `LOADING`), Chhanda presents modern dynamic icons beside local model names in the picker:
    * **Selected (Idle)**: Shows a premium primary-tinted Check Circle vector.
    * **Loading Engine**: Displays an active Material 3 circular progress spinner while the LiteRT-LM C++ instance is initializing in memory.
    * **Active (Running)**: Renders a premium, glowing **emerald-green** (`#22C55E`) Check Circle when the model is loaded and the gateway server is successfully running.
-4. When a model is successfully activated, Chhanda will:
+6. When a model is successfully activated from the picker, Chhanda will:
    - Stop any currently running server
    - Wait **2.5 seconds** for RAM to flush (prevents OOM)
    - Load the model into memory via LiteRT-LM
    - Start the Ktor-CIO server on the configured port
    - Register mDNS for network discovery
-5. The Active Model Card will show a green pulsing indicator.
+7. The Active Model Card will show a green pulsing indicator.
 
 ### 3.4 Model Deletion
-Tap the **Delete** icon on any model card → Confirm in the dialog. This removes the `.task` file from disk.
+Tap the **Delete** icon on any local model list card → Confirm in the dialog. This safely deletes the downloaded model file from disk.
 
 ---
 
@@ -204,13 +206,22 @@ Ask the AI to create files:
 
 The AI uses `[GENERATE_FILE]` tags internally. Files are saved to `filesDir/generated/` and a download link appears in the chat bubble.
 
-### 4.7 Text-to-Speech
-- Tap the **Speaker** icon on any AI response to hear it read aloud
-- A global playback bar appears with:
-  - Play/Pause button
-  - 10-second forward/backward seeking
-  - Progress indicator
-- Voice selection: Settings → TTS Voice → Preview with "Play Sample"
+### 4.7 Text-to-Speech & Voice Assistant Hardening
+- **Dynamic Character-Range Multilingual TTS Playback**: Chhanda natively supports flawless speech synthesis for **English, Hindi, and Bengali**. During playback, the app dynamically scans the response text for specific character script ranges (e.g. Bengali Unicode `\u0980-\u09FF` or Devanagari Hindi Unicode `\u0900-\u097F`). If detected, it seamlessly switches the system TTS engine language and voice signature to the corresponding language on the fly right before synthesizing.
+- **Multi-tier Locale Fallbacks**: If the device's default TTS provider lacks pre-installed offline localized language packs (like `bn-BD` or `bn-IN`), Chhanda initiates automated self-healing fallbacks to language-only parameters (`bn`, `hi`), and gracefully defaults back to standard English instead of silent-failing or crashing.
+- **Hands-Free Continuous Conversational Loop**: Tap the **Microphone** button to start a flawless, uninterrupted voice call session. The assistant will record your spoken prompt, submit it automatically upon detecting silence, stream the local Gemma response, synthesize the vocal playback, and immediately re-engage the microphone to listen again. You do not need to touch a single button for a continuous face-to-face conversation.
+- **Acoustic Citation & Source Scrubbing**: During Text-To-Speech playback, Chhanda runs highly aggressive recursive regex parsers to strip all citation brackets (e.g. `[1]`, `[Source #2]`), parenthetical tags (e.g., `(Source 1)`, `(2)`), spoken source tags (e.g., *"source one says"*, *"according to source two"*), and list headers. Bullet items are converted into natural conversational pauses, ensuring fluid vocal output.
+- **Unblocked News & Weather Engine**: If you ask about the weather or current news, the search subsystem instantly intercepts the query:
+  - **Decentralized Multi-Engine Search**: Instead of relying on hardcoded coordinates or rigid RSS feeds, the subsystem queries global web search engines dynamically.
+  - **LLM-First Context Synthesis**: The fetched web snippets are fed directly into the local Gemma LLM context. The LLM then dynamically parses, translates, and synthesizes the news or weather report in real time by itself.
+  - **General Search**: Employs **Dynamic Script Routing**. If the search query contains Hindi/Bengali script characters, Stage 1 automatically targets DuckDuckGo HTML or Google Search to pull rich regional Indic indices; otherwise, it targets the 100% unblocked, CAPTCHA-free **Mojeek Search** index first.
+  - **Multilingual Location Extraction**: Weather geocoding dynamically parses and scrubs English, Hindi, and Bengali stop words and postpositions, and strips trailing grammatical case endings (such as `ায়`, `য়`, `তে`, `র`, `ের` in Bengali and `में`, `का`, `की`, `के` in Hindi) to isolate the exact city name (e.g. "কলকাতা" or "दिल्ली") for 100% reliable geocoding.
+- **Self-Healing Speech Input**: Tap the **Microphone** to speak directly to the assistant. If the local system throws an `ERROR_LANGUAGE_UNAVAILABLE` (Error 13) due to missing offline voice packs, Chhanda's pipeline intercepts the exception and seamlessly falls back to Google's cloud-backed speech services.
+- **Global Playback Controller**: A premium playback bar appears at the bottom of the screen with:
+  - Play/Pause toggle
+  - 10-second skip forward/backward seeking buttons
+  - Real-time progress bar slider
+  - Custom speed (optimized at 0.95x for warm, natural cadence) and voice pitch options (Settings -> TTS Voice).
 
 ---
 
@@ -393,14 +404,14 @@ If a VPN is detected (TUN/PPP/IPSec interface), a warning banner appears on the 
 | **DB Capacity** | Auto-calculated | 1 GB min, up to 15% of free storage |
 | **Internet Search Capability** | Toggle | Enable or completely disable the external Google Web Search fallback querying pipeline |
 
-### 7.3 Fallback Web Search Logic
+### 7.3 Fallback Web Search Logic & Decoupled Privacy Control
 
-The **Internet Search Capability** toggle provides complete digital sovereignty. When enabled:
-* If a query yields poor similarity matches in the local RAG knowledge base, Chhanda attempts to query Google Search dynamically to augment its response.
-* This operates purely on an online connection. If the device goes offline, search transitions gracefully back to pre-trained parameters.
-
-When disabled:
-* Chhanda acts as a **100% disconnected local bubble**, completely ignoring the web scraper regardless of your internet connection or search queries. Any fallback triggers pre-trained parameters with immediate notification banners on the screen.
+The **Internet Search Capability** toggle provides complete digital sovereignty and is completely decoupled from the local RAG database state:
+*   **Decoupled Operation**: Unlike traditional platforms where web search depends on general RAG configurations, Chhanda runs internet queries based solely on whether `webSearchEnabled` is active and network connectivity is present—even if the RAG document store is completely empty or disabled.
+*   **Dynamic Script Routing & Multi-stage Fallbacks**: When search is enabled, Chhanda executes an O(N) check for Indic language characters. For Latin/English queries, it utilizes unblocked, privacy-preserving **Mojeek Search** (Stage 1), falling back to DuckDuckGo HTML (Stage 2) and Google Search (Stage 3). For Hindi or Bengali script queries, it automatically re-routes Stage 1 to **DuckDuckGo HTML / Google Search** to leverage world-class local-language indexing.
+*   **Weather and News Search Decentralization**: In case of weather and news, the system completely avoids hardcoded websites, rigid RSS feeds, and restricted geocoding APIs. Instead, the search engine dynamically queries general web search (Mojeek for English, DuckDuckGo/Google for Indic) to fetch live web contexts. The retrieved snippets are passed directly into the Gemma local LLM context, which parses and synthesizes accurate, real-time results conversationally by itself.
+*   **Startup State Synchronization**: During boot, Chhanda bypasses classic Android `NetworkCallback` initialization races by executing a direct, synchronous query on `connectivityManager.activeNetwork` and `NetworkCapabilities.NET_CAPABILITY_INTERNET`. This guarantees the search engine immediately recognizes active network links on startup without transition delays.
+*   **When Disabled**: Chhanda acts as a **100% disconnected local bubble**, completely bypassing the scraper in the domain layer regardless of internet status or query types, forcing all queries directly to local pre-trained parameter parameters with real-time screen banners notifying the user.
 
 ### 7.4 Auto-Delete Settings
 | Setting | Options | Effect |

@@ -129,9 +129,14 @@ English · Hindi · Bengali — full UI + TTS localization with voice persona sy
 | **Google Drive Cloud Sync** | Auto-syncs chats offline-to-online daily by default. Supports user configurations (custom schedules, no sync, Google account binding check). |
 | **Hot Model Swapping & Reload** | Swaps active running models directly from the active card. Automatically stops the server, tears down the C++ engine instance, swaps models, and starts back online with zero manual restarts. |
 | **Internet Search Toggle Switch** | A premium Material 3 configuration switch enabling users to completely turn off the LLM's external web search/scraping fallback. When disabled, the system operates as a 100% offline local brain, bypassing any internet calls with real-time status banners. |
-| **Zero-Default Selection Enforcement** | Enforces zero automatic model fallbacks on startup. The app does not assume or preload any model (like Gemma-4) by default, requiring explicit user selection to start the server. Startup cleanly aborts with informative user guidance if no model is selected. |
-| **Glowing State Icon Indicators** | Replaced flat text status badges (`SELECTED`, `RUNNING`, `LOADING`) with interactive dynamic icons beside local model cards. A primary-tinted Check Circle denotes selection, turning into an active emerald-green glowing Check Circle when running, or an animated circular progress indicator during model loading. |
+| **Zero-Default Selection Enforcement** | Enforces zero automatic model fallbacks. Pressing the "Start Server" button always presents a clean Material 3 bottom-sheet displaying all downloaded models, allowing the user to select their desired model which then immediately boots the engine and starts the gateway in a single tap. |
+| **Decluttered Model List (UX)** | Removed all redundant play and chat icons from the individual model list items, leaving a single clean Delete action. This ensures all server controls are consolidated at the main Active Model Card and prevents UI duplication. |
 | **Greeting Auto-Bypass Guard** | High-fidelity greeting filter (`isGreeting`) intercepting inputs like *"Hi"*, *"Hello"*, *"নমস্কার"*, or *"नमस्ते"*. Bypasses RAG SQLite database lookup and Web scraper operations entirely to respond directly from pretrained parameters, cutting processing latency to absolute zero. |
+| **Hands-Free Conversational Loop** | Allows continuous, hands-free voice conversations. The assistant records your voice, streams it to Gemma, plays the synthesized response, and automatically restarts recording with a safe audio cooldown, simulating a natural face-to-face call. |
+| **Acoustic Citation Scrubbing** | Real-time pre-synthesizer text parser that recursively strips inline citation brackets (`[1]`, `[Source #1]`), spoken source references (`"source one says"`), and raw URLs to produce completely fluid, continuous, human-like voice narration. |
+| **Decentralized Web Search Engine** | Lightning-fast search system that fetches real-time weather and news dynamically via multi-engine queries (Mojeek for English, DuckDuckGo/Google for Indic) and lets the local Gemma LLM synthesize the final reports organically. Offers **Dynamic Script Routing** that shifts Stage 1 to DuckDuckGo/Google Search for Hindi/Bengali scripts to leverage rich regional indexing. |
+| **Network Startup Probe** | Bypasses Android's startup `NetworkCallback` race conditions through synchronous, direct active network capability checks, seeding the online state immediately. |
+| **Multilingual TTS Hardening** | Dynamic script range character detection (Bengali Unicode `\u0980-\u09FF`, Hindi Devanagari Unicode `\u0900-\u097F`) that changes the TTS engine locale and voice dynamically right before playback, backed by self-healing locale fallbacks (`bn-BD` → `bn-IN` → `bn` → `en`). |
 
 ---
 
@@ -542,6 +547,9 @@ chhanda-local LLM/
 | **In-Context Read-Only Sessions**| ❌ | ✅ Server-aware security layer for reading session histories |
 | **Offline Hotspot Discovery** | ❌ | ✅ Automated tether settings launcher & join validation |
 | **Internet Search Toggle** | ❌ | ✅ Premium UI toggle to enable/disable external web query fallback |
+| **Self-Healing Speech recognition** | ❌ | ✅ Secure offline-to-cloud automatic Speech Error 13 recovery |
+| **Acoustic Citation Scrubbing** | ❌ | ✅ Fluid pre-TTS citation and reference suppression |
+| **Stage 1 Fast Search Engine** | ❌ | ✅ Sub-second DuckDuckGo HTML parser (<500ms local scrapers) |
 
 ---
 

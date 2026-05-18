@@ -47,11 +47,21 @@ class SendMessageUseCase @javax.inject.Inject constructor(
         var isContextFound = false
 
         try {
-            val isInternetPresent = networkManager.isConnected.value
+            val isInternetPresent = networkManager.isConnected.value || run {
+                try {
+                    val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                    val net = cm.activeNetwork
+                    val caps = cm.getNetworkCapabilities(net)
+                    caps != null && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                } catch (e: Exception) {
+                    false
+                }
+            }
             val isQrRequest = source.lowercase() == "qr"
             val isGreetingMsg = isGreeting(userText)
+            val isRealTime = isWeatherOrNewsQuery(userText)
             val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest && !isGreetingMsg
-            val webSearchEnabled = settingsRepository.webSearchEnabledFlow.first() && !isQrRequest && !isGreetingMsg
+            val webSearchEnabled = (settingsRepository.webSearchEnabledFlow.first() || isRealTime) && !isQrRequest && !isGreetingMsg
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
@@ -85,8 +95,8 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 }
             }
 
-            // Process RAG long-term context
-            val longTermContext = if (ragEnabled && longTermContextRaw.isNotBlank()) {
+            // Process RAG long-term context (skip for real-time queries to avoid stale database pollution)
+            val longTermContext = if (ragEnabled && !isRealTime && longTermContextRaw.isNotBlank()) {
                 val sourceSegments = longTermContextRaw
                     .substringAfter("<retrieved_knowledge>\n")
                     .substringBefore("</retrieved_knowledge>")
@@ -122,7 +132,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val retrievedSourcesList = mutableListOf<String>()
 
             // Gather any sources from local database context
-            if (hasDbKnowledge) {
+            if (hasDbKnowledge && !isRealTime) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Local database context found. Formulating grounded response..."))
                 val sourceRegex = """\[Source #\d+:\s*(.*?)\]""".toRegex()
                 sourceRegex.findAll(longTermContext).forEach { match ->
@@ -131,82 +141,109 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                         retrievedSourcesList.add(cleanSrc)
                     }
                 }
-            } else if (ragEnabled) {
-                if (isInternetPresent && webSearchEnabled) {
-                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches. Searching the web for real-time answers..."))
-                    try {
-                        val searchResults = webSearchUseCase(userText)
-                        if (searchResults.isNotEmpty()) {
-                            val snippetsList = searchResults.map { it.snippet }
-                            val distinctSnippets = deduplicateContexts(snippetsList)
-                            val filteredResults = searchResults.filter { distinctSnippets.contains(it.snippet) }
-                            
-                            if (filteredResults.isNotEmpty()) {
-                                hasWebKnowledge = true
-                                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web matches found. Synthesizing real-time information..."))
-                                webContext = buildString {
-                                    append("<retrieved_web_knowledge>\n")
-                                    filteredResults.take(3).forEachIndexed { index, result ->
-                                        val combinedSource = "${result.title}|${result.url}"
-                                        if (!retrievedSourcesList.contains(combinedSource)) {
-                                            retrievedSourcesList.add(combinedSource)
-                                        }
-                                        val rawSnippet = result.snippet
-                                        val cappedSnippet = if (rawSnippet.length > singleContextLimit) {
-                                            rawSnippet.take(singleContextLimit) + "... [truncated]"
-                                        } else {
-                                            rawSnippet
-                                        }
-                                        append("[Source #$index: ${result.title}]\n")
-                                        append("URL: ${result.url}\n")
-                                        append("Content: $cappedSnippet\n\n")
-                                    }
-                                    append("</retrieved_web_knowledge>")
-                                }
-                            }
-                            
-                            // Ingest the search results to the vector database for later use in the background
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                                try {
-                                    searchResults.forEach { result ->
-                                        val resultText = "Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}"
-                                        val finalLabel = result.title.ifBlank { result.url }.take(50).trim()
-                                        val existing = uploadedFileDao.findByNameAndSize(finalLabel, resultText.length.toLong())
-                                        if (existing == null) {
-                                            ingestDocumentUseCase.ingestScrapedText(resultText, result.url, finalLabel)
-                                            uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
-                                                id = java.util.UUID.randomUUID().toString(),
-                                                name = finalLabel,
-                                                format = "WEB_URL",
-                                                size = resultText.length.toLong(),
-                                                path = result.url,
-                                                timestamp = System.currentTimeMillis()
-                                            ))
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    android.util.Log.e("SendMessageUseCase", "Failed to ingest web search results: ${e.message}")
-                                }
-                            }
-                        } else {
-                            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search returned no matches. Answering from pre-trained knowledge..."))
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
-                        emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search error. Answering from pre-trained knowledge..."))
-                    }
-                } else if (isInternetPresent && !webSearchEnabled) {
-                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches & web search disabled. Answering from pre-trained knowledge..."))
+            }
+
+            // Web Search Fallback or forced Real-Time query search
+            if (isInternetPresent && webSearchEnabled) {
+                if (isRealTime) {
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Fetching real-time updates for news/weather..."))
                 } else {
-                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Searching the web for answers..."))
                 }
+                try {
+                    val searchResults = webSearchUseCase(userText)
+                    if (searchResults.isNotEmpty()) {
+                        val snippetsList = searchResults.map { it.snippet }
+                        val distinctSnippets = deduplicateContexts(snippetsList)
+                        val filteredResults = searchResults.filter { distinctSnippets.contains(it.snippet) }
+                        
+                        if (filteredResults.isNotEmpty()) {
+                            hasWebKnowledge = true
+                            emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web matches found. Synthesizing real-time information..."))
+                            webContext = buildString {
+                                append("<retrieved_web_knowledge>\n")
+                                filteredResults.take(3).forEachIndexed { index, result ->
+                                    val combinedSource = "${result.title}|${result.url}"
+                                    if (!retrievedSourcesList.contains(combinedSource)) {
+                                        retrievedSourcesList.add(combinedSource)
+                                    }
+                                    val rawSnippet = result.snippet
+                                    val cappedSnippet = if (rawSnippet.length > singleContextLimit) {
+                                        rawSnippet.take(singleContextLimit) + "... [truncated]"
+                                    } else {
+                                        rawSnippet
+                                    }
+                                    append("[Source #$index: ${result.title}]\n")
+                                    append("URL: ${result.url}\n")
+                                    append("Content: $cappedSnippet\n\n")
+                                }
+                                append("</retrieved_web_knowledge>")
+                            }
+                        }
+                        
+                        // Ingest the search results to the vector database for later use in the background
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            try {
+                                searchResults.forEach { result ->
+                                    val resultText = "Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet}"
+                                    val finalLabel = result.title.ifBlank { result.url }.take(50).trim()
+                                    val existing = uploadedFileDao.findByNameAndSize(finalLabel, resultText.length.toLong())
+                                    if (existing == null) {
+                                        ingestDocumentUseCase.ingestScrapedText(resultText, result.url, finalLabel)
+                                        uploadedFileDao.insertFile(com.chhanda.ai.data.repository.UploadedFileEntity(
+                                            id = java.util.UUID.randomUUID().toString(),
+                                            name = finalLabel,
+                                            format = "WEB_URL",
+                                            size = resultText.length.toLong(),
+                                            path = result.url,
+                                            timestamp = System.currentTimeMillis()
+                                        ))
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("SendMessageUseCase", "Failed to ingest web search results: ${e.message}")
+                            }
+                        }
+                    } else {
+                        emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search returned no matches. Answering from pre-trained knowledge..."))
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
+                    emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search error. Answering from pre-trained knowledge..."))
+                }
+            } else if (!isInternetPresent && isRealTime) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but device is offline. Answering from pre-trained knowledge..."))
+            } else if (isInternetPresent && !webSearchEnabled && !isRealTime) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches & web search disabled. Answering from pre-trained knowledge..."))
+            } else if (!isInternetPresent && !isRealTime) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
             }
 
             isContextFound = hasDbKnowledge || hasWebKnowledge
 
+            if (attachments.isNotEmpty()) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Processing ${attachments.size} attachments..."))
+            }
+            val attachmentContextRaw = turnContextIngestor.processTurnContext(userText, attachments)
+            val attachmentContext = if (attachmentContextRaw.isNotBlank()) {
+                hasAttachmentKnowledge = true
+                isContextFound = true
+                if (attachmentContextRaw.length > singleContextLimit) {
+                    attachmentContextRaw.take(singleContextLimit) + "... [truncated]"
+                } else {
+                    attachmentContextRaw
+                }
+            } else ""
+
+            val finalUserText = if (attachmentContextRaw.isNotBlank()) {
+                "$userText\n\n<turn_context>\n${attachmentContextRaw.take(3000)}\n</turn_context>"
+            } else {
+                userText
+            }
+
             val attachmentPathsString = if (attachments.isNotEmpty()) attachments.joinToString(",") { it.toString() } else null
             chatDao.insertMessage(com.chhanda.ai.data.repository.MessageEntity(
-                text = userText, 
+                text = finalUserText, 
                 role = "user", 
                 deviceId = deviceId, 
                 modelName = modelName, 
@@ -236,20 +273,6 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Error("Potential safety violation detected."))
                 return@flow
             }
-
-            if (attachments.isNotEmpty()) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Processing ${attachments.size} attachments..."))
-            }
-            val attachmentContextRaw = turnContextIngestor.processTurnContext(userText, attachments)
-            val attachmentContext = if (attachmentContextRaw.isNotBlank()) {
-                hasAttachmentKnowledge = true
-                isContextFound = true
-                if (attachmentContextRaw.length > singleContextLimit) {
-                    attachmentContextRaw.take(singleContextLimit) + "... [truncated]"
-                } else {
-                    attachmentContextRaw
-                }
-            } else ""
 
             val isApiRequest = source.lowercase() == "api"
 
@@ -678,5 +701,18 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             "नमस्ते", "नमस्कार", "प्रणाम", "शुभ प्रभात", "शुभ दोपहर", "शुभ संध्या", "शुभ रात्रि", "कैसे हो", "कैसे हैं", "हेलो"
         )
         return clean in greetings || greetings.any { clean == it || clean.startsWith(it + " ") }
+    }
+
+    private fun isWeatherOrNewsQuery(text: String): Boolean {
+        val clean = text.lowercase().trim()
+        val keywords = listOf(
+            "weather", "temperature", "forecast", "rain", "sunny", "climate", "celsius", "fahrenheit", "wind", "humidity",
+            "news", "headline", "current event", "breaking news", "latest update",
+            // Bengali
+            "আবহাওয়া", "আবহাওয়া", "তাপমাত্রা", "বৃষ্টি", "খবর", "সংবাদ", "শিরোনাম",
+            // Hindi
+            "मौसम", "तापमान", "बारिश", "समाचार", "खबर", "सुर्खियां"
+        )
+        return keywords.any { clean.contains(it) }
     }
 }

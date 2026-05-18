@@ -26,8 +26,10 @@ class TurnContextIngestor @Inject constructor(
                     val uriString = uri.toString()
                     val (fileName, fileLength) = com.chhanda.ai.util.FileUtils.getFileDetails(context, uri)
                     val lowerName = fileName.lowercase()
+                    val mimeType = context.contentResolver.getType(uri)?.lowercase() ?: ""
+                    val isImage = mimeType.startsWith("image/") || lowerName.contains("image") || lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp")
                     val (rawText, type) = when {
-                        lowerName.contains("image") || lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp") -> 
+                        isImage -> 
                             ingestor.ingestImage(uri) to DocType.IMAGE
                         lowerName.endsWith(".pdf") -> 
                             ingestor.ingestPdf(uri).joinToString("\n") to DocType.PDF

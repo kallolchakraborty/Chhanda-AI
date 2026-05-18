@@ -1,0 +1,512 @@
+--- OCR RESULT FOR Screenshot_20260518_040328_Chhanda.jpg ---
+4:03 $ in #•
+477
+Chhanda
+0*
+STOPPED
+Active Model
+Gemma-4 E2B IT
+© 192.168.0.194
+: 8888
+$ 35°C
+© 7.0 GB / 12 GB
+Start Server
+Session Summary
+128 Tokens Generated
+EST. SAVINGS
+$0.00
+Internal Models
+1 SECURE
+Gemma-4 E2B IT
+2.41 GB • READY
+Home
+Models
+Settings
+< >
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_040342_Chhanda.jpg ---
+4:03 00
+• in •
+Chhanda
+Gemma-4 E2B IT
+2.41 GB • READY
+Downloadable Models
+Gemma-4 E4B IT
+SIZE: 3.4 GB
+RECOMMENDED
+Chat Management
+Model Comparison
+Compare speed and accuracy of installed models.
+Manage Chat History
+View and purge history across all connected
+devices.
+Home
+E
+Models
+Settings
+4 77
+download
+SECURE
+40
+Open
+< >
+Logs
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_040351_Chhanda.jpg ---
+4:03 00
+in •
+477
+Chhanda
+L
+STOPPED
+60%
+C
+Active Model
+Loading Model.. +
+G 192.168.0.194
+: 8888
+$ 35°C
+@ 7.6 GB / 12 GB
+Initializing Engine...
+Session Summary
+128 Tokens Generated
+EST. SAVINGS
+$0.00
+Internal Models
+1 SECURE
+Gemma-4 E2B IT
+2.41 GB • READY
+Home
+Models
+Settings
+< >
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_040401_Chhanda.jpg ---
+4:04
+30 •
+Chhanda
+CONNECTED
+Active Model
+Gemma-4 E2B IT +
+G 192.168.0.194
+• 8888
+35°C
+Stop Server
+4
+Session Summary
+128 Tokens Generated
+Internal Models
+Gemma-4 E2B IT
+2.41 GB • READY
+Home
+Models
+Settings
+477
+• 7.8 GB / 12 GB
+Try It
+EST. SAVINGS
+$0.00
+1 SECURE
+< >
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041024_Chhanda.jpg ---
+4:10
+all
+• 80
+C
+Chhanda
+CONNECTED
+Active Model
+No Local Network Detected
+To share this local Al gateway offline, please
+complete these steps:
+1. Tap the button below to open your phone's Personal
+Hotspot settings and turn it on.
+2. Ask other users/devices to connect to your hotspot
+network.
+3. Once they join, confirm below to open the QR Code
+window.
+Configure Hotspot
+CANCEL
+Confirm & Show QR
+Home
+Models
+Settings
+<>
+Logs
+111
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041045_Chhanda.jpg ---
+4:10 C C
+• 80
+Node Connectivity
+X
+10
+1*
+API URL
+http://127.0.0.1:8888/v1
+API KEY
+CONTINUE CONFIG (YAML)
+LE
+name: Local Config
+version: 1.0.0
+schema: v1
+models:
+- name: "Chhanda: Gemma 4 (Local)"
+provider: "openai"
+model: "gemma-4-e2b"
+apiBase: "http://127.0.0.1:8888/v1"
+apiKey: "CH-61FACBF8"
+template: "chatml"
+useToolCalling: true # Enables file
+creation/edits
+Done
+O
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041100_Chhanda.jpg ---
+4:11 O,
+all
+• 80
+Chhanda
+CONNECTED
+Active Model
+Gemma-4 E2B IT +
+GO 127.0.0.1
+฿ 8888
+34°C
+• 7.8 GB / 12 GB
+Stop Server
+4
+Try It
+Session Summary
+O Tokens Generated
+EST. SAVINGS
+$0.00
+Chat History -
+Gemma-4-E2B-IT.litertlm
++ Start New Chat
+Simple Greeting
+111
+O
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041119_Chhanda.jpg ---
+4:11 C C
+all 080
+Gemma-4 E2B IT
+X
+newu.
+1)
+2 tokens 8.44s (0.2 t/s)
+who are you?
+1 am Chhanda, a Senior Al Assistant.
+1)
+• LLM
+11 tokens | 1.33s (8.7 t/s)
+what you can do
+i
+I am a Senior Al Assistant capable of complex
+queries, coding, analysis, and information synthesis.
+* LLM
+19 tokens | 1.79s (11.0 t/s)
++
+Ask Chhanda...
+Home
+Models
+Settings
+Logs
+111
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041133_Chhanda.jpg ---
+4:11 6@
+all
+• 80
+Memory
+Data Ingestion
+1
+Upload Data
+Upload PDF's, images, text Documents, audio,
+datasets your local database for RAG purpose.
+Browse Files
+Connect URL
+SUPPORTED KNOWLEDGE SOURCES
+PDF
+PDF
+Word
+Excel
+Il.
+CSV
+JSON
+Tr
+Text
+Image
+Audio
+Web Link
+GitHub
+External Memory Integration
+Home
+Models
+Settings
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041145_Chhanda.jpg ---
+4:11 C @
+all
+• 80
+Memory
+External Memory Integration
+External Memory
+Integration
+Import memory from ChatGPT, Perplexity
+or export your Chhanda memory.
+Import Memory
+1
+Export Memory
+ChatGPT (conversations.json)
+Perplexity (JSON/Text)
+il. Statistics
+Total Indexed
+O files
+N 0.0% growth this week
+Home
+E
+Models
+Settings
+< >
+Logs
+111
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041202_Chhanda.jpg ---
+4:12 C @
+all
+• 80
+Memory
+: Storage Metrics
+VECTOR STORAGE
+0 B / 3.94 GB Used
+RAG Quality & Search
+88%
+Recall@K
+0.74
+MRR
+Measures retrieval accuracy and ranking quality of the vector
+engine.
+Production Performance
+Tail Latency (ms)
+p50
+p95
+p99
+Home
+Models
+Settings
+Logs
+11l
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041214_Chhanda.jpg ---
+4:12 C @
+all
+• 80
+Tail Latency (ms)
+p50
+Oms
+p95
+Oms
+p99
+Oms
+QPS
+0.00
+Ingest Rate
+0.0 ch/s
+Readiness & Resource Cost
+4
+App RAM
+Index Efficiency
+Compute Cost
+Storage Efficiency
+302 MB
+92.0%
+0.002 Wh/Query
+98.5%
+Wipe All Local Memory
+Home
+E
+Models
+Settings
+< >
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041230_Chhanda.jpg ---
+4:12 C @
+all
+• 80
+Settings
+Appearance
+Dark Mode
+Switch between light and dark themes.
+Thinking Mode
+Show or hide the model's internal thinking process.
+App Language
+English
+TTS Voice
+Kallol (Indian Male)
+"Or Vibration & Haptics
+Haptic Feedback
+Enable or disable physical vibration triggers.
+Home
+E
+Models
+Settings
+Logs
+111
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041241_Chhanda.jpg ---
+4:12 6, @
+all 080
+Settings
+Network Settings
+Server Port
+8888
+Context Length
+Total tokens for processing.
+System RAM: 10.8 GB | Recommended: 4096 (Mid-High)
+tokens
+102
+4096 tokens
+TurboQuant
+Enable KV-cache compression to reduce memory use
+during long-context inference.
+32,768
+Max Devices
+Limit remote connections.
+5 devices
+20
+Home
+E
+Models
+Settings
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041256_Chhanda.jpg ---
+4:12 0, @
+all
+• 80
+Settings
+Vector Database (RAG)
+Enable long-term memory via localized vector storage.
+Disable to save memory/RAM.
+Automatically managed (1GB minimum, up to 15% of remaining
+storage).
+Current Limit: 3.7 GB
+Internet Search Capability
+Allow the LLM to search the web as a fallback when no
+relevant vector memory matches are found.
+OF Auto Delete Settings
+Auto Delete
+Automatically clear old vector data
+Retention Period
+Delete files older than the specified number of days
+7 days
+1 day
+30 days
+Home
+E
+Models
+Settings
+< >
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041316_Chhanda.jpg ---
+4:13 6@
+all
+80
+Settings
+S& Cloud Sync & Backup
+Connect to Google Drive
+Sync your chat history securely across devices.
+Sign in with Google
+Cloud Sync Frequency
+Sign in to configure sync
+E2E Encrypted via Hardware Keystore
+Security
+Home
+E
+Models
+Settings
+Logs
+111
+<
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041332_Chhanda.jpg ---
+4:13 -
+all
+• 80
+Settings
+Security
+Privacy Shield
+Automatically redact Emails, Phone numbers, and Credit
+Cards from Al responses.
+App Authentication
+Require biometric fingerprint or face lock when opening
+the app.
+API Key
+For external integrations.
+• ••
+.....
+C
+Hugging Face Token
+For gated models.
+hf_...
+Revoke All Sessions
+Home
+E
+Models
+Settings
+< >
+Logs
+--------------------------------------------------
+--- OCR RESULT FOR Screenshot_20260518_041343_Chhanda.jpg ---
+4:13 E
+all
+• 80
+Logs
+Q
+Search activity, LLM or status...
+All Logs
+Date
+=
+LIVE FEED
+• LIVE
+[com.chhanda.ail SYSTEM
+SUCCESS
+Provisioned device node key: CH-61FACBF8
+03:53:04
+[com.chhanda.ail SYSTEM
+INFO
+Device RAM detected: 10.8 GB. Recommended:
+Gemma-4-E4B-IT
+03:53:04
+[com.chhanda.ail SYSTEM
+SUCCESS
+Chhanda Gateway Refactored Active
+03:53:05
+[com.chhanda.ail SYSTEM
+All permissions granted.
+SUCCESS
+03:53:23
+Home
+E
+Models
+Settings
+< >
+Logs
+<
+--------------------------------------------------

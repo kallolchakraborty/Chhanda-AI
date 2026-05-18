@@ -270,7 +270,7 @@ class SystemViewModel @Inject constructor(
     val autoDeleteDays = settingsRepository.autoDeleteDaysFlow.stateIn(viewModelScope, SharingStarted.Eagerly, 7)
     val autoDeleteEnabled = settingsRepository.autoDeleteEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val turboQuantEnabled = settingsRepository.turboQuantEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "Kallol (Indian Male)")
+    val selectedVoice = settingsRepository.selectedVoiceFlow.stateIn(viewModelScope, SharingStarted.Eagerly, "Male")
     val ragEnabled = settingsRepository.ragEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
     val webSearchEnabled = settingsRepository.webSearchEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val thinkingModeEnabled = settingsRepository.thinkingModeEnabledFlow.stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -489,7 +489,7 @@ class SystemViewModel @Inject constructor(
 
     private val _availableVoices = MutableStateFlow<List<String>>(
         listOf(
-            "Kallol (Indian Male)", "Chhanda (Indian Female)"
+            "Male", "Female"
         )
     )
     val availableVoices: StateFlow<List<String>> = _availableVoices.asStateFlow()
@@ -517,56 +517,31 @@ class SystemViewModel @Inject constructor(
     }
 
     private fun speakSampleInternal(virtualVoiceName: String, locale: Locale) {
-        sampleTts?.language = locale
-        sampleTts?.setSpeechRate(0.9f)
-        sampleTts?.setPitch(1.0f)
-
-        val isMale = virtualVoiceName.contains("Male")
-
-        val cleanName = virtualVoiceName.substringBefore(" (")
-
-        val systemVoices = sampleTts?.voices?.toList() ?: emptyList()
-
-        val pool = systemVoices.filter { v -> v.locale.language == locale.language }
-            .filter { v ->
-                val name = v.name.lowercase()
-                if (isMale) {
-
-                    name.contains("male") || name.contains("-m-") || name.contains("_m_") || 
-                    name.contains("ahp") || name.contains("hie") || name.contains("baq") ||
-                    name.contains("guy") || name.contains("man") || name.contains("boy") ||
-                    (v.locale.country == "IN" && (name.contains("en-in-x-ahp") || name.contains("hi-in-x-hie")))
-                } else {
-
-                    name.contains("female") || name.contains("-f-") || name.contains("_f_") || 
-                    name.contains("ahi") || name.contains("hif") || name.contains("ban") ||
-                    name.contains("girl") || name.contains("woman") || name.contains("lady") ||
-                    (v.locale.country == "IN" && (name.contains("en-in-x-ahi") || name.contains("hi-in-x-hif")))
-                }
+        val engine = sampleTts ?: return
+        var result = engine.setLanguage(locale)
+        if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA || result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+            val fallback = when (locale.language) {
+                "bn" -> Locale("bn", "IN")
+                "hi" -> Locale("hi")
+                else -> Locale("en")
             }
-            .sortedByDescending { v ->
-                val name = v.name.lowercase()
-                var score = 0
-
-                if (!v.isNetworkConnectionRequired) score += 100 
-                if (name.contains("network") || name.contains("neural")) score += 50
-                if (name.contains("high") || name.contains("premium")) score += 30
-                score
-            }
-
-        val voiceToUse = pool.firstOrNull() ?: run {
-            val localeVoices = systemVoices.filter { it.locale.language == locale.language }
-            if (isMale && localeVoices.size > 1) {
-
-                localeVoices.getOrNull(1) ?: localeVoices.firstOrNull()
-            } else {
-                localeVoices.firstOrNull()
+            result = engine.setLanguage(fallback)
+            if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA || result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+                engine.setLanguage(Locale("bn"))
             }
         }
+        
+        engine.setSpeechRate(0.9f)
+        engine.setPitch(1.0f)
+
+        val isMale = virtualVoiceName.contains("Male")
+        val cleanName = virtualVoiceName.substringBefore(" (")
+        val systemVoices = engine.voices?.toList() ?: emptyList()
+        val voiceToUse = com.chhanda.ai.util.TtsVoiceFilter.findBestVoice(systemVoices, locale, isMale)
 
         if (voiceToUse != null) {
             sampleTts?.voice = voiceToUse
-            Log.d("SystemViewModel", "Selected system voice ${voiceToUse.name} (${if(isMale) "M" else "F"} heuristic) for $virtualVoiceName")
+            Log.d("SystemViewModel", "Selected system voice ${voiceToUse.name} via TtsVoiceFilter for $virtualVoiceName")
         }
 
         val languageName = when (locale.language) {

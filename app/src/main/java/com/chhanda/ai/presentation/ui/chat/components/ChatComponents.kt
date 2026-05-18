@@ -127,7 +127,10 @@ fun MessageBubble(
     
     val (parsedThinking, parsedResponse) = parseMessageContent(message.text)
     val finalThinking = message.thinking ?: parsedThinking
-    val finalResponse = if (message.thinking != null) message.text else parsedResponse
+    val rawResponse = if (message.thinking != null) message.text else parsedResponse
+    val contextStrippedResponse = rawResponse.replace(Regex("<turn_context>[\\s\\S]*?</turn_context>", RegexOption.IGNORE_CASE), "")
+    val genericTagRegex = """</?[a-zA-Z_][a-zA-Z0-9_\-:]*[^>]*>""".toRegex()
+    val finalResponse = cleanLatexFormatting(contextStrippedResponse.replace(genericTagRegex, "").trim())
 
     Column(
         modifier = Modifier.fillMaxWidth(),

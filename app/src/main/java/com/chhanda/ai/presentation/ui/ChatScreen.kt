@@ -65,21 +65,39 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(voiceResult) {
-        if (voiceResult.isNotEmpty()) {
-            inputText = voiceResult
+    var baseText by remember { mutableStateOf("") }
+    var wasListening by remember { mutableStateOf(false) }
+    var wasSentViaVoice by remember { mutableStateOf(false) }
+
+    // When listening starts, capture the current input text as the base
+    LaunchedEffect(voiceListening) {
+        if (voiceListening) {
+            baseText = inputText
+        } else {
+            baseText = ""
         }
     }
 
-    LaunchedEffect(voiceError) {
-        voiceError?.let {
-            if (hapticsEnabled) {
-                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+    LaunchedEffect(voiceResult) {
+        if (voiceResult.isNotEmpty()) {
+            if (baseText.isEmpty()) {
+                inputText = voiceResult
+            } else {
+                inputText = baseText + (if (baseText.endsWith(" ")) "" else " ") + voiceResult
             }
         }
     }
 
     val context = LocalContext.current
+    LaunchedEffect(voiceError) {
+        voiceError?.let { errorMsg ->
+            if (hapticsEnabled) {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            }
+            android.widget.Toast.makeText(context, errorMsg, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearVoiceResult() // Clear error so we don't trigger the toast again on recomposition
+        }
+    }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     
     val ttsLocale = when (appLanguage) {
@@ -93,6 +111,7 @@ fun ChatScreen(
     var ttsProgress by remember { mutableFloatStateOf(0f) }
     var isTtsPlaying by remember { mutableStateOf(false) }
     var ttsOffset by remember { mutableIntStateOf(0) }
+    var isContinuousVoiceActive by remember { mutableStateOf(false) }
 
     DisposableEffect(ttsLocale, selectedVoice) {
         var ttsInstance: TextToSpeech? = null
@@ -100,19 +119,29 @@ fun ChatScreen(
             ttsInstance = TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     ttsInstance?.let { engine ->
-                        engine.language = ttsLocale
+                        var result = engine.setLanguage(ttsLocale)
+                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                            val fallback = when (appLanguage) {
+                                "Bengali" -> java.util.Locale("bn", "IN")
+                                "Hindi" -> java.util.Locale("hi")
+                                else -> java.util.Locale("en")
+                            }
+                            result = engine.setLanguage(fallback)
+                            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                                val secFallback = when (appLanguage) {
+                                    "Bengali" -> java.util.Locale("bn")
+                                    else -> java.util.Locale.ENGLISH
+                                }
+                                engine.setLanguage(secFallback)
+                            }
+                        }
                         engine.setSpeechRate(0.9f)
                         
                         if (selectedVoice != "Default") {
                             val isMale = selectedVoice.contains("Male")
                             val systemVoices = engine.voices?.toList() ?: emptyList()
-                            val pool = systemVoices.filter { v -> v.locale.language == ttsLocale.language }
-                                .filter { v ->
-                                    val name = v.name.lowercase()
-                                    if (isMale) name.contains("male") || name.contains("-m-") || name.contains("boy")
-                                    else name.contains("female") || name.contains("-f-") || name.contains("girl")
-                                }
-                            pool.firstOrNull()?.let { engine.voice = it }
+                            val voiceToUse = com.chhanda.ai.util.TtsVoiceFilter.findBestVoice(systemVoices, ttsLocale, isMale)
+                            voiceToUse?.let { engine.voice = it }
                         }
                         
                         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -124,6 +153,19 @@ fun ChatScreen(
                                         isTtsPlaying = false
                                         ttsProgress = 0f
                                         ttsOffset = 0
+                                        
+                                        if (isContinuousVoiceActive) {
+                                            kotlinx.coroutines.delay(500)
+                                            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                                context,
+                                                android.Manifest.permission.RECORD_AUDIO
+                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            if (hasPermission) {
+                                                viewModel.startVoiceInput()
+                                            } else {
+                                                permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -146,6 +188,101 @@ fun ChatScreen(
             ttsInstance?.stop()
             ttsInstance?.shutdown()
             tts = null
+        }
+    }
+
+    // Dynamic Persona-based Human Speech Adaptation Pipeline (Rate, Pitch, and Voice signature)
+    LaunchedEffect(tts, uiState.selectedPersona, selectedVoice, ttsLocale) {
+        tts?.let { engine ->
+            val persona = uiState.selectedPersona
+            
+            // 1. Map Selected Persona to human-like voice characteristics (Speech Rate & Pitch)
+            val (rate, pitch) = when (persona) {
+                "Senior Teacher" -> Pair(0.85f, 1.0f)           // Warm, patient, and instructional
+                "Senior Software Engineer" -> Pair(0.95f, 0.9f)  // Crisp, professional, analytical lower pitch
+                "Friend" -> Pair(1.02f, 1.1f)                    // Warm, energetic, faster speech & upbeat pitch
+                else -> Pair(0.92f, 1.0f)                        // General Companion / Default
+            }
+            engine.setSpeechRate(rate)
+            engine.setPitch(pitch)
+            
+            // 2. Select corresponding optimal system voice signature dynamically
+            val systemVoices = engine.voices?.toList() ?: emptyList()
+            val isMale = if (selectedVoice != "Default") {
+                selectedVoice.contains("Male")
+            } else {
+                persona == "Senior Software Engineer"
+            }
+            val voiceToUse = com.chhanda.ai.util.TtsVoiceFilter.findBestVoice(systemVoices, ttsLocale, isMale)
+            voiceToUse?.let { engine.voice = it }
+        }
+    }
+
+    // Auto-Submit prompt when user stops speaking (silence detected)
+    LaunchedEffect(voiceListening) {
+        if (voiceListening) {
+            wasListening = true
+        } else if (wasListening) {
+            wasListening = false
+            // Wait 200ms for final SpeechRecognizer results to safely stream and append
+            kotlinx.coroutines.delay(200)
+            val finalPrompt = inputText.trim()
+            if (finalPrompt.isNotEmpty()) {
+                wasSentViaVoice = true
+                viewModel.sendMessage(finalPrompt)
+                inputText = ""
+                viewModel.clearVoiceResult()
+            }
+        }
+    }
+
+    // Auto-Speak response aloud when LLM finishes generating (if query was dictated)
+    LaunchedEffect(uiState.isGenerating) {
+        if (!uiState.isGenerating && wasSentViaVoice) {
+            wasSentViaVoice = false
+            val lastMessage = uiState.messages.lastOrNull()
+            if (lastMessage != null && lastMessage.role == "model") {
+                val msgIdStr = lastMessage.id.toString()
+                tts?.stop()
+                val rawTextToSpeak = if (lastMessage.thinking != null) lastMessage.text else parseMessageContent(lastMessage.text).second
+                val textToSpeak = rawTextToSpeak.replace("""</?[a-zA-Z_][a-zA-Z0-9_\-:]*[^>]*>""".toRegex(), "").trim()
+                val cleanText = cleanTextForTts(textToSpeak)
+                if (cleanText.isNotEmpty()) {
+                    activeTtsMessageId = msgIdStr
+                    activeTtsText = cleanText
+                    ttsOffset = 0
+                    ttsProgress = 0f
+                    
+                    tts?.let { engine ->
+                        val detectedLocale = when {
+                            containsBengali(cleanText) -> java.util.Locale("bn", "IN")
+                            containsDevanagari(cleanText) -> java.util.Locale("hi", "IN")
+                            else -> when (appLanguage) {
+                                "Bengali" -> java.util.Locale("bn", "BD")
+                                "Hindi" -> java.util.Locale("hi", "IN")
+                                else -> java.util.Locale("en", "IN")
+                            }
+                        }
+                        
+                        var result = engine.setLanguage(detectedLocale)
+                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                            val fallback = when (detectedLocale.language) {
+                                "bn" -> java.util.Locale("bn")
+                                "hi" -> java.util.Locale("hi")
+                                else -> java.util.Locale("en")
+                            }
+                            engine.setLanguage(fallback)
+                        }
+                        
+                        val systemVoices = engine.voices?.toList() ?: emptyList()
+                        val isMale = selectedVoice.contains("Male")
+                        val voiceToUse = com.chhanda.ai.util.TtsVoiceFilter.findBestVoice(systemVoices, detectedLocale, isMale)
+                        voiceToUse?.let { engine.voice = it }
+                    }
+                    
+                    tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, msgIdStr)
+                }
+            }
         }
     }
 
@@ -197,18 +334,14 @@ fun ChatScreen(
                 ),
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        with(sharedTransitionScope) {
-                            ChhandaLogo(size = 28, modifier = Modifier.sharedElement(sharedTransitionScope.rememberSharedContentState(key = "model_logo_${viewModel.modelName}"), animatedVisibilityScope = animatedVisibilityScope))
-                        }
+                        ChhandaLogo(size = 28, modifier = Modifier)
                         Spacer(Modifier.width(10.dp))
-                        with(sharedTransitionScope) {
-                            Text(
-                                formatModelDisplayName(viewModel.modelName), 
-                                fontWeight = FontWeight.ExtraBold, 
-                                fontSize = 18.sp, 
-                                modifier = Modifier.sharedElement(sharedTransitionScope.rememberSharedContentState(key = "model_name_${viewModel.modelName}"), animatedVisibilityScope = animatedVisibilityScope)
-                            ) 
-                        }
+                        Text(
+                            if (uiState.isModelLoaded) formatModelDisplayName(viewModel.modelName) else "No Active Model", 
+                            fontWeight = FontWeight.ExtraBold, 
+                            fontSize = 18.sp, 
+                            modifier = Modifier
+                        ) 
                     }
                 },
                 actions = {
@@ -221,7 +354,7 @@ fun ChatScreen(
             // Model Loading/Error Banner
             if (uiState.isModelLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp))
-            } else if (!uiState.isModelLoaded) {
+            } else if (!uiState.isModelLoaded && uiState.messages.isEmpty()) {
                 Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Warning, contentDescription = "Warning", tint = MaterialTheme.colorScheme.error)
@@ -260,6 +393,34 @@ fun ChatScreen(
                                     activeTtsText = cleanText
                                     ttsOffset = 0
                                     ttsProgress = 0f
+                                    
+                                    tts?.let { engine ->
+                                        val detectedLocale = when {
+                                            containsBengali(cleanText) -> java.util.Locale("bn", "IN")
+                                            containsDevanagari(cleanText) -> java.util.Locale("hi", "IN")
+                                            else -> when (appLanguage) {
+                                                "Bengali" -> java.util.Locale("bn", "BD")
+                                                "Hindi" -> java.util.Locale("hi", "IN")
+                                                else -> java.util.Locale("en", "IN")
+                                            }
+                                        }
+                                        
+                                        var result = engine.setLanguage(detectedLocale)
+                                        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                                            val fallback = when (detectedLocale.language) {
+                                                "bn" -> java.util.Locale("bn")
+                                                "hi" -> java.util.Locale("hi")
+                                                else -> java.util.Locale("en")
+                                            }
+                                            engine.setLanguage(fallback)
+                                        }
+                                        
+                                        val systemVoices = engine.voices?.toList() ?: emptyList()
+                                        val isMale = selectedVoice.contains("Male")
+                                        val voiceToUse = com.chhanda.ai.util.TtsVoiceFilter.findBestVoice(systemVoices, detectedLocale, isMale)
+                                        voiceToUse?.let { engine.voice = it }
+                                    }
+                                    
                                     tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, msgIdStr)
                                 }
                             }
@@ -355,10 +516,21 @@ fun ChatScreen(
                 GlobalTtsPlayer(
                     progress = ttsProgress,
                     isPlaying = isTtsPlaying,
-                    onStop = { tts?.stop(); activeTtsMessageId = null; isTtsPlaying = false },
+                    onStop = { 
+                        tts?.stop()
+                        activeTtsMessageId = null
+                        isTtsPlaying = false
+                        isContinuousVoiceActive = false
+                    },
                     onTogglePlay = {
-                        if (isTtsPlaying) { tts?.stop(); isTtsPlaying = false }
-                        else { tts?.speak(activeTtsText.substring(ttsOffset), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId); isTtsPlaying = true }
+                        if (isTtsPlaying) { 
+                            tts?.stop()
+                            isTtsPlaying = false
+                            isContinuousVoiceActive = false
+                        } else { 
+                            tts?.speak(activeTtsText.substring(ttsOffset), TextToSpeech.QUEUE_FLUSH, null, activeTtsMessageId)
+                            isTtsPlaying = true 
+                        }
                     },
                     onSeek = { pos ->
                         val idx = (pos * activeTtsText.length).toInt().coerceIn(0, activeTtsText.length)
@@ -380,18 +552,41 @@ fun ChatScreen(
 
             ChatInput(
                 text = inputText,
-                onTextChange = { inputText = it },
-                onSend = { viewModel.sendMessage(inputText); inputText = "" },
+                onTextChange = {
+                    inputText = it
+                    if (it.isNotEmpty() && !voiceListening) {
+                        isContinuousVoiceActive = false
+                    }
+                },
+                onSend = { 
+                    isContinuousVoiceActive = false
+                    viewModel.sendMessage(inputText)
+                    inputText = "" 
+                },
                 onStop = { viewModel.stopInference() },
                 onAttach = { viewModel.addFile(it) },
-                onRefine = { viewModel.refineText(inputText); inputText = "" },
+                onRefine = { 
+                    isContinuousVoiceActive = false
+                    viewModel.refineText(inputText)
+                    inputText = "" 
+                },
                 isGenerating = uiState.isGenerating,
                 isListening = voiceListening,
                 onVoiceClick = {
                     if (voiceListening) {
+                        isContinuousVoiceActive = false
                         viewModel.stopVoiceInput()
                     } else {
-                        permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        isContinuousVoiceActive = true
+                        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.RECORD_AUDIO
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            viewModel.startVoiceInput()
+                        } else {
+                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        }
                     }
                 },
                 appLanguage = appLanguage,
@@ -410,4 +605,18 @@ fun ChatScreen(
             dismissButton = { TextButton(onClick = { showCloseConfirm = false }) { Text("CANCEL") } }
         )
     }
+}
+
+private fun containsBengali(text: String): Boolean {
+    for (char in text) {
+        if (char in '\u0980'..'\u09FF') return true
+    }
+    return false
+}
+
+private fun containsDevanagari(text: String): Boolean {
+    for (char in text) {
+        if (char in '\u0900'..'\u097F') return true
+    }
+    return false
 }

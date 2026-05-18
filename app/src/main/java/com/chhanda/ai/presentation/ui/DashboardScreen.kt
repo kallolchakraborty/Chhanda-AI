@@ -117,7 +117,7 @@ fun DashboardScreen(
     var showHotspotPrompt by remember { mutableStateOf(false) }
     var showNoNetworkHotspotPrompt by remember { mutableStateOf(false) }
     var forceShowQr by remember { mutableStateOf(false) }
-    val hasNetworkState by viewModel.hasNetwork.collectAsStateWithLifecycle()
+    val hasLocalNetwork = networkIps.any { it != "127.0.0.1" }
     var expandedAssistant by remember { mutableStateOf<String?>(null) }
     var isApiKeyVisibleInQr by remember { mutableStateOf(false) }
     var modelToDelete by remember { mutableStateOf<String?>(null) }
@@ -353,7 +353,7 @@ fun DashboardScreen(
                     IconButton(
                         onClick = { 
                             hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
-                            if (!hasNetworkState) {
+                            if (!hasLocalNetwork) {
                                 showNoNetworkHotspotPrompt = true 
                             } else {
                                 showQrDialog = true
@@ -395,11 +395,7 @@ fun DashboardScreen(
                     },
                     onStart = { 
                         hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.HEAVY_CLICK)
-                        if (anyActiveModel) {
-                            viewModel.toggleServer()
-                        } else {
-                            showModelPicker = true 
-                        }
+                        showModelPicker = true
                     },
                     onTryIt = { 
                         hapticManager.play(com.chhanda.ai.util.HapticManager.HapticPattern.LIGHT_TICK)
@@ -824,7 +820,7 @@ fun DashboardScreen(
                 Surface(
                     onClick = { 
                         if (isQrEnabled) {
-                            if (!hasNetworkState) {
+                            if (!hasLocalNetwork) {
                                 showNoNetworkHotspotPrompt = true
                             } else {
                                 showQrDialog = true

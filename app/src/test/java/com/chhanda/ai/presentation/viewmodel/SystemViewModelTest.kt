@@ -84,7 +84,7 @@ class SystemViewModelTest {
         every { settingsRepository.autoDeleteDaysFlow } returns flowOf(7)
         every { settingsRepository.autoDeleteEnabledFlow } returns flowOf(true)
         every { settingsRepository.turboQuantEnabledFlow } returns flowOf(true)
-        every { settingsRepository.selectedVoiceFlow } returns flowOf("Kallol (Indian Male)")
+        every { settingsRepository.selectedVoiceFlow } returns flowOf("Male")
         every { settingsRepository.ragEnabledFlow } returns flowOf(true)
         every { settingsRepository.thinkingModeEnabledFlow } returns flowOf(true)
         every { settingsRepository.privacyShieldEnabledFlow } returns flowOf(true)

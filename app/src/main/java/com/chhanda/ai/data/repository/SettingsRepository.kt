@@ -135,7 +135,7 @@ class SettingsRepository @Inject constructor(
     }
 
     val selectedVoiceFlow: Flow<String> = dataStore.data.map { preferences ->
-        preferences[PreferencesKeys.SELECTED_VOICE] ?: "Kallol (Indian Male)"
+        preferences[PreferencesKeys.SELECTED_VOICE] ?: "Male"
     }
 
     val ragEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->

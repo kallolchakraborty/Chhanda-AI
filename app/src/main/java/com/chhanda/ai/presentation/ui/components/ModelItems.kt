@@ -146,54 +146,6 @@ fun LocalModelItem(
                         )
                     }
                 }
-
-                // Chat/Try It Button
-                Surface(
-                    onClick = onTryIt,
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Chat, 
-                            null, 
-                            tint = MaterialTheme.colorScheme.primary, 
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                // Run/Activate or Stop Button
-                val buttonColor = when {
-                    isServerRunning && model.isActive -> MaterialTheme.colorScheme.error
-                    model.isActive -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                }
-                val iconVector = when {
-                    isServerRunning && model.isActive -> Icons.Default.Stop
-                    else -> Icons.Default.PlayArrow
-                }
-                val iconTint = when {
-                    model.isActive -> MaterialTheme.colorScheme.onPrimary
-                    else -> MaterialTheme.colorScheme.primary
-                }
-
-                Surface(
-                    onClick = if (isServerRunning && model.isActive) onStop else onActivate,
-                    color = buttonColor,
-                    shape = CircleShape,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            iconVector, 
-                            null, 
-                            tint = iconTint, 
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
             }
         }
     }

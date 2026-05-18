@@ -47,6 +47,11 @@ class NetworkManager @Inject constructor(
     }
 
     init {
+        val activeNetwork = connectivityManager.activeNetwork
+        val caps = connectivityManager.getNetworkCapabilities(activeNetwork)
+        _isConnected.value = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        _isVpnActive.value = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false
+
         val request = NetworkRequest.Builder().build()
         connectivityManager.registerNetworkCallback(request, networkCallback)
         updateNetworkInfo()
@@ -57,6 +62,11 @@ class NetworkManager @Inject constructor(
     }
 
     private fun updateNetworkInfo() {
+        val activeNetwork = connectivityManager.activeNetwork
+        val caps = connectivityManager.getNetworkCapabilities(activeNetwork)
+        _isConnected.value = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        _isVpnActive.value = caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ?: false
+
         val ips = mutableListOf<String>()
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
