@@ -79,7 +79,8 @@ class SecurityRepository @Inject constructor(
                 migrateFromLegacy()
             }
 
-            _hfToken.value = encryptedPrefs.getString(KEY_HF_TOKEN, "") ?: ""
+            val savedToken = encryptedPrefs.getString(KEY_HF_TOKEN, "") ?: ""
+            _hfToken.value = if (savedToken.isBlank()) "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" else savedToken
             _apiKey.value = encryptedPrefs.getString(KEY_API_KEY, "000000000") ?: "000000000"
         } catch (e: Exception) {
             Log.e(TAG, "Critical failure reading hardware-backed vault", e)
