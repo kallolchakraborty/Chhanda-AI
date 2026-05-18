@@ -95,9 +95,21 @@ class ContextManager @Inject constructor(
                 }
             }
 
-            val directAttachmentResults = if (activeAttachmentPaths.isNotEmpty()) {
+            val sessionAttachmentPaths = try {
+                chatDao.getRecentMessagesForSession(sessionId, 50)
+                    .mapNotNull { it.attachmentPaths }
+                    .flatMap { it.split(",") }
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val allAttachmentPaths = (activeAttachmentPaths + sessionAttachmentPaths).distinct()
+
+            val directAttachmentResults = if (allAttachmentPaths.isNotEmpty()) {
                 try {
-                    vectorStore.getChunksForSources(activeAttachmentPaths).map { chunk ->
+                    vectorStore.getChunksForSources(allAttachmentPaths).map { chunk ->
                         SearchResult(
                             text = chunk.text,
                             score = 1.0f,
