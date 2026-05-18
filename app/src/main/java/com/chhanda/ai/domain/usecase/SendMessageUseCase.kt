@@ -570,7 +570,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                                  val autoSaveScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
                                  autoSaveScope.launch {
                                      try {
-                                         if (shouldAutosaveToKnowledgeBase(userQuery, aiResponse)) {
+                                         if (false) {
                                              val cleanQuerySnippet = userQuery.take(40).trim().replace("[^a-zA-Z0-9 ]".toRegex(), "")
                                              val label = "Chat Fact: $cleanQuerySnippet..."
                                              
