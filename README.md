@@ -553,7 +553,24 @@ chhanda-local LLM/
 
 ---
 
+## 📚 Project Resources & Documentation
+
+Chhanda is fully documented with comprehensive system architecture sheets, user guides, test plans, and official presentation decks. Explore the resources below:
+
+| Resource | Document | Description |
+| :--- | :--- | :--- |
+| **User & Deployment Manual** | [MANUAL.md](MANUAL.md) | Complete operational manual, setup, configuration, and feature walkthrough. |
+| **Gemma for Good Hackathon** | [HACKATHON_SUBMISSION.md](HACKATHON_SUBMISSION.md) | Official hackathon submission detailing the project mission, architecture, and alignment. |
+| **System Architectural FAQ** | [FAQSheet.md](FAQSheet.md) | Detailed FAQ mapping system features (RAG, gateway, memory) to specific code references. |
+| **SDET Test Specification** | [TestCases.md](TestCases.md) | Senior SDET test matrix, manual test steps, and physical device regression suite. |
+| **App Presentation Slides** | [Chhanda_Gemma_4_Good_Presentation.pptx](Presentation/Chhanda_Gemma_4_Good_Presentation.pptx) | The official visual slide deck for the Chhanda presentation. |
+| **Presenter Script Guide** | [Chhanda_Presentation_Script.md](Presentation/Chhanda_Presentation_Script.md) | Accompanying talk script for the presentation deck. |
+
+---
+
 ## 📜 License & Credits
 
 Dedicated to **Chhanda Chakraborty**.
+
 Developed by **Kallol Chakraborty** (Solo Developer) using **Android Studio** for Android integration and Gradle building, **Google's Antigravity** as the agentic codebase orchestration platform, **Google Gemini 3 Flash** as the exclusive AI development assistant, and **Google Stitch** for the base UI mockups.
+

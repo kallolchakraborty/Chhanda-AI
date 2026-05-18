@@ -74,6 +74,77 @@ object FileUtils {
         return Pair(name, size)
     }
 
+    /**
+     * Probes the first 4 magic bytes of the file stream if the resolver MIME is generic or empty.
+     */
+    fun probeMimeType(context: Context, uri: Uri): String {
+        val resolverMime = try {
+            context.contentResolver.getType(uri)?.lowercase()
+        } catch (e: Exception) {
+            null
+        }
+        
+        if (!resolverMime.isNullOrBlank() && resolverMime != "application/octet-stream" && resolverMime != "binary/octet-stream") {
+            return resolverMime
+        }
+
+        // Probe magic bytes
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val bytes = ByteArray(4)
+                val read = stream.read(bytes)
+                if (read >= 2) {
+                    val hex = bytes.take(read).joinToString("") { "%02X".format(it) }
+                    
+                    // PDF Magic bytes: %PDF (25 50 44 46)
+                    if (hex.startsWith("25504446")) return "application/pdf"
+                    
+                    // PNG Magic bytes: 89 50 4E 47
+                    if (hex.startsWith("89504E47")) return "image/png"
+                    
+                    // JPEG Magic bytes: FF D8
+                    if (hex.startsWith("FFD8")) return "image/jpeg"
+                    
+                    // GIF Magic bytes: 47 49 46 38
+                    if (hex.startsWith("47494638")) return "image/gif"
+                    
+                    // ZIP / Office Open XML (DOCX, XLSX): PK.. (50 4B 03 04)
+                    if (hex.startsWith("504B0304")) {
+                        return "application/zip"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        return resolverMime ?: "application/octet-stream"
+    }
+
+    /**
+     * Inspects zip entries to distinguish docx/xlsx.
+     */
+    fun isZipWordOrExcel(context: Context, uri: Uri): String? {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                java.util.zip.ZipInputStream(stream).use { zipStream ->
+                    var entry = zipStream.nextEntry
+                    while (entry != null) {
+                        if (entry.name.contains("word/document.xml")) {
+                            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        } else if (entry.name.contains("xl/workbook.xml")) {
+                            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        }
+                        entry = zipStream.nextEntry
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
     private fun getFileName(context: android.content.Context, uri: android.net.Uri): String? {
         var result: String? = null
         if (uri.scheme == "content") {

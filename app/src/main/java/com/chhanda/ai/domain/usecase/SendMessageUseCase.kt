@@ -299,6 +299,10 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 val validatedPersona = if (persona != null && persona in allowedPersonas && persona != "Default") persona else null
                 append("IDENTITY: You are ${validatedPersona ?: role}. Respond in $preferredLanguage.\n")
 
+                if (isShortAffirmation(userText)) {
+                    append("BREVITY CONSTRAINT: The user sent a short acknowledgment or affirmation ('$userText'). Do NOT repeat previous facts, do NOT list bullet points, and do NOT ramble. Respond with a single, extremely brief, friendly, and natural sentence (e.g. 'Glad to help! Let me know if you need anything else.', 'My pleasure!', or 'You got it!').\n")
+                }
+
                 append("REASONING (CoVe): For complex queries, coding, or analytical tasks, think step-by-step using a 'Chain of Verification' approach:\n")
                 append("1. Analyze the user intent and constraints.\n")
                 append("2. Retrieve and verify facts from context.\n")
@@ -732,5 +736,17 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 clean.contains(keyword)
             }
         }
+    }
+
+    private fun isShortAffirmation(text: String): Boolean {
+        val clean = text.trim().lowercase().replace(Regex("[^a-z0-9\\u0980-\\u09FF\\u0900-\\u097F]"), "")
+        val affirmations = setOf(
+            "ok", "okay", "understood", "gotit", "thanks", "thankyou", "fine", "cool", "perfect", "done", "gotitthanks",
+            // Bengali affirmations
+            "ঠিকআছে", "বুঝেছি", "ধন্যবাদ", "ওকে",
+            // Hindi affirmations
+            "ठीकहै", "समझगया", "धन्यवाद", "ओके"
+        )
+        return clean in affirmations || (clean.length <= 12 && affirmations.any { clean.contains(it) })
     }
 }

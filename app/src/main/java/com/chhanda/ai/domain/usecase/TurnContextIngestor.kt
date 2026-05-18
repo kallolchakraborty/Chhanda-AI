@@ -26,7 +26,11 @@ class TurnContextIngestor @Inject constructor(
                     val uriString = uri.toString()
                     val (fileName, fileLength) = com.chhanda.ai.util.FileUtils.getFileDetails(context, uri)
                     val lowerName = fileName.lowercase()
-                    val mimeType = context.contentResolver.getType(uri)?.lowercase() ?: ""
+                    val rawMime = com.chhanda.ai.util.FileUtils.probeMimeType(context, uri)
+                    val mimeType = if (rawMime == "application/zip") {
+                        com.chhanda.ai.util.FileUtils.isZipWordOrExcel(context, uri) ?: rawMime
+                    } else rawMime
+
                     val isImage = mimeType.startsWith("image/") || lowerName.contains("image") || lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp")
                     val isPdf = mimeType == "application/pdf" || lowerName.endsWith(".pdf")
                     val isAudio = mimeType.startsWith("audio/") || lowerName.contains("audio") || lowerName.endsWith(".wav") || lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a")

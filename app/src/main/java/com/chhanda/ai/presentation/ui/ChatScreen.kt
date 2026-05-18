@@ -52,6 +52,7 @@ fun ChatScreen(
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var inputText by remember { mutableStateOf("") }
     var showCloseConfirm by remember { mutableStateOf(false) }
+    var isContinuousVoiceActive by remember { mutableStateOf(false) }
 
     val voiceListening by viewModel.voiceListening.collectAsStateWithLifecycle()
     val voiceResult by viewModel.voiceResult.collectAsStateWithLifecycle()
@@ -61,6 +62,7 @@ fun ChatScreen(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
+            isContinuousVoiceActive = true
             viewModel.startVoiceInput()
         }
     }
@@ -111,7 +113,6 @@ fun ChatScreen(
     var ttsProgress by remember { mutableFloatStateOf(0f) }
     var isTtsPlaying by remember { mutableStateOf(false) }
     var ttsOffset by remember { mutableIntStateOf(0) }
-    var isContinuousVoiceActive by remember { mutableStateOf(false) }
 
     DisposableEffect(ttsLocale, selectedVoice) {
         var ttsInstance: TextToSpeech? = null
@@ -232,6 +233,15 @@ fun ChatScreen(
                 viewModel.sendMessage(finalPrompt)
                 inputText = ""
                 viewModel.clearVoiceResult()
+            } else if (isContinuousVoiceActive) {
+                // If the prompt is empty but continuous voice is active, restart listening!
+                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (hasPermission) {
+                    viewModel.startVoiceInput()
+                }
             }
         }
     }
@@ -577,7 +587,7 @@ fun ChatScreen(
                         isContinuousVoiceActive = false
                         viewModel.stopVoiceInput()
                     } else {
-                        isContinuousVoiceActive = false
+                        isContinuousVoiceActive = true
                         val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
                             context,
                             android.Manifest.permission.RECORD_AUDIO
