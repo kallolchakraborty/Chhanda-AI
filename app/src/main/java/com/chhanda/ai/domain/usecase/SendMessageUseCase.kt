@@ -68,7 +68,14 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             }
             val attachmentContextRaw = turnContextIngestor.processTurnContext(userText, attachments)
 
-            val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
+            val activeAttachmentPaths = attachments.map { it.toString() }
+            val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(
+                userText, 
+                deviceId, 
+                modelName, 
+                sessionId,
+                activeAttachmentPaths
+            )
 
             // Dynamic Token/Character Budget Allocation System to prevent prompt bloat and engine JNI crashes
             val ctxLen = settingsRepository.contextLengthFlow.firstOrNull()?.toIntOrNull() ?: 2048

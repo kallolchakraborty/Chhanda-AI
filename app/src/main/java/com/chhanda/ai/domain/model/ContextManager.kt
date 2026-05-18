@@ -24,7 +24,8 @@ class ContextManager @Inject constructor(
         query: String, 
         deviceId: String, 
         modelName: String, 
-        sessionId: String
+        sessionId: String,
+        activeAttachmentPaths: List<String> = emptyList()
     ): Pair<List<Pair<String, String>>, String> {
         val startTime = System.currentTimeMillis()
         
@@ -60,7 +61,10 @@ class ContextManager @Inject constructor(
             )
             
             val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || 
-                                 query.lowercase().contains("web") || query.lowercase().contains("search")
+                                 query.lowercase().contains("web") || query.lowercase().contains("search") ||
+                                 query.lowercase().contains("image") || query.lowercase().contains("photo") ||
+                                 query.lowercase().contains("picture") || query.lowercase().contains("pic") ||
+                                 activeAttachmentPaths.isNotEmpty()
             
             // Tiered Filtering & Selection: Lowered thresholds to maximize recall from local database
             val threshold = if (isExplicitSearch) 0.12f else 0.15f 
@@ -68,14 +72,18 @@ class ContextManager @Inject constructor(
             
             var filtered = results.filter { result ->
                 val source = result.metadata["source"] ?: ""
-                result.score >= threshold && !disabledSources.contains(source)
+                val isCurrentAttachment = activeAttachmentPaths.contains(source)
+                val passThreshold = if (isCurrentAttachment) result.score >= 0.01f else result.score >= threshold
+                passThreshold && !disabledSources.contains(source)
             } 
  
             if (filtered.isEmpty()) {
                 // Primary threshold yielded no results. Fallback to lower threshold (0.10f) to prioritize retrieval over omission.
                 filtered = results.filter { result ->
                     val source = result.metadata["source"] ?: ""
-                    result.score >= 0.10f && !disabledSources.contains(source)
+                    val isCurrentAttachment = activeAttachmentPaths.contains(source)
+                    val passThreshold = if (isCurrentAttachment) result.score >= 0.01f else result.score >= 0.10f
+                    passThreshold && !disabledSources.contains(source)
                 }
             }
 
