@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.chhanda.ai.MainActivity
 import com.chhanda.ai.data.inference.ChhandaServer
+import com.chhanda.ai.data.inference.ServerOrchestrator
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -29,6 +30,9 @@ class ChhandaForegroundService : Service() {
 
     @Inject
     lateinit var chhandaServer: ChhandaServer
+
+    @Inject
+    lateinit var serverOrchestrator: ServerOrchestrator
 
     private var currentPort: Int = 8080
     private var currentMaxDevices: Int = 5
@@ -199,6 +203,13 @@ class ChhandaForegroundService : Service() {
     private fun shutdown() {
         unregisterMdns()
         try { chhandaServer.stop() } catch (e: Exception) { Log.w(TAG, "Server stop: ${e.message}") }
+        try {
+            if (::serverOrchestrator.isInitialized) {
+                serverOrchestrator.stopServerFromService()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to update orchestrator: ${e.message}")
+        }
         releaseLocks()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)

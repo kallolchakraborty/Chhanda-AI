@@ -46,6 +46,17 @@ class ServerOrchestrator @Inject constructor(
     val isTunnelActive = MutableStateFlow(false)
 
     init {
+        if (chhandaServer.isServerActive()) {
+            _isServerRunning.value = true
+            scope.launch {
+                try {
+                    val port = settingsRepository.serverPortFlow.first().toIntOrNull() ?: 8888
+                    _boundPort.value = port
+                } catch (e: Exception) {
+                    _boundPort.value = 8888
+                }
+            }
+        }
         startHealthCheck()
     }
 
@@ -111,6 +122,20 @@ class ServerOrchestrator @Inject constructor(
                 appLogManager.addLog("SERVER", "Web Gateway stopped by user", "WARN")
             } catch (e: Exception) {
                 appLogManager.addLog("SERVER", "Shutdown error: ${e.message}", "ERROR")
+            }
+        }
+    }
+
+    fun stopServerFromService() {
+        scope.launch {
+            try {
+                llmEngine.close()
+                _isServerRunning.value = false
+                _boundPort.value = 0
+                modelProvisioner.refreshModels()
+                appLogManager.addLog("SERVER", "Web Gateway stopped via Notification", "WARN")
+            } catch (e: Exception) {
+                appLogManager.addLog("SERVER", "Shutdown error from service: ${e.message}", "ERROR")
             }
         }
     }
