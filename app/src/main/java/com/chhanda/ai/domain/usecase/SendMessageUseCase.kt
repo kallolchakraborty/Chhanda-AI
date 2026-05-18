@@ -715,6 +715,13 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             // Hindi
             "मौसम", "तापमान", "बारिश", "समाचार", "खबर", "सुर्खियां"
         )
-        return keywords.any { clean.contains(it) }
+        val words = clean.split("""\s+""".toRegex()).map { it.replace("""[^\w]""".toRegex(), "") }
+        return keywords.any { keyword ->
+            if (keyword.all { it.code in 0..127 }) {
+                words.contains(keyword)
+            } else {
+                clean.contains(keyword)
+            }
+        }
     }
 }
