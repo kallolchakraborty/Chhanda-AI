@@ -36,6 +36,35 @@ class VoiceAssistant(private val context: Context) {
 
     private var isOnDeviceRecognizer = false
 
+    init {
+        runOnMainThread {
+            warmUp()
+        }
+    }
+
+    /**
+     * Eagerly pre-warms the SpeechRecognizer binder link to prevent first-click delays or silent failures.
+     */
+    private fun warmUp() {
+        if (speechRecognizer == null && SpeechRecognizer.isRecognitionAvailable(context)) {
+            try {
+                val newRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && 
+                                      SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                    Log.i("VoiceAssistant", "Pre-warming local on-device SpeechRecognizer")
+                    isOnDeviceRecognizer = true
+                    SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+                } else {
+                    Log.i("VoiceAssistant", "Pre-warming default system SpeechRecognizer")
+                    isOnDeviceRecognizer = false
+                    SpeechRecognizer.createSpeechRecognizer(context)
+                }
+                speechRecognizer = newRecognizer
+            } catch (e: Exception) {
+                Log.w("VoiceAssistant", "Failed to pre-warm SpeechRecognizer: ${e.message}")
+            }
+        }
+    }
+
     /**
      * Executes the given action immediately if called on the Main Thread,
      * otherwise posts it to the Main Looper queue. Prevents out-of-order race conditions.
@@ -145,6 +174,7 @@ class VoiceAssistant(private val context: Context) {
                     }
                     
                     _isListening.value = false
+                    cancelActiveSession()
 
                     // If recognizer is locked or busy, perform dynamic self-healing reset
                     if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
@@ -202,8 +232,20 @@ class VoiceAssistant(private val context: Context) {
     fun stopListening() {
         runOnMainThread {
             hapticManager.play(HapticManager.HapticPattern.LIGHT_TICK)
-            cleanUpSession()
+            cancelActiveSession()
             _isListening.value = false
+        }
+    }
+
+    /**
+     * Helper to cancel any active recording/processing session to release
+     * hardware locks and reset the state without destroying the binder service.
+     */
+    private fun cancelActiveSession() {
+        try {
+            speechRecognizer?.cancel()
+        } catch (e: Exception) {
+            Log.w("VoiceAssistant", "Failed to cancel active recognition session: ${e.message}")
         }
     }
 
@@ -213,7 +255,7 @@ class VoiceAssistant(private val context: Context) {
      */
     private fun cleanUpSession() {
         try {
-            speechRecognizer?.stopListening()
+            speechRecognizer?.cancel()
             speechRecognizer?.destroy()
         } catch (e: Exception) {
             Log.w("VoiceAssistant", "Failed to stop/destroy SpeechRecognizer cleanly: ${e.message}")
