@@ -22,6 +22,7 @@ interface VectorStore {
     suspend fun add(text: String, embedding: Embedding, metadata: Map<String, String> = emptyMap(), modelId: String = "default")
     suspend fun addAll(entities: List<com.chhanda.ai.data.repository.VectorChunkEntity>)
     suspend fun search(query: Embedding, topK: Int, modelId: String = "default", queryText: String? = null): List<SearchResult>
+    suspend fun getChunksForSources(sources: List<String>): List<com.chhanda.ai.data.repository.VectorChunkEntity>
     suspend fun getStorageUsage(): StorageStats
     suspend fun clear()
     suspend fun clearSource(source: String)

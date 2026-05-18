@@ -95,13 +95,30 @@ class ContextManager @Inject constructor(
                 }
             }
 
+            val directAttachmentResults = if (activeAttachmentPaths.isNotEmpty()) {
+                try {
+                    vectorStore.getChunksForSources(activeAttachmentPaths).map { chunk ->
+                        SearchResult(
+                            text = chunk.text,
+                            score = 1.0f,
+                            metadata = mapOf("source" to chunk.source, "type" to chunk.type)
+                        )
+                    }
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
+
+            val combined = (directAttachmentResults + filtered).distinctBy { it.text.take(100) }
+
             // Format results using XML-style tags for better LLM boundary detection.
-            if (filtered.isEmpty()) ""
+            if (combined.isEmpty()) ""
             else {
                 buildString {
                     append("<retrieved_knowledge>\n")
-                    filtered.distinctBy { it.text.take(100) }
-                        .groupBy { it.metadata["source"] ?: "General" }
+                    combined.groupBy { it.metadata["source"] ?: "General" }
                         .entries.take(5)
                         .forEachIndexed { index, entry ->
                             val source = entry.key.substringAfterLast("/").substringAfterLast("\\")

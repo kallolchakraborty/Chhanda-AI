@@ -37,6 +37,9 @@ interface VectorChunkDao {
     @Query("SELECT DISTINCT source FROM vector_chunks LIMIT :limit")
     suspend fun getDistinctSources(limit: Int = 5): List<String>
 
+    @Query("SELECT * FROM vector_chunks WHERE source IN (:sources)")
+    suspend fun getChunksForSources(sources: List<String>): List<VectorChunkEntity>
+
     @Query("""
         SELECT vector_chunks.* FROM vector_chunks 
         JOIN vector_chunks_fts ON vector_chunks.rowid = vector_chunks_fts.rowid 

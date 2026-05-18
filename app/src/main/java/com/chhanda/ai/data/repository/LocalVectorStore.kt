@@ -149,6 +149,11 @@ class LocalVectorStore @javax.inject.Inject constructor(
         vectorChunkDao.clearAll()
     }
 
+    override suspend fun getChunksForSources(sources: List<String>): List<VectorChunkEntity> {
+        if (sources.isEmpty()) return emptyList()
+        return vectorChunkDao.getChunksForSources(sources)
+    }
+
     override suspend fun clearSource(source: String) {
         vectorChunkDao.deleteBySource(source)
     }
