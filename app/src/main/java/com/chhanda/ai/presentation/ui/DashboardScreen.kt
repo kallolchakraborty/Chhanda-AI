@@ -86,6 +86,7 @@ fun DashboardScreen(
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val downloadPauseState by viewModel.downloadPauseFlow.collectAsStateWithLifecycle()
     val downloadStatus by viewModel.downloadStatus.collectAsStateWithLifecycle()
+    val hfToken by viewModel.hfToken.collectAsStateWithLifecycle()
     val isModelLoaded by viewModel.isModelLoaded.collectAsStateWithLifecycle()
     val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
     val modelLoadingProgress by viewModel.modelLoadingProgress.collectAsStateWithLifecycle()
@@ -125,9 +126,9 @@ fun DashboardScreen(
     var modelToSwitchAndRun by remember { mutableStateOf<String?>(null) }
     var showHfTokenPromptForModel by remember { mutableStateOf<com.chhanda.ai.presentation.ui.DownloadModelInfo?>(null) }
 
-    LaunchedEffect(downloadStatus, downloadableModels) {
+    LaunchedEffect(downloadStatus, downloadableModels, hfToken) {
         downloadStatus.forEach { (modelName, status) ->
-            if (status.isFailed) {
+            if (status.isFailed && hfToken.isBlank()) {
                 val matchingModel = downloadableModels.find { it.name == modelName }
                 if (matchingModel != null && showHfTokenPromptForModel?.name != modelName) {
                     showHfTokenPromptForModel = matchingModel
