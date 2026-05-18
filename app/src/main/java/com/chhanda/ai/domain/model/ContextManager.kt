@@ -79,6 +79,14 @@ class ContextManager @Inject constructor(
                 }
             }
 
+            if (filtered.isEmpty()) {
+                // Final safety fallback: Get any non-negative similarity matches to maximize database grounding
+                filtered = results.filter { result ->
+                    val source = result.metadata["source"] ?: ""
+                    result.score >= 0.01f && !disabledSources.contains(source)
+                }
+            }
+
             // Format results using XML-style tags for better LLM boundary detection.
             if (filtered.isEmpty()) ""
             else {

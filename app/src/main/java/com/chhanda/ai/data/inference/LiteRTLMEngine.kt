@@ -188,37 +188,39 @@ class LiteRTLMEngine @Inject constructor(
                     Log.w(TAG, "Thermal throttling active ($thermal), reducing inference load")
                 }
                 
-                // Retrieve or initialize conversation for this specific session
-                var isNewConv = false
-                var conv = activeConversations[sessionKey]
-                if (conv == null) {
-                    // Close all other conversation sessions to prevent JNI FAILED_PRECONDITION
-                    if (activeConversations.isNotEmpty()) {
-                        Log.i(TAG, "Context switch detected from previous active conversations. Closing existing native JNI sessions to free resources.")
-                        activeConversations.values.forEach { staleConv ->
-                            try { staleConv.close() } catch (e: Exception) { Log.e(TAG, "Error closing stale conversation session", e) }
-                        }
-                        activeConversations.clear()
-                    }
+                // Close existing session for sessionKey to force a fresh stateless run and prevent JNI/KV-cache leakage
+                try {
+                    activeConversations[sessionKey]?.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error closing existing conversation", e)
+                }
+                activeConversations.remove(sessionKey)
 
-                    val samplerConfig = SamplerConfig(
-                        topK = 40,
-                        topP = 0.95,
-                        temperature = 0.7
+                // Close other conversation sessions to prevent JNI FAILED_PRECONDITION
+                if (activeConversations.isNotEmpty()) {
+                    Log.i(TAG, "Closing remaining active conversation sessions to release memory.")
+                    activeConversations.values.forEach { staleConv ->
+                        try { staleConv.close() } catch (e: Exception) { Log.e(TAG, "Error closing stale conversation session", e) }
+                    }
+                    activeConversations.clear()
+                }
+
+                val samplerConfig = SamplerConfig(
+                    topK = 40,
+                    topP = 0.95,
+                    temperature = 0.7
+                )
+                val config = if (systemInstruction != null && systemInstruction.isNotBlank()) {
+                    ConversationConfig(
+                        systemInstruction = Contents.of(listOf(Content.Text(systemInstruction))),
+                        samplerConfig = samplerConfig
                     )
-                    val config = if (systemInstruction != null && systemInstruction.isNotBlank()) {
-                        ConversationConfig(
-                            systemInstruction = Contents.of(listOf(Content.Text(systemInstruction))),
-                            samplerConfig = samplerConfig
-                        )
-                    } else {
-                        ConversationConfig(samplerConfig = samplerConfig)
-                    }
-                    conv = engine?.createConversation(config)
-                    if (conv != null) {
-                        activeConversations[sessionKey] = conv
-                        isNewConv = true
-                    }
+                } else {
+                    ConversationConfig(samplerConfig = samplerConfig)
+                }
+                val conv = engine?.createConversation(config)
+                if (conv != null) {
+                    activeConversations[sessionKey] = conv
                 }
 
                 if (conv == null) {
@@ -233,18 +235,18 @@ class LiteRTLMEngine @Inject constructor(
                         true
                     }
 
-                    // If conversation was newly initialized due to a session switch, reconstruct the session history into the prompt
-                    val promptWithHistory = if (isNewConv && history.isNotEmpty()) {
+                    // Always reconstruct history from the SQLite database to guarantee absolute memory accuracy and context retrieval
+                    val promptWithHistory = if (history.isNotEmpty()) {
                         val activeHistory = if (isTurboQuant) {
-                            // Truncate history to the last 3 turns to prevent KV cache bloat
+                            // Truncate history to the last 3 turns to prevent KV cache bloat and native process death
                             history.takeLast(3)
                         } else {
-                            history
+                            history.takeLast(5)
                         }
                         
                         buildString {
                             if (isTurboQuant) {
-                                append("[System Instruction: Memory-optimized mode active. Summarize context and generate hyper-concise replies to conserve KV cache memory.]\n")
+                                append("[System Instruction: Memory-optimized mode active. Be highly concise.]\n")
                             }
                             append("CONVERSATION HISTORY:\n")
                             activeHistory.forEach { turn ->

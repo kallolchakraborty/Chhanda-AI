@@ -42,19 +42,29 @@ class LocalVectorStore @javax.inject.Inject constructor(
      */
     override suspend fun search(query: Embedding, topK: Int, modelId: String, queryText: String?): List<SearchResult> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         
-        // TIER 1: Keyword-based candidate retrieval (BM25)
-        // If queryText is provided, we fetch high-probability candidates using FTS5 first.
         val candidates = if (!queryText.isNullOrBlank()) {
             try {
                 // Sanitize query for FTS (remove special characters that break MATCH)
                 val cleanQuery = queryText.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
                 if (cleanQuery.isNotEmpty()) {
-                    vectorChunkDao.searchKeywords("$cleanQuery*")
+                    val words = cleanQuery.split(" ").filter { it.length > 2 }
+                    val ftsQuery = if (words.isNotEmpty()) {
+                        words.joinToString(" OR ") { "$it*" }
+                    } else {
+                        "$cleanQuery*"
+                    }
+                    val results = vectorChunkDao.searchKeywords(ftsQuery)
+                    if (results.isEmpty()) {
+                        android.util.Log.i("LocalVectorStore", "FTS matching returned 0 hits for '$ftsQuery'. Falling back to full model candidates scan.")
+                        vectorChunkDao.getAllForModel(modelId)
+                    } else {
+                        results
+                    }
                 } else {
                     vectorChunkDao.getAllForModel(modelId)
                 }
             } catch (e: Exception) {
-                android.util.Log.w("LocalVectorStore", "FTS search failed, falling back: ${e.message}")
+                android.util.Log.w("LocalVectorStore", "FTS search failed, falling back to full model scan: ${e.message}")
                 vectorChunkDao.getAllForModel(modelId)
             }
         } else {
