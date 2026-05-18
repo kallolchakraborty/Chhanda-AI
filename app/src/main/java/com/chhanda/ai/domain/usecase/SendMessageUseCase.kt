@@ -312,7 +312,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
                 // Senior Ingestion Architecture: Prioritization logic
                 if (hasDbKnowledge) {
-                    append("LOCAL KNOWLEDGE BASE RETRIEVED: Use the provided local database context in the <retrieved_knowledge> section as your primary source of truth. Ground your response heavily in this facts list first.\n")
+                    append("LOCAL KNOWLEDGE BASE RETRIEVED: You MUST use the provided local database context in the <retrieved_knowledge> section as your primary source of truth. Ground your response completely in this retrieved facts list first. Do NOT hallucinate, do NOT fabricate facts, and do NOT use external pre-trained general knowledge if it contradicts or goes beyond the retrieved local database context. If the query asks for specific facts, locate and extract them from the <retrieved_knowledge> block. Quote or reference the sources explicitly using [Source #X] inline.\n")
                 }
                 if (hasWebKnowledge) {
                     append("WEB SEARCH RESULTS RETRIEVED: Real-time search results are provided in <retrieved_web_knowledge> because no local database matches were found. Synthesize these results into a highly structured, cohesive, and fully integrated explanation. Avoid providing scattered, disjointed snippets or bullet points without context. Write in a clear, easy-to-understand manner so the user can easily check and verify the information. Group related details logically under clear section headers.\n")
@@ -323,7 +323,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                 if (!hasDbKnowledge && !hasWebKnowledge && !hasAttachmentKnowledge) {
                     append("NO CONTEXT RETRIEVED: No local knowledge base, web results, or attachments are available. Answer the question using your pre-trained general knowledge base. Be highly helpful and detailed.\n")
                 } else {
-                    append("UNSURE CASE: If the question cannot be answered by the retrieved local documents or web search results, explain what is missing, and then provide a helpful response using your pre-trained parameters, clearly stating that you are falling back to pretrained general intelligence.\n")
+                    append("UNSURE CASE: If local knowledge or web search results are retrieved but do not contain the answer, explicitly state: 'I could not find the exact answer in the local database or search results.' Then, and ONLY then, provide a cautious response based on your pre-trained parameters, clearly separating it as a fallback answer.\n")
                 }
 
                 if (llmEngine.isMultimodal() && attachments.any { it.toString().contains("image") }) {

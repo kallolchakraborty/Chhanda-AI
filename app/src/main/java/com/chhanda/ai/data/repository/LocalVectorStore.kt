@@ -86,8 +86,8 @@ class LocalVectorStore @javax.inject.Inject constructor(
             val vNorm = kotlin.math.sqrt(vNormSqInt.toDouble()).toFloat()
             val score = if (vNorm > 1e-8) (dotProductInt.toFloat() / (queryNorm * 127f * vNorm)) else 0.0f
             
-            // HEURISTIC: Reject low-quality matches
-            if (score < 0.25f) continue 
+            // HEURISTIC: Reject extremely low-quality matches (lowered from 0.25f to 0.10f to maximize recall)
+            if (score < 0.10f) continue 
 
             val result = SearchResult(
                 text = entity.text, 

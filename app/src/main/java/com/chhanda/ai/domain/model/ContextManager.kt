@@ -62,21 +62,20 @@ class ContextManager @Inject constructor(
             val isExplicitSearch = query.lowercase().contains("attachment") || query.lowercase().contains("file") || 
                                  query.lowercase().contains("web") || query.lowercase().contains("search")
             
-            // Tiered Filtering & Selection
-            val threshold = if (isExplicitSearch) 0.25f else 0.30f 
+            // Tiered Filtering & Selection: Lowered thresholds to maximize recall from local database
+            val threshold = if (isExplicitSearch) 0.12f else 0.15f 
             val disabledSources = try { uploadedFileDao.getDisabledFileNames().toSet() } catch (e: Exception) { emptySet() }
             
             var filtered = results.filter { result ->
                 val source = result.metadata["source"] ?: ""
-                // Filter by threshold and also ensure the source is not disabled
                 result.score >= threshold && !disabledSources.contains(source)
             } 
-
-            if (filtered.isEmpty() && isFollowUp) {
-                val rawResults = vectorStore.search(embeddingEngine.embed(query), topK = 10, modelId = "shared_rag_db", queryText = query)
-                filtered = rawResults.filter { result ->
+ 
+            if (filtered.isEmpty()) {
+                // Primary threshold yielded no results. Fallback to lower threshold (0.10f) to prioritize retrieval over omission.
+                filtered = results.filter { result ->
                     val source = result.metadata["source"] ?: ""
-                    result.score >= 0.25f && !disabledSources.contains(source)
+                    result.score >= 0.10f && !disabledSources.contains(source)
                 }
             }
 
