@@ -435,14 +435,17 @@ This is applied **bidirectionally** — on user input before it reaches the LLM,
 *   **The Solution**: Hardened the system network initialization process. Inside the `init` block of the `NetworkManager` and during message use-case processing, the app performs a direct, synchronous query on `connectivityManager.activeNetwork` and checks `NetworkCapabilities.NET_CAPABILITY_INTERNET`. This seeds and refreshes the live internet connection status instantly at launch, ensuring search triggers flawlessly.
 
 ### 37. How does the Hands-Free Continuous Voice loop operate without any manual user input?
-**UtteranceProgressListener Cooldown & Auto-Mic Triggers.**
+**UtteranceProgressListener Cooldown, Elevated State Scope, and Self-Healing Silence Retries.**
+*   **Elevated State Scope**: To prevent state synchronization failure or premature shutdowns when navigating between UI layers, the continuous voice state flag `isContinuousVoiceActive` is elevated to the root Compose scope of `ChatScreen.kt`, ensuring it remains in scope for all child elements and permission callbacks.
 *   **Hands-Free Interaction**: When the user enters continuous voice mode (by tapping the microphone icon in Chat), they do not need to tap any buttons to submit prompts or hear replies.
+*   **Self-Healing Silence Retries**: If the user pauses or the speech recognizer throws an empty speech timeout (`ERROR_SPEECH_TIMEOUT`), Chhanda's active listener detects that a continuous session is engaged and programmatically calls `viewModel.startVoiceInput()` to self-heal the loop and keep the microphone listening, rather than terminating the session silently.
 *   **The Workflow**:
     1. The user speaks their query; silence is automatically detected via the offline `SpeechRecognizer`.
     2. Prompt is automatically submitted to Gemma, setting `wasSentViaVoice = true`.
     3. Response is generated; `ChatScreen.kt` intercepts completion, cleans the text using `cleanTextForTts`, and streams it to Android's `TextToSpeech` engine.
     4. Inside the `UtteranceProgressListener.onDone` callback, the screen catches TTS completion. If `isContinuousVoiceActive` is true, it triggers a 500ms delay to cleanly clear the audio channel and automatically launches `viewModel.startVoiceInput()` to listen to the user's next question.
 *   **Interruption Recovery**: If the user starts typing manually or taps the stop button in the TTS player, the continuous voice state is cleanly turned off (`isContinuousVoiceActive = false`), handing back normal keyboard-based chat controls.
+
 
 ### 38. How does Chhanda achieve flawless, low-latency multilingual speech playback in Hindi and Bengali?
 **Dynamic Character-Range Language Detection & Multi-tier Locale Fallbacks.**
