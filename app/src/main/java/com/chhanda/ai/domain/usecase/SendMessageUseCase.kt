@@ -63,6 +63,11 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest && !isGreetingMsg
             val webSearchEnabled = settingsRepository.webSearchEnabledFlow.first() && !isQrRequest && !isGreetingMsg
 
+            if (attachments.isNotEmpty()) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Processing ${attachments.size} attachments..."))
+            }
+            val attachmentContextRaw = turnContextIngestor.processTurnContext(userText, attachments)
+
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
             // Dynamic Token/Character Budget Allocation System to prevent prompt bloat and engine JNI crashes
@@ -232,10 +237,6 @@ class SendMessageUseCase @javax.inject.Inject constructor(
 
             isContextFound = hasDbKnowledge || hasWebKnowledge
 
-            if (attachments.isNotEmpty()) {
-                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Processing ${attachments.size} attachments..."))
-            }
-            val attachmentContextRaw = turnContextIngestor.processTurnContext(userText, attachments)
             val attachmentContext = if (attachmentContextRaw.isNotBlank()) {
                 hasAttachmentKnowledge = true
                 isContextFound = true
