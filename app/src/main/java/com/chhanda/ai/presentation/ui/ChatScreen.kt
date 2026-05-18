@@ -577,7 +577,7 @@ fun ChatScreen(
                         isContinuousVoiceActive = false
                         viewModel.stopVoiceInput()
                     } else {
-                        isContinuousVoiceActive = true
+                        isContinuousVoiceActive = false
                         val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
                             context,
                             android.Manifest.permission.RECORD_AUDIO
