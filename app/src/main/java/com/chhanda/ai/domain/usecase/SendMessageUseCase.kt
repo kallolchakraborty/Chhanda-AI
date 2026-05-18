@@ -61,7 +61,7 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val isGreetingMsg = isGreeting(userText)
             val isRealTime = isWeatherOrNewsQuery(userText)
             val ragEnabled = settingsRepository.ragEnabledFlow.first() && !isQrRequest && !isGreetingMsg
-            val webSearchEnabled = (settingsRepository.webSearchEnabledFlow.first() || isRealTime) && !isQrRequest && !isGreetingMsg
+            val webSearchEnabled = settingsRepository.webSearchEnabledFlow.first() && !isQrRequest && !isGreetingMsg
 
             val (dbHistory, longTermContextRaw) = contextManager.getOptimizedContext(userText, deviceId, modelName, sessionId)
 
@@ -211,11 +211,13 @@ class SendMessageUseCase @javax.inject.Inject constructor(
                     android.util.Log.e("SendMessageUseCase", "Web search failed: ${e.message}")
                     emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Web search error. Answering from pre-trained knowledge..."))
                 }
+            } else if (isRealTime && !webSearchEnabled) {
+                emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but web search is disabled. Answering from pre-trained knowledge..."))
             } else if (!isInternetPresent && isRealTime) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("Real-time updates requested but device is offline. Answering from pre-trained knowledge..."))
-            } else if (isInternetPresent && !webSearchEnabled && !isRealTime) {
+            } else if (isInternetPresent && !webSearchEnabled) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches & web search disabled. Answering from pre-trained knowledge..."))
-            } else if (!isInternetPresent && !isRealTime) {
+            } else if (!isInternetPresent) {
                 emit(com.chhanda.ai.domain.model.TokenUpdate.Status("No local matches and device offline. Answering from pre-trained knowledge..."))
             }
 
