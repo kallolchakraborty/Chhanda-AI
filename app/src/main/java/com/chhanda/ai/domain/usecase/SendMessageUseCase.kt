@@ -247,8 +247,9 @@ class SendMessageUseCase @javax.inject.Inject constructor(
             val attachmentContext = if (attachmentContextRaw.isNotBlank()) {
                 hasAttachmentKnowledge = true
                 isContextFound = true
-                if (attachmentContextRaw.length > singleContextLimit) {
-                    attachmentContextRaw.take(singleContextLimit) + "... [truncated]"
+                val attachmentLimit = 3000
+                if (attachmentContextRaw.length > attachmentLimit) {
+                    attachmentContextRaw.take(attachmentLimit) + "... [truncated]"
                 } else {
                     attachmentContextRaw
                 }
