@@ -28,28 +28,43 @@ class TurnContextIngestor @Inject constructor(
                     val lowerName = fileName.lowercase()
                     val mimeType = context.contentResolver.getType(uri)?.lowercase() ?: ""
                     val isImage = mimeType.startsWith("image/") || lowerName.contains("image") || lowerName.endsWith(".jpg") || lowerName.endsWith(".png") || lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp")
+                    val isPdf = mimeType == "application/pdf" || lowerName.endsWith(".pdf")
+                    val isAudio = mimeType.startsWith("audio/") || lowerName.contains("audio") || lowerName.endsWith(".wav") || lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a")
+                    val isWord = mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || 
+                                 mimeType == "application/msword" || 
+                                 lowerName.endsWith(".docx") || lowerName.endsWith(".doc")
+                    val isExcel = mimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+                                  mimeType == "application/vnd.ms-excel" || 
+                                  lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")
+                    val isJson = mimeType == "application/json" || lowerName.endsWith(".json")
+                    val isCsv = mimeType == "text/csv" || mimeType == "application/csv" || lowerName.endsWith(".csv")
+                    val isTsv = mimeType == "text/tab-separated-values" || lowerName.endsWith(".tsv") || lowerName.endsWith(".tab")
+                    val isXml = mimeType == "text/xml" || mimeType == "application/xml" || lowerName.endsWith(".xml")
+                    val isHtml = mimeType == "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")
+                    val isMd = mimeType == "text/markdown" || mimeType == "text/x-markdown" || lowerName.endsWith(".md")
+
                     val (rawText, type) = when {
                         isImage -> 
                             ingestor.ingestImage(uri) to DocType.IMAGE
-                        lowerName.endsWith(".pdf") -> 
+                        isPdf -> 
                             ingestor.ingestPdf(uri).joinToString("\n") to DocType.PDF
-                        lowerName.contains("audio") || lowerName.endsWith(".wav") || lowerName.endsWith(".mp3") || lowerName.endsWith(".m4a") -> 
+                        isAudio -> 
                             ingestor.ingestAudio(uri) to DocType.AUDIO
-                        lowerName.endsWith(".docx") || lowerName.endsWith(".doc") -> 
+                        isWord -> 
                             ingestor.ingestWord(uri) to DocType.WORD
-                        lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") -> 
+                        isExcel -> 
                             ingestor.ingestExcel(uri) to DocType.EXCEL
-                        lowerName.endsWith(".json") -> 
+                        isJson -> 
                             ingestor.ingestJson(uri) to DocType.JSON
-                        lowerName.endsWith(".csv") -> 
+                        isCsv -> 
                             ingestor.ingestCsv(uri) to DocType.CSV
-                        lowerName.endsWith(".tsv") || lowerName.endsWith(".tab") -> 
+                        isTsv -> 
                             ingestor.ingestTsv(uri) to DocType.TSV
-                        lowerName.endsWith(".xml") -> 
+                        isXml -> 
                             ingestor.ingestXml(uri) to DocType.XML
-                        lowerName.endsWith(".html") || lowerName.endsWith(".htm") -> 
+                        isHtml -> 
                             ingestor.ingestHtml(uri) to DocType.HTML
-                        lowerName.endsWith(".md") -> 
+                        isMd -> 
                             ingestor.ingestMd(uri) to DocType.MD
                         else -> ingestor.ingestTxt(uri) to DocType.TXT
                     }
